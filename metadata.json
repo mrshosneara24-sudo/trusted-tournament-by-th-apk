@@ -1,0 +1,6 @@
+{
+  "name": "TRUSTED TOURNAMENT BY TH",
+  "description": "বাংলাদেশের সবচেয়ে বিশ্বস্ত ফ্রি ফায়ার টুর্নামেন্ট প্ল্যাটফর্ম। লোন উলফ, বিআর র‍্যাঙ্ক এবং সিএস র‍্যাঙ্ক ম্যাচে বিকাশ দিয়ে স্লট কিনুন এবং প্রতিদিন জিতে নিন নগদ পুরস্কার।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
