@@ -43,11 +43,14 @@ import com.example.R
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.FlameYellow
 
+import com.example.model.AppCustomization
+
 @Composable
 fun TournamentHeader(
     walletBalance: Int,
     onWalletClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    appCustomization: AppCustomization = AppCustomization()
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         // Hero Esports Stage Card
@@ -156,7 +159,7 @@ fun TournamentHeader(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "TRUSTED TOURNAMENT BY TH",
+                                text = appCustomization.appName,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.5.sp
@@ -165,7 +168,7 @@ fun TournamentHeader(
                             )
                         }
                         Text(
-                            text = "লোন উলফ • বিআর র‍্যাঙ্ক • সিএস র‍্যাঙ্ক | বিকাশ দিয়ে স্লট বুকিং",
+                            text = appCustomization.appTagline,
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 12.sp
@@ -205,7 +208,7 @@ fun TournamentHeader(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!",
+                    text = appCustomization.noticeTickerText,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
                         color = Color(0xFFE2E8F0)

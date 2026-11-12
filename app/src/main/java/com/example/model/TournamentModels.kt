@@ -284,3 +284,34 @@ data class DailyGamerMission(
     val actionType: String
 )
 
+data class TournamentRuleItem(
+    val id: String,
+    val title: String,
+    val description: String,
+    val penalty: String,
+    val iconEmoji: String = "⚠️",
+    val isStrict: Boolean = true
+)
+
+enum class AppLogoOption(val id: String, val title: String, val iconEmoji: String) {
+    TH_LOGO("th_logo", "TH রয়্যাল লায়ন (অফিসিয়াল)", "👑"),
+    TH_ESPORTS("th_esports", "TH গোল্ডেন ফ্লেম এসপোর্টস", "⚡"),
+    CYBER_WOLF("avatar_wolf", "সাইবার উলফ ফাইটার", "🐺"),
+    PRO_GAMER("avatar_cyber", "প্রো নিয়ন গেমার", "🎮")
+}
+
+data class AppCustomization(
+    val appName: String = "TRUSTED TOURNAMENT BY TH",
+    val appTagline: String = "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট",
+    val selectedLogo: AppLogoOption = AppLogoOption.TH_LOGO,
+    val noticeTickerText: String = "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!",
+    val activeAnnouncement: String = "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!",
+    val officialBkashNumber: String = "01861583924",
+    val officialNagadNumber: String = "01861583924",
+    val officialWhatsAppUrl: String = "https://chat.whatsapp.com/G8TrustedTHTournament",
+    val minWithdraw: Int = 50,
+    val maxWithdraw: Int = 200,
+    val isMaintenanceMode: Boolean = false,
+    val maintenanceMessage: String = "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট রুম উন্মুক্ত করা হবে।"
+)
+

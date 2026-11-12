@@ -42,7 +42,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,12 +57,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.R
+import com.example.model.UserRole
 import com.example.ui.components.AddMoneyDialog
 import com.example.ui.components.AdminControlDialog
 import com.example.ui.components.DailyLuckySpinDialog
 import com.example.ui.components.DailyStreakDialog
 import com.example.ui.components.EditAccountDialog
+import com.example.ui.components.MasterAppEditorDialog
 import com.example.ui.components.OwnerControlDialog
 import com.example.ui.components.RoomDetailsDialog
 import com.example.ui.components.RoomSlotGridDialog
@@ -68,6 +71,7 @@ import com.example.ui.components.SettingsDialog
 import com.example.ui.components.SlotBookingDialog
 import com.example.ui.components.SupportChatDialog
 import com.example.ui.components.WithdrawDialog
+import com.example.ui.components.getLogoDrawable
 import com.example.ui.screens.AccountScreen
 import com.example.ui.screens.AuthOnboardingScreen
 import com.example.ui.screens.LeaderboardScreen
@@ -104,6 +108,9 @@ fun MainTournamentApp(
     val officialWhatsAppUrl by viewModel.officialWhatsAppGroupUrl.collectAsStateWithLifecycle()
     val allMatches by viewModel.allMatches.collectAsStateWithLifecycle()
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
+    val appCustomization by viewModel.appCustomization.collectAsStateWithLifecycle()
+    val strictRules by viewModel.strictRules.collectAsStateWithLifecycle()
+    var showMasterAppEditor by remember { mutableStateOf(false) }
 
     val bookingMatch by viewModel.bookingMatch.collectAsStateWithLifecycle()
     val roomSlotGridMatch by viewModel.roomSlotGridMatch.collectAsStateWithLifecycle()
@@ -168,27 +175,28 @@ fun MainTournamentApp(
                         modifier = Modifier.clickable { viewModel.selectTab(TournamentTab.MATCHES) }
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.th_logo),
-                            contentDescription = "TH Logo",
+                            painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
+                            contentDescription = "App Logo",
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TRUSTED TOURNAMENT",
+                            text = appCustomization.appName,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Black,
                                 letterSpacing = 0.5.sp
                             ),
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1
                         )
                     }
                 },
                 actions = {
-                    // Supreme Owner Button (Crown)
+                    // Supreme Owner A-to-Z Master Editor Button (Crown)
                     IconButton(
-                        onClick = { viewModel.openOwnerPanel() },
+                        onClick = { showMasterAppEditor = true },
                         modifier = Modifier.testTag("appbar_owner_btn")
                     ) {
                         Text("👑", fontSize = 18.sp)
@@ -422,7 +430,8 @@ fun MainTournamentApp(
                         onSupportChatClick = { viewModel.openSupportChat() },
                         onDailyStreakClick = { viewModel.openDailyStreak() },
                         dailyMissions = dailyMissions,
-                        onClaimMission = { viewModel.claimMission(it) }
+                        onClaimMission = { viewModel.claimMission(it) },
+                        appCustomization = appCustomization
                     )
                 }
 
@@ -616,6 +625,10 @@ fun MainTournamentApp(
             onOpenOwnerPanel = {
                 viewModel.closeSettings()
                 viewModel.openOwnerPanel()
+            },
+            onOpenMasterEditor = {
+                viewModel.closeSettings()
+                showMasterAppEditor = true
             }
         )
     }
@@ -645,6 +658,62 @@ fun MainTournamentApp(
         )
     }
 
+    // Master App Editor Dialog (A-to-Z control requested by user)
+    if (showMasterAppEditor) {
+        MasterAppEditorDialog(
+            appCustomization = appCustomization,
+            matches = allMatches,
+            bookings = myBookings,
+            strictRules = strictRules,
+            onDismiss = { showMasterAppEditor = false },
+            onUpdateAppBranding = { name, tagline, logo, ticker, announcement ->
+                viewModel.updateAppBranding(name, tagline, logo, ticker, announcement)
+            },
+            onUpdateFinancials = { bkash, nagad, whatsApp, minW, maxW ->
+                viewModel.updateFinancialSettings(bkash, nagad, whatsApp, minW, maxW)
+            },
+            onToggleMaintenance = { enabled, msg ->
+                viewModel.toggleMaintenanceMode(enabled, msg)
+            },
+            onCreateMatch = { title, category, matchType, mapName, matchDateTime, entryFee, totalPrize, perKill, booyahPrize, totalSlots ->
+                viewModel.createNewMatch(
+                    title, category, matchType, mapName, matchDateTime,
+                    entryFee, totalPrize, perKill, booyahPrize, totalSlots
+                )
+            },
+            onUpdateExistingMatch = { match ->
+                viewModel.updateExistingMatch(match)
+            },
+            onDeleteMatch = { matchId ->
+                viewModel.deleteMatch(matchId)
+            },
+            onUpdateSlotCapacity = { matchId, newCapacity ->
+                viewModel.updateMatchSlotCapacity(matchId, newCapacity)
+            },
+            onCreateManualSlot = { matchId, slotNumber, ign, uid, phone, fee ->
+                viewModel.createManualSlotBooking(matchId, slotNumber, ign, uid, phone, fee)
+            },
+            onCancelSlotAndRefund = { bookingId ->
+                viewModel.cancelSlotBookingAndRefund(bookingId)
+            },
+            onCancelMatchAndRefundAll = { matchId ->
+                viewModel.cancelMatchAndRefundAll(matchId)
+            },
+            onAddRule = { title, desc, penalty, emoji ->
+                viewModel.addStrictRule(title, desc, penalty, emoji)
+            },
+            onUpdateRule = { rule ->
+                viewModel.updateStrictRule(rule)
+            },
+            onDeleteRule = { ruleId ->
+                viewModel.deleteStrictRule(ruleId)
+            },
+            onResetRules = {
+                viewModel.resetDefaultRules()
+            }
+        )
+    }
+
     // Rules Dialog
     if (showRulesDialog) {
         Dialog(onDismissRequest = { viewModel.closeRules() }) {
@@ -658,9 +727,17 @@ fun MainTournamentApp(
                     onOpenSupportChat = {
                         viewModel.closeRules()
                         viewModel.openSupportChat()
+                    },
+                    strictRules = strictRules,
+                    appCustomization = appCustomization,
+                    isOwner = (userProfile.role == UserRole.OWNER),
+                    onOpenOwnerRulesEditor = {
+                        viewModel.closeRules()
+                        showMasterAppEditor = true
                     }
                 )
             }
         }
     }
 }
+

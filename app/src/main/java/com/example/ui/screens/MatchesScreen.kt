@@ -59,6 +59,8 @@ import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.VictoryGreen
 
+import com.example.model.AppCustomization
+
 @Composable
 fun MatchesScreen(
     matches: List<TournamentMatch>,
@@ -77,6 +79,7 @@ fun MatchesScreen(
     onDailyStreakClick: () -> Unit = {},
     dailyMissions: List<DailyGamerMission> = emptyList(),
     onClaimMission: (String) -> Unit = {},
+    appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     val bookedMatchIds = myBookings.map { it.matchId }.toSet()
@@ -92,7 +95,8 @@ fun MatchesScreen(
         item {
             TournamentHeader(
                 walletBalance = walletBalance,
-                onWalletClick = onWalletClick
+                onWalletClick = onWalletClick,
+                appCustomization = appCustomization
             )
         }
 

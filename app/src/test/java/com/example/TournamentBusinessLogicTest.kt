@@ -326,5 +326,68 @@ class TournamentBusinessLogicTest {
         val totalWeekBonus = rewards.sum()
         assertTrue("Total 7-day bonus must be low and budget-safe (<= 12 Taka), was $totalWeekBonus", totalWeekBonus <= 12)
     }
+
+    @Test
+    fun testAppBrandingUpdateByOwner() {
+        assertEquals("TRUSTED TOURNAMENT BY TH", repository.appCustomization.value.appName)
+        repository.updateAppBranding(
+            appName = "TH PRO ESPORTS CHAMPIONSHIP",
+            appTagline = "সেরা টুর্নামেন্ট • দ্রুত ক্যাশআউট",
+            logo = com.example.model.AppLogoOption.TH_ESPORTS,
+            noticeTicker = "নতুন রুম শুরু হবে ৭টায়!",
+            announcement = "বিশাল ধামাকা অফার"
+        )
+        val updated = repository.appCustomization.value
+        assertEquals("TH PRO ESPORTS CHAMPIONSHIP", updated.appName)
+        assertEquals("সেরা টুর্নামেন্ট • দ্রুত ক্যাশআউট", updated.appTagline)
+        assertEquals(com.example.model.AppLogoOption.TH_ESPORTS, updated.selectedLogo)
+        assertEquals("নতুন রুম শুরু হবে ৭টায়!", updated.noticeTickerText)
+    }
+
+    @Test
+    fun testStrictRulesManagement() {
+        val initialCount = repository.strictRules.value.size
+        assertTrue("Should start with 8 default strict rules", initialCount >= 8)
+
+        // Add rule
+        val added = repository.addStrictRule(
+            title = "নো রিকয়েল স্ক্রিপ্ট নিষিদ্ধ",
+            description = "স্ক্রিপ্ট ব্যবহার করলে সাথে সাথে ব্যান",
+            penalty = "আজীবন বহিষ্কার",
+            emoji = "🚫"
+        )
+        assertTrue(added)
+        assertEquals(initialCount + 1, repository.strictRules.value.size)
+
+        // Reset to default
+        repository.resetDefaultRules()
+        assertEquals(8, repository.strictRules.value.size)
+    }
+
+    @Test
+    fun testSlotCapacityAdjustmentAndManualSlotCreation() {
+        val match = repository.matches.value.first()
+        val originalCapacity = match.totalSlots
+
+        // Adjust capacity
+        val updated = repository.updateMatchSlotCapacity(match.id, 50)
+        assertTrue(updated)
+        val updatedMatch = repository.matches.value.find { it.id == match.id }
+        assertEquals(50, updatedMatch?.totalSlots)
+
+        // Create manual VIP slot
+        val manualSuccess = repository.createManualSlotBooking(
+            matchId = match.id,
+            slotNumber = 49,
+            playerIgn = "VIP_TH_WARRIOR",
+            playerUid = "1122334455",
+            phoneOrBkash = "01861583924",
+            feePaid = 0
+        )
+        assertTrue(manualSuccess)
+        val bookedSlot = repository.myBookings.value.find { it.matchId == match.id && it.slotNumber == 49 }
+        assertNotNull(bookedSlot)
+        assertEquals("VIP_TH_WARRIOR", bookedSlot?.playerIgn)
+    }
 }
 

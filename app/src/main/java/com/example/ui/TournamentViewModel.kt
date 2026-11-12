@@ -3,6 +3,8 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.TournamentRepository
+import com.example.model.AppCustomization
+import com.example.model.AppLogoOption
 import com.example.model.AppUser
 import com.example.model.ChatMessage
 import com.example.model.DailyGamerMission
@@ -10,10 +12,11 @@ import com.example.model.DailyStreakInfo
 import com.example.model.GameCategory
 import com.example.model.LeaderboardPlayer
 import com.example.model.MatchResult
+import com.example.model.MatchType
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
-import com.example.model.MatchType
 import com.example.model.TournamentMatch
+import com.example.model.TournamentRuleItem
 import com.example.model.UserProfile
 import com.example.model.UserRole
 import com.example.model.WalletTransaction
@@ -71,6 +74,8 @@ class TournamentViewModel(
     val hasSpunThisWeek: StateFlow<Boolean> = repository.hasSpunThisWeek
     val spinHistory: StateFlow<List<SpinHistoryRecord>> = repository.spinHistory
     val dailyMissions: StateFlow<List<DailyGamerMission>> = repository.dailyMissions
+    val appCustomization: StateFlow<AppCustomization> = repository.appCustomization
+    val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
 
     // Dialog States
     private val _bookingMatch = MutableStateFlow<TournamentMatch?>(null)
@@ -580,4 +585,104 @@ class TournamentViewModel(
         }
         return success
     }
+
+    // ==================== A TO Z OWNER APP MANAGEMENT ====================
+
+    fun updateAppBranding(
+        appName: String,
+        appTagline: String,
+        logo: AppLogoOption,
+        noticeTicker: String,
+        announcement: String
+    ) {
+        repository.updateAppBranding(appName, appTagline, logo, noticeTicker, announcement)
+        _snackbarMessage.value = "👑 অ্যাপের নাম, লোগো ও নোটিশ সফলভাবে আপডেট করা হয়েছে!"
+    }
+
+    fun updateFinancialSettings(
+        bkash: String,
+        nagad: String,
+        whatsAppUrl: String,
+        minWithdraw: Int,
+        maxWithdraw: Int
+    ) {
+        repository.updateFinancialSettings(bkash, nagad, whatsAppUrl, minWithdraw, maxWithdraw)
+        _snackbarMessage.value = "💰 বিকাশ, নগদ ও উইথড্র সেটিংস সফলভাবে সংরক্ষিত হয়েছে!"
+    }
+
+    fun toggleMaintenanceMode(enabled: Boolean, message: String) {
+        repository.toggleMaintenanceMode(enabled, message)
+        _snackbarMessage.value = if (enabled) "⚠️ মেইনটেন্যান্স মোড চালু করা হয়েছে!" else "✅ মেইনটেন্যান্স মোড বন্ধ করা হয়েছে।"
+    }
+
+    fun updateExistingMatch(match: TournamentMatch): Boolean {
+        val success = repository.updateExistingMatch(match)
+        if (success) {
+            _snackbarMessage.value = "⚔️ ম্যাচ তথ্য সফলভাবে এডিট ও সেভ করা হয়েছে!"
+        }
+        return success
+    }
+
+    fun deleteMatch(matchId: String): Boolean {
+        val success = repository.deleteMatch(matchId)
+        if (success) {
+            _snackbarMessage.value = "🗑️ ম্যাচটি সম্পূর্ণ মুছে ফেলা হয়েছে ও স্লট ফি রিফান্ড করা হয়েছে!"
+        }
+        return success
+    }
+
+    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean {
+        val success = repository.updateMatchSlotCapacity(matchId, newCapacity)
+        if (success) {
+            _snackbarMessage.value = "🎟️ ম্যাচের মোট স্লট সংখ্যা $newCapacity এ পরিবর্তন করা হয়েছে!"
+        }
+        return success
+    }
+
+    fun createManualSlotBooking(
+        matchId: String,
+        slotNumber: Int,
+        playerIgn: String,
+        playerUid: String,
+        phoneOrBkash: String,
+        feePaid: Int
+    ): Boolean {
+        val success = repository.createManualSlotBooking(matchId, slotNumber, playerIgn, playerUid, phoneOrBkash, feePaid)
+        if (success) {
+            _snackbarMessage.value = "✅ স্লট #$slotNumber এ $playerIgn এর জন্য সফলভাবে স্লট ক্রিয়েট করা হয়েছে!"
+        } else {
+            _snackbarMessage.value = "স্লট #$slotNumber ইতিমধ্যেই পূর্ণ অথবা অবৈধ!"
+        }
+        return success
+    }
+
+    fun addStrictRule(title: String, description: String, penalty: String, emoji: String): Boolean {
+        val success = repository.addStrictRule(title, description, penalty, emoji)
+        if (success) {
+            _snackbarMessage.value = "📜 নতুন টুর্নামেন্ট নিয়ম যুক্ত হয়েছে!"
+        }
+        return success
+    }
+
+    fun updateStrictRule(rule: TournamentRuleItem): Boolean {
+        val success = repository.updateStrictRule(rule)
+        if (success) {
+            _snackbarMessage.value = "📜 নিয়মটি সফলভাবে আপডেট করা হয়েছে!"
+        }
+        return success
+    }
+
+    fun deleteStrictRule(ruleId: String): Boolean {
+        val success = repository.deleteStrictRule(ruleId)
+        if (success) {
+            _snackbarMessage.value = "🗑️ নিয়মটি মুছে ফেলা হয়েছে!"
+        }
+        return success
+    }
+
+    fun resetDefaultRules() {
+        repository.resetDefaultRules()
+        _snackbarMessage.value = "🔄 ডিফল্ট ৮টি কঠোর টুর্নামেন্ট নিয়মে রিসেট করা হয়েছে!"
+    }
 }
+

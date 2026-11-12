@@ -22,10 +22,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
+import com.example.model.AppCustomization
+import com.example.model.AppLogoOption
+import com.example.model.TournamentRuleItem
+
 class TournamentRepository {
 
-    // User's official bKash Number for TRUSTED TOURNAMENT BY TH
-    val officialBkashNumber = "01861583924"
+    private val _appCustomization = MutableStateFlow(AppCustomization())
+    val appCustomization: StateFlow<AppCustomization> = _appCustomization.asStateFlow()
+
+    // Official bKash Number delegates to dynamic app customization
+    val officialBkashNumber: String get() = _appCustomization.value.officialBkashNumber
 
     // Master Owner Credentials (Strictly for the app creator / owner)
     var masterOwnerPasskey = "TH-OWNER-7788"
@@ -34,6 +41,68 @@ class TournamentRepository {
 
     // Official WhatsApp Group for Room ID & Password sharing in 1 tap
     val officialWhatsAppGroupUrl = MutableStateFlow("https://chat.whatsapp.com/G8TrustedTHTournament")
+
+    private val defaultRules = listOf(
+        TournamentRuleItem(
+            id = "rule_1",
+            title = "১০০% মোবাইল অনলি (No Emulator)",
+            description = "পিসি, ব্লুস্ট্যাক্স, এলডিপ্লেয়ার, স্মার্টগা বা কোনো এমুলেটর ডিভাইস সম্পূর্ণ নিষিদ্ধ। আইপ্যাড বা ট্যাবলেট গ্রহণযোগ্য নয়।",
+            penalty = "ধরা পড়লে সাথে সাথে স্থায়ী ব্যান এবং এন্ট্রি ফি ১০০% বাজেয়াপ্ত করা হবে।",
+            iconEmoji = "🚫"
+        ),
+        TournamentRuleItem(
+            id = "rule_2",
+            title = "হেডশট কনফিগ ও থার্ড-পার্টি ফাইল সম্পূর্ণ নিষিদ্ধ",
+            description = "অটো-হেডশট, কনফিগ ফাইল, গ্লিচ প্যাক, হাই জাম্প, নো রিকয়েল, GFX টুল বা কোনো মোড এপিকে ব্যবহার কঠোরভাবে নিষিদ্ধ।",
+            penalty = "প্লেয়ারের UID ও ডিভাইস আইডি আজীবনের জন্য ব্ল্যাকলিস্ট করা হবে।",
+            iconEmoji = "🛡️"
+        ),
+        TournamentRuleItem(
+            id = "rule_3",
+            title = "সঠিক স্লট শৃঙ্খলার নিয়ম (Slot Discipline)",
+            description = "অ্যাপে আপনি যে স্লট নম্বর বুকিং করেছেন, কাস্টম রুমে হুবহু সেই নির্দিষ্ট স্লট নম্বরেই বসতে হবে।",
+            penalty = "অন্যের স্লটে বসলে কোনো ওয়ার্নিং ছাড়া রুম থেকে কিক করা হবে এবং ফি রিফান্ড হবে না।",
+            iconEmoji = "🎯"
+        ),
+        TournamentRuleItem(
+            id = "rule_4",
+            title = "সোলো ও ডুও ম্যাচে টিমিং (Teaming) কঠোরভাবে নিষিদ্ধ",
+            description = "ম্যাচে অন্য প্লেয়ারের সাথে আপস, ফ্রেন্ডশিপ বা টিমিং করার চেষ্টা ধরা পড়লে কোনো প্রাইজ মানি দেওয়া হবে না।",
+            penalty = "উভয় প্লেয়ারকে সরাসরি ডিসকোয়ালিফাই ও টুর্নামেন্ট থেকে বরখাস্ত করা হবে।",
+            iconEmoji = "⚖️"
+        ),
+        TournamentRuleItem(
+            id = "rule_5",
+            title = "কাস্টম রুম আইডি ও পাসওয়ার্ডের গোপনীয়তা",
+            description = "অ্যাপে প্রদত্ত কাস্টম রুম আইডি ও পাসওয়ার্ড কোনো বাইরের বন্ধু, ফেসবুক বা হোয়াটসঅ্যাপ গ্রুপে শেয়ার করা দণ্ডনীয় অপরাধ।",
+            penalty = "আইডি শেয়ারকারীর প্রোফাইল তাৎক্ষণিক ব্যান করা হবে।",
+            iconEmoji = "🔐"
+        ),
+        TournamentRuleItem(
+            id = "rule_6",
+            title = "বিকাশ ও লেনদেন সংক্রান্ত জালিয়াতি প্রতিরোধ",
+            description = "ভুয়া TrxID বা অন্যের TrxID দিয়ে স্লট কেনার অপচেষ্টা করলে সিস্টেম স্বয়ংক্রিয়ভাবে সনাক্ত করবে।",
+            penalty = "প্রতারকের বিকাশ নম্বর, ফোন নম্বর ও UID স্থায়ীভাবে ব্যান ও ব্ল্যাকলিস্ট হবে।",
+            iconEmoji = "💳"
+        ),
+        TournamentRuleItem(
+            id = "rule_7",
+            title = "যথাসময়ে কাস্টম রুমে উপস্থিতি আবশ্যক",
+            description = "ম্যাচ শুরুর নির্ধারিত সময়ের পর কোনো প্লেয়ারের জন্য ১ সেকেন্ডও অপেক্ষা করা হবে না। সময়মতো খেলায় অংশ নিতে হবে।",
+            penalty = "দেরি করে আসলে বা অনুপস্থিত থাকলে কোনো প্রকার রিফান্ড দেওয়া হবে না।",
+            iconEmoji = "⏱️"
+        ),
+        TournamentRuleItem(
+            id = "rule_8",
+            title = "বুইয়া ও প্রাইজ ক্লেইম ভেরিফিকেশন নিয়ম",
+            description = "ম্যাচ জয়ের পর স্পষ্ট কিল সংখ্যা ও বুইয়ার স্ক্রিনশট ১৫ মিনিটের মধ্যে লাইভ এডমিন বা এআই সাপোর্টে প্রদান করতে হবে।",
+            penalty = "মিথ্যা দাবি বা এডিটেড স্ক্রিনশট দিলে প্রাইজ মানি বাতিল ও জরিমানা করা হবে।",
+            iconEmoji = "🏆"
+        )
+    )
+
+    private val _strictRules = MutableStateFlow<List<TournamentRuleItem>>(defaultRules)
+    val strictRules: StateFlow<List<TournamentRuleItem>> = _strictRules.asStateFlow()
 
     private val _walletBalance = MutableStateFlow(35) // ছোট ও বাস্তবসম্মত প্রারম্ভিক ব্যালেন্স ৳৩৫
     val walletBalance: StateFlow<Int> = _walletBalance.asStateFlow()
@@ -1159,4 +1228,151 @@ class TournamentRepository {
         }
         return false
     }
+
+    // ==================== A TO Z OWNER APP MANAGEMENT ====================
+
+    fun updateAppBranding(
+        appName: String,
+        appTagline: String,
+        logo: AppLogoOption,
+        noticeTicker: String,
+        announcement: String
+    ) {
+        _appCustomization.value = _appCustomization.value.copy(
+            appName = appName.ifBlank { "TRUSTED TOURNAMENT BY TH" },
+            appTagline = appTagline.ifBlank { "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট" },
+            selectedLogo = logo,
+            noticeTickerText = noticeTicker.ifBlank { "ম্যাচ শুরুর ১৫ মিনিট আগে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!" },
+            activeAnnouncement = announcement.ifBlank { "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!" }
+        )
+    }
+
+    fun updateFinancialSettings(
+        bkash: String,
+        nagad: String,
+        whatsAppUrl: String,
+        minWithdraw: Int,
+        maxWithdraw: Int
+    ) {
+        _appCustomization.value = _appCustomization.value.copy(
+            officialBkashNumber = bkash.ifBlank { "01861583924" },
+            officialNagadNumber = nagad.ifBlank { "01861583924" },
+            officialWhatsAppUrl = whatsAppUrl.ifBlank { "https://chat.whatsapp.com/G8TrustedTHTournament" },
+            minWithdraw = minWithdraw.coerceAtLeast(10),
+            maxWithdraw = maxWithdraw.coerceAtLeast(minWithdraw)
+        )
+        officialWhatsAppGroupUrl.value = _appCustomization.value.officialWhatsAppUrl
+    }
+
+    fun toggleMaintenanceMode(enabled: Boolean, message: String) {
+        _appCustomization.value = _appCustomization.value.copy(
+            isMaintenanceMode = enabled,
+            maintenanceMessage = message.ifBlank { "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট শুরু হবে।" }
+        )
+    }
+
+    fun updateExistingMatch(updatedMatch: TournamentMatch): Boolean {
+        var found = false
+        _matches.value = _matches.value.map { match ->
+            if (match.id == updatedMatch.id) {
+                found = true
+                updatedMatch
+            } else match
+        }
+        return found
+    }
+
+    fun deleteMatch(matchId: String): Boolean {
+        val countBefore = _matches.value.size
+        // Refund any players who booked this match first
+        cancelMatchAndRefundAll(matchId)
+        _matches.value = _matches.value.filter { it.id != matchId }
+        return _matches.value.size < countBefore
+    }
+
+    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean {
+        if (newCapacity < 2 || newCapacity > 100) return false
+        _matches.value = _matches.value.map { match ->
+            if (match.id == matchId) {
+                match.copy(totalSlots = newCapacity)
+            } else match
+        }
+        return true
+    }
+
+    fun createManualSlotBooking(
+        matchId: String,
+        slotNumber: Int,
+        playerIgn: String,
+        playerUid: String,
+        phoneOrBkash: String,
+        feePaid: Int
+    ): Boolean {
+        val targetMatch = _matches.value.find { it.id == matchId } ?: return false
+        if (slotNumber < 1 || slotNumber > targetMatch.totalSlots) return false
+
+        // Check if slot already taken
+        val alreadyBooked = _myBookings.value.any { it.matchId == matchId && it.slotNumber == slotNumber }
+        if (alreadyBooked) return false
+
+        val manualBooking = SlotBooking(
+            bookingId = "BK-OWNER-${(1000..9999).random()}",
+            matchId = targetMatch.id,
+            matchTitle = targetMatch.title,
+            category = targetMatch.category,
+            matchDateTime = targetMatch.matchDateTime,
+            slotNumber = slotNumber,
+            playerIgn = playerIgn.ifBlank { "VIP_PLAYER" },
+            playerUid = playerUid.ifBlank { "0000000000" },
+            bkashSenderNumber = phoneOrBkash.ifBlank { officialBkashNumber },
+            trxId = "OWNER-RESERVED",
+            feePaid = feePaid,
+            isVerified = true,
+            roomId = targetMatch.roomId,
+            roomPassword = targetMatch.roomPassword
+        )
+        _myBookings.value = listOf(manualBooking) + _myBookings.value
+
+        _matches.value = _matches.value.map { match ->
+            if (match.id == matchId) {
+                match.copy(bookedSlots = (match.bookedSlots + 1).coerceAtMost(match.totalSlots))
+            } else match
+        }
+        return true
+    }
+
+    fun addStrictRule(title: String, description: String, penalty: String, emoji: String): Boolean {
+        if (title.isBlank()) return false
+        val newRule = TournamentRuleItem(
+            id = "rule_${System.currentTimeMillis()}",
+            title = title,
+            description = description.ifBlank { "টুর্নামেন্টের শৃঙ্খলা বজায় রাখতে এই নিয়ম প্রযোজ্য।" },
+            penalty = penalty.ifBlank { "নিয়ম ভঙ্গকারীর এন্ট্রি ফি বাজেয়াপ্ত ও অ্যাকাউন্ট সাসপেন্ড হবে।" },
+            iconEmoji = emoji.ifBlank { "⚠️" }
+        )
+        _strictRules.value = _strictRules.value + newRule
+        return true
+    }
+
+    fun updateStrictRule(rule: TournamentRuleItem): Boolean {
+        var found = false
+        _strictRules.value = _strictRules.value.map {
+            if (it.id == rule.id) {
+                found = true
+                rule
+            } else it
+        }
+        return found
+    }
+
+    fun deleteStrictRule(ruleId: String): Boolean {
+        val before = _strictRules.value.size
+        _strictRules.value = _strictRules.value.filter { it.id != ruleId }
+        return _strictRules.value.size < before
+    }
+
+    fun resetDefaultRules() {
+        _strictRules.value = defaultRules
+    }
 }
+
