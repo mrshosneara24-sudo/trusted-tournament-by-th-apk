@@ -306,7 +306,7 @@ fun WeeklyLuckySpinDialog(
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF0F0F1B))
+                                .background(Color(0xFF070409))
                                 .border(2.dp, FlameYellow, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {

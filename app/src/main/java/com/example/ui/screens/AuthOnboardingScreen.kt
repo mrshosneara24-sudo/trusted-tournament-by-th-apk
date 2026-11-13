@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -47,7 +48,9 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.example.ui.components.ForgotPasswordDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +72,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.model.AppCustomization
+import com.example.ui.components.getLogoDrawable
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkBorder
@@ -77,6 +82,8 @@ import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
+import com.example.ui.theme.PinkBlackHeaderGradient
 import com.example.ui.theme.VictoryGreen
 
 data class CaptchaChallenge(
@@ -120,13 +127,18 @@ private fun generateNewCaptcha(): CaptchaChallenge {
 
 @Composable
 fun AuthOnboardingScreen(
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String) -> Boolean,
+    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> Boolean,
     onLogin: (phoneOrEmail: String, pass: String) -> Boolean,
     onDemoOwnerLogin: () -> Unit,
+    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(true, "7788") },
+    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> true },
+    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> true },
+    appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Create Account, 1 = Sign In
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
 
     // Registration States
     var regName by remember { mutableStateOf("") }
@@ -140,6 +152,7 @@ fun AuthOnboardingScreen(
     var loginPhone by remember { mutableStateOf("") }
     var loginPassword by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
+    var loginError by remember { mutableStateOf<String?>(null) }
 
     // Captcha States
     var currentCaptcha by remember { mutableStateOf(generateNewCaptcha()) }
@@ -152,7 +165,7 @@ fun AuthOnboardingScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(PinkBlackHeaderGradient)
             .padding(16.dp),
         contentAlignment = Alignment.TopCenter
     ) {
@@ -164,22 +177,26 @@ fun AuthOnboardingScreen(
         ) {
             Spacer(modifier = Modifier.height(18.dp))
 
-            // App Logo with glowing border
+            // App Logo with glowing Yellow-White-Pink border
             Box(
                 modifier = Modifier
                     .size(88.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            listOf(FlameYellow.copy(alpha = 0.35f), Color.Transparent)
+                            listOf(FlameYellow.copy(alpha = 0.30f), NeonPink.copy(alpha = 0.22f), Color.Transparent)
                         )
                     )
-                    .border(2.5.dp, FlameYellow, CircleShape)
+                    .border(
+                        2.5.dp,
+                        Brush.linearGradient(listOf(FlameYellow, Color.White, NeonPink)),
+                        CircleShape
+                    )
                     .padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.th_logo),
+                    painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
                     contentDescription = "TH Logo",
                     modifier = Modifier
                         .size(76.dp)
@@ -191,19 +208,20 @@ fun AuthOnboardingScreen(
 
             // App Brand Name & Slogan
             Text(
-                text = "TRUSTED TOURNAMENT",
+                text = appCustomization.appName,
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp
                 ),
-                color = Color.White
+                color = Color.White,
+                textAlign = TextAlign.Center
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = FlameYellow.copy(alpha = 0.2f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow)
+                    color = NeonPink.copy(alpha = 0.22f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink)
                 ) {
                     Text(
                         text = "BY TH",
@@ -215,37 +233,37 @@ fun AuthOnboardingScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "বাংলাদেশের বিশ্বস্ত ফ্রি ফায়ার টুর্নামেন্ট",
+                    text = appCustomization.appTagline,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = Color.White.copy(alpha = 0.85f)
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Highlight feature pills row
+            // Highlight feature pills row (Black, Yellow, Pink & Crisp White)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF141A28),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.4f)),
+                    color = Color(0xFF1A170D),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.6f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("⚡ অটো রিফান্ড", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FlameCyan)
-                        Text("ওনার ক্যান্সেলে সাথে সাথে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.7f))
+                        Text("⚡ অটো রিফান্ড", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
+                        Text("ওনার ক্যান্সেলে সাথে সাথে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.85f))
                     }
                 }
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF281E10),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f)),
+                    color = Color(0xFF1A1018),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.55f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
@@ -253,35 +271,44 @@ fun AuthOnboardingScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("🎡 ফ্রি স্পিন", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
-                        Text("৩-৩০৳ ক্যাশ প্রাইজ", fontSize = 8.sp, color = Color.White.copy(alpha = 0.7f))
+                        Text("৩-৩০৳ ক্যাশ প্রাইজ", fontSize = 8.sp, color = Color.White.copy(alpha = 0.85f))
                     }
                 }
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF10281C),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.4f)),
+                    color = Color(0xFF12151C),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🛡️ ১০০% সেফ", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VictoryGreen)
-                        Text("বিকাশ সুরক্ষিত গেটওয়ে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.7f))
+                        Text("🛡️ ১০০% সেফ", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("বিকাশ সুরক্ষিত গেটওয়ে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.8f))
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Main Auth Card (Discord-like clean modern gaming card)
+            // Main Auth Card (Black + Yellow + White + Pink Gaming Card)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("auth_onboarding_card"),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, DarkBorder)
+                border = androidx.compose.foundation.BorderStroke(
+                    1.5.dp,
+                    Brush.horizontalGradient(
+                        listOf(
+                            FlameYellow.copy(alpha = 0.65f),
+                            Color.White.copy(alpha = 0.5f),
+                            NeonPink.copy(alpha = 0.65f)
+                        )
+                    )
+                )
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     // Discord-inspired Tabs
@@ -511,7 +538,10 @@ fun AuthOnboardingScreen(
                         // Login Password
                         OutlinedTextField(
                             value = loginPassword,
-                            onValueChange = { loginPassword = it },
+                            onValueChange = {
+                                loginPassword = it
+                                loginError = null
+                            },
                             label = { Text("পাসওয়ার্ড") },
                             placeholder = { Text("আপনার পাসওয়ার্ড") },
                             leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = FlameOrange) },
@@ -537,9 +567,56 @@ fun AuthOnboardingScreen(
                                 unfocusedTextColor = Color.White
                             )
                         )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Forgot Password button row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showForgotPasswordDialog = true },
+                                modifier = Modifier.testTag("forgot_password_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.LockReset,
+                                    contentDescription = null,
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "পাসওয়ার্ড ভুলে গেছেন? (Forgot Password)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FlameYellow
+                                )
+                            }
+                        }
+
+                        loginError?.let { err ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF331414),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                                    .testTag("login_error_banner")
+                            ) {
+                                Text(
+                                    text = err,
+                                    color = Color(0xFFFCA5A5),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Real Captcha Verification Box (রোবট প্রতিরোধ ও হিউম্যান যাচাইকরণ)
                     Surface(
@@ -685,19 +762,33 @@ fun AuthOnboardingScreen(
                                     Toast.makeText(context, "সকল তথ্য পূরণ করুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val ok = onRegister(regName.trim(), regIgn.trim(), regUid.trim().ifEmpty { "1002345" }, regPhone.trim(), regPhone.trim())
+                                val ok = onRegister(
+                                    regName.trim(),
+                                    regIgn.trim(),
+                                    regUid.trim().ifEmpty { "1002345" },
+                                    regPhone.trim(),
+                                    regPhone.trim(),
+                                    regPassword.trim().ifBlank { "123456" }
+                                )
                                 if (ok) {
                                     Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! স্বাগতম $regName", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "❌ এই মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে বা তথ্য অসম্পূর্ণ!", Toast.LENGTH_LONG).show()
                                 }
                             } else {
                                 // Login
                                 if (loginPhone.isBlank()) {
+                                    loginError = "দয়া করে মোবাইল নম্বর বা UID লিখুন!"
                                     Toast.makeText(context, "মোবাইল নম্বর লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 val ok = onLogin(loginPhone.trim(), loginPassword.trim())
                                 if (ok) {
+                                    loginError = null
                                     Toast.makeText(context, "সফলভাবে লগইন হয়েছে!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    loginError = "❌ ভুল নম্বর বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে উপরে 'পাসওয়ার্ড ভুলে গেছেন?' এ ক্লিক করে রিসেট করুন।"
+                                    Toast.makeText(context, "ভুল নম্বর বা পাসওয়ার্ড!", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -725,7 +816,7 @@ fun AuthOnboardingScreen(
                         onClick = onDemoOwnerLogin,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(48.dp)
                             .testTag("demo_owner_login_btn"),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameYellow),
@@ -754,6 +845,24 @@ fun AuthOnboardingScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // Forgot Password Dialog
+        if (showForgotPasswordDialog) {
+            ForgotPasswordDialog(
+                initialPhoneOrUid = loginPhone,
+                onDismiss = { showForgotPasswordDialog = false },
+                onRequestOtp = onRequestOtp,
+                onVerifyOtp = onVerifyOtp,
+                onResetPassword = onResetPassword,
+                onPasswordResetSuccess = { resetPhone, resetPass ->
+                    loginPhone = resetPhone
+                    loginPassword = resetPass
+                    loginError = null
+                    showForgotPasswordDialog = false
+                    selectedTab = 1 // Switch to Sign In tab
+                }
+            )
         }
     }
 }

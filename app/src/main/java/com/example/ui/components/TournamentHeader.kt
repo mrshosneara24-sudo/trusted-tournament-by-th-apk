@@ -1,5 +1,11 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +49,9 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
+import com.example.ui.theme.ObsidianBlack
+import com.example.ui.theme.WarmYellow
 
 import com.example.model.AppCustomization
 
@@ -52,6 +62,17 @@ fun TournamentHeader(
     modifier: Modifier = Modifier,
     appCustomization: AppCustomization = AppCustomization()
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "arena_pulse")
+    val livePulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+
     Column(modifier = modifier.fillMaxWidth()) {
         // Hero Esports Stage Card
         Card(
@@ -59,7 +80,11 @@ fun TournamentHeader(
                 .fillMaxWidth()
                 .height(180.dp),
             shape = RoundedCornerShape(20.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            border = BorderStroke(
+                1.5.dp,
+                Brush.horizontalGradient(listOf(NeonPink, FlameYellow, Color.White.copy(alpha = 0.85f)))
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Generated Esports Tournament Banner
@@ -70,15 +95,15 @@ fun TournamentHeader(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // High contrast dark gaming scrim
+                // High contrast Black & Pink-Yellow gaming scrim
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.Black.copy(alpha = 0.45f),
-                                    Color.Black.copy(alpha = 0.85f)
+                                    Color(0xFF141118).copy(alpha = 0.42f),
+                                    ObsidianBlack.copy(alpha = 0.90f)
                                 )
                             )
                         )
@@ -99,7 +124,8 @@ fun TournamentHeader(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF1E1E34).copy(alpha = 0.9f)
+                            color = Color(0xFF121218).copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.45f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -116,6 +142,13 @@ fun TournamentHeader(
                                     text = "১০০% বিশ্বস্ত প্ল্যাটফর্ম",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981).copy(alpha = livePulseAlpha))
                                 )
                             }
                         }
@@ -173,7 +206,7 @@ fun TournamentHeader(
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 12.sp
                             ),
-                            color = Color(0xFFFFD54F)
+                            color = WarmYellow
                         )
                     }
                 }
@@ -182,11 +215,12 @@ fun TournamentHeader(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Notice Ticker
+        // Notice Ticker (Black, White & Yellow)
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -196,13 +230,13 @@ fun TournamentHeader(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        .background(FlameYellow.copy(alpha = 0.18f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Campaign,
                         contentDescription = "Notice",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = FlameYellow,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -211,7 +245,7 @@ fun TournamentHeader(
                     text = appCustomization.noticeTickerText,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
-                        color = Color(0xFFE2E8F0)
+                        color = Color.White
                     )
                 )
             }

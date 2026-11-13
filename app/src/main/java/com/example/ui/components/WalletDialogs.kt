@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Close
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkSurface
@@ -72,17 +75,22 @@ fun AddMoneyDialog(
     var trxId by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.92f)
                 .testTag("add_money_dialog"),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, com.example.ui.theme.NeonPink.copy(alpha = 0.55f))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 Row(
@@ -260,24 +268,40 @@ fun AddMoneyDialog(
 @Composable
 fun WithdrawDialog(
     currentBalance: Int,
+    minWithdraw: Int = 50,
+    maxWithdraw: Int = 200,
+    defaultBkashNumber: String = "",
     onDismiss: () -> Unit,
     onConfirmWithdraw: (amount: Int, bkashNumber: String) -> Unit
 ) {
-    var amountText by remember { mutableStateOf("25") }
-    var targetBkash by remember { mutableStateOf("") }
+    var amountText by remember(minWithdraw) { mutableStateOf(minWithdraw.toString()) }
+    var targetBkash by remember(defaultBkashNumber) { mutableStateOf(defaultBkashNumber) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val presetAmounts = remember(minWithdraw, maxWithdraw) {
+        val mid = ((minWithdraw + maxWithdraw) / 2 / 10) * 10
+        listOf(minWithdraw, mid, (minWithdraw + maxWithdraw) / 2, maxWithdraw)
+            .filter { it in minWithdraw..maxWithdraw }
+            .distinct()
+            .sorted()
+            .take(4)
+    }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.92f)
                 .testTag("withdraw_dialog"),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, BkashPink.copy(alpha = 0.65f))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 Row(
@@ -302,6 +326,7 @@ fun WithdrawDialog(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -330,11 +355,11 @@ fun WithdrawDialog(
                             color = BkashPink.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = "লিমিট: ৳৫০ - ৳২০০",
+                                text = "লিমিট: ৳$minWithdraw - ৳$maxWithdraw",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = BkashPink
+                                    color = FlameYellow
                                 )
                             )
                         }
@@ -348,19 +373,20 @@ fun WithdrawDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf(50, 100, 150, 200).forEach { preset ->
+                    presetAmounts.forEach { preset ->
                         val isSelected = amountText == preset.toString()
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) BkashPink else DarkSurface,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
-                                if (isSelected) BkashPink else DarkBorder
+                                if (isSelected) com.example.ui.theme.NeonPink else DarkBorder
                             ),
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
                                     amountText = preset.toString()
+                                    errorMessage = null
                                 }
                         ) {
                             Text(
@@ -380,11 +406,14 @@ fun WithdrawDialog(
 
                 OutlinedTextField(
                     value = amountText,
-                    onValueChange = { amountText = it },
+                    onValueChange = {
+                        amountText = it
+                        errorMessage = null
+                    },
                     label = { Text("উইথড্র পরিমাণ (টাকা)") },
-                    placeholder = { Text("৫০ থেকে ২০০ টাকা") },
-                    supportingText = { Text("সর্বনিম্ন ৳৫০ এবং সর্বোচ্চ ৳২০০") },
-                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("$minWithdraw থেকে $maxWithdraw টাকা") },
+                    supportingText = { Text("সর্বনিম্ন ৳$minWithdraw এবং সর্বোচ্চ ৳$maxWithdraw") },
+                    modifier = Modifier.fillMaxWidth().testTag("withdraw_amount_input"),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -400,10 +429,13 @@ fun WithdrawDialog(
 
                 OutlinedTextField(
                     value = targetBkash,
-                    onValueChange = { targetBkash = it },
+                    onValueChange = {
+                        targetBkash = it
+                        errorMessage = null
+                    },
                     label = { Text("আপনার বিকাশ পার্সোনাল নম্বর") },
                     placeholder = { Text("018XXXXXXXX") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("withdraw_bkash_input"),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -423,25 +455,25 @@ fun WithdrawDialog(
                 Button(
                     onClick = {
                         val amt = amountText.toIntOrNull() ?: 0
-                        if (amt < 50) {
-                            errorMessage = "সর্বনিম্ন ৫০ টাকা উইথড্র করা যাবে"
+                        if (amt < minWithdraw) {
+                            errorMessage = "সর্বনিম্ন $minWithdraw টাকা উইথড্র করা যাবে"
                             return@Button
                         }
-                        if (amt > 200) {
-                            errorMessage = "সর্বোচ্চ ২০০ টাকা একসাথে উইথড্র করা যাবে"
+                        if (amt > maxWithdraw) {
+                            errorMessage = "সর্বোচ্চ $maxWithdraw টাকা একসাথে উইথড্র করা যাবে"
                             return@Button
                         }
                         if (amt > currentBalance) {
                             errorMessage = "আপনার ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই"
                             return@Button
                         }
-                        if (targetBkash.length < 11) {
+                        if (targetBkash.trim().length < 11) {
                             errorMessage = "সঠিক বিকাশ নম্বর দিন (১১ ডিজিট)"
                             return@Button
                         }
 
                         errorMessage = null
-                        onConfirmWithdraw(amt, targetBkash)
+                        onConfirmWithdraw(amt, targetBkash.trim())
                     },
                     modifier = Modifier
                         .fillMaxWidth()

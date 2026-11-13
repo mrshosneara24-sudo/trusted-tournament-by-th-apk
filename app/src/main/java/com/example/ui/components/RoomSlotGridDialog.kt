@@ -65,10 +65,26 @@ fun RoomSlotGridDialog(
     bookings: List<SlotBooking> = emptyList(),
     onDismiss: () -> Unit,
     onSelectSlotToBook: (Int) -> Unit,
-    onCancelSlotBookingAndRefund: ((bookingId: String) -> Unit)? = null
+    onCancelSlotBookingAndRefund: ((bookingId: String) -> Unit)? = null,
+    onCancelLegacySlot: ((slotNumber: Int) -> Unit)? = null
 ) {
     var slotToRefundBooking by remember { mutableStateOf<SlotBooking?>(null) }
     var slotToRefundNum by remember { mutableStateOf<Int?>(null) }
+
+    val explicitBookingsMap = remember(bookings, match.id) {
+        bookings.filter { it.matchId == match.id }.associateBy { it.slotNumber }
+    }
+    val bookedSlotSet = remember(match.bookedSlots, match.totalSlots, explicitBookingsMap) {
+        val set = explicitBookingsMap.keys.toMutableSet()
+        var candidate = 1
+        while (set.size < match.bookedSlots && candidate <= match.totalSlots) {
+            if (candidate !in set) {
+                set.add(candidate)
+            }
+            candidate++
+        }
+        set.toSet()
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -80,7 +96,8 @@ fun RoomSlotGridDialog(
                 .heightIn(max = 660.dp)
                 .testTag("room_slot_grid_dialog"),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, BkashPink.copy(alpha = 0.6f))
         ) {
             Column(
                 modifier = Modifier
@@ -177,29 +194,29 @@ fun RoomSlotGridDialog(
                 ) {
                     items(match.totalSlots) { index ->
                         val slotNum = index + 1
-                        val isBooked = slotNum <= match.bookedSlots
-                        val isClickable = !isBooked || (isOwner && onCancelSlotBookingAndRefund != null)
+                        val isBooked = slotNum in bookedSlotSet
+                        val canOwnerRefund = isOwner && (onCancelSlotBookingAndRefund != null || onCancelLegacySlot != null)
+                        val isClickable = !isBooked || canOwnerRefund
 
                         Box(
                             modifier = Modifier
                                 .height(50.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(
-                                    if (isBooked) Color(0xFF201524) else Color(0xFF0F3124)
+                                    if (isBooked) Color(0xFF280B1C) else Color(0xFF0E2921)
                                 )
                                 .border(
                                     width = 1.dp,
                                     color = if (isBooked) {
-                                        if (isOwner) Color(0xFFEF4444) else Color(0xFF3F2034)
+                                        if (isOwner) com.example.ui.theme.NeonPink else Color(0xFF4E1B3B)
                                     } else VictoryGreen.copy(alpha = 0.6f),
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .clickable(enabled = isClickable) {
                                     if (!isBooked) {
                                         onSelectSlotToBook(slotNum)
-                                    } else if (isOwner && onCancelSlotBookingAndRefund != null) {
-                                        val found = bookings.find { it.matchId == match.id && it.slotNumber == slotNum }
-                                        slotToRefundBooking = found
+                                    } else if (canOwnerRefund) {
+                                        slotToRefundBooking = explicitBookingsMap[slotNum]
                                         slotToRefundNum = slotNum
                                     }
                                 }
@@ -212,14 +229,14 @@ fun RoomSlotGridDialog(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isBooked) {
-                                        if (isOwner) Color(0xFFFCA5A5) else Color(0xFF94A3B8)
+                                        if (isOwner) com.example.ui.theme.BlushPink else Color(0xFFA7829B)
                                     } else VictoryGreen
                                 )
                                 if (isBooked) {
                                     Icon(
                                         imageVector = Icons.Filled.Lock,
                                         contentDescription = "Booked",
-                                        tint = Color(0xFFEF4444),
+                                        tint = com.example.ui.theme.NeonPink,
                                         modifier = Modifier.size(12.dp)
                                     )
                                 } else {
@@ -236,19 +253,26 @@ fun RoomSlotGridDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                val firstAvailable = (1..match.totalSlots).firstOrNull { it !in bookedSlotSet }
                 Button(
                     onClick = {
-                        val firstAvailable = (match.bookedSlots + 1).coerceAtMost(match.totalSlots)
-                        onSelectSlotToBook(firstAvailable)
+                        if (firstAvailable != null) {
+                            onSelectSlotToBook(firstAvailable)
+                        }
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    enabled = firstAvailable != null,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Filled.SportsEsports, contentDescription = "Buy", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "যেকোনো ফাঁকা স্লট বুক করুন (৳${match.entryFee})",
+                        text = if (firstAvailable != null) {
+                            "যেকোনো ফাঁকা স্লট বুক করুন (৳${match.entryFee})"
+                        } else {
+                            "সব স্লট পূর্ণ হয়েছে"
+                        },
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -296,6 +320,8 @@ fun RoomSlotGridDialog(
                         val bookingId = booking?.bookingId ?: ""
                         if (bookingId.isNotBlank()) {
                             onCancelSlotBookingAndRefund?.invoke(bookingId)
+                        } else {
+                            onCancelLegacySlot?.invoke(slotNum)
                         }
                         slotToRefundNum = null
                         slotToRefundBooking = null

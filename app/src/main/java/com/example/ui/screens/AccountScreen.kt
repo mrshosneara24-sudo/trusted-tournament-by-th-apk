@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -88,12 +89,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AppCustomization
 import com.example.model.BadgeType
 import com.example.model.UserProfile
 import com.example.ui.components.BadgePill
 import com.example.ui.components.BadgeShowcaseDialog
+import com.example.ui.components.ForgotPasswordDialog
 import com.example.ui.components.getAvailableAvatars
 import com.example.ui.components.getAvatarDrawableRes
+import com.example.ui.components.getLogoDrawable
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
@@ -101,6 +105,7 @@ import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -108,14 +113,18 @@ fun AccountScreen(
     userProfile: UserProfile,
     walletBalance: Int,
     onEditProfileClick: () -> Unit,
-    onLogin: (phoneOrEmail: String, password: String) -> Unit,
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String) -> Unit,
+    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
+    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit,
     onLogout: () -> Unit,
     onNavigateToWallet: () -> Unit,
     onNavigateToMyMatches: () -> Unit,
     onOpenRules: () -> Unit,
     onOpenSupportChat: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
+    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
+    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
+    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
+    appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -125,6 +134,9 @@ fun AccountScreen(
         AuthView(
             onLogin = onLogin,
             onRegister = onRegister,
+            onRequestOtp = onRequestOtp,
+            onVerifyOtp = onVerifyOtp,
+            onResetPassword = onResetPassword,
             modifier = modifier
         )
     } else {
@@ -139,6 +151,7 @@ fun AccountScreen(
             onOpenRules = onOpenRules,
             onOpenSupportChat = onOpenSupportChat,
             onOpenOwnerPanel = onOpenOwnerPanel,
+            appCustomization = appCustomization,
             modifier = modifier
         )
     }
@@ -191,6 +204,7 @@ private fun LoggedInAccountView(
     onOpenRules: () -> Unit,
     onOpenSupportChat: () -> Unit,
     onOpenOwnerPanel: () -> Unit,
+    appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -774,8 +788,8 @@ private fun LoggedInAccountView(
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF2C1E07),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f)),
+                        color = Color(0xFF240B1B),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1010,7 +1024,7 @@ private fun LoggedInAccountView(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.45f))
             ) {
                 Row(
                     modifier = Modifier
@@ -1022,10 +1036,10 @@ private fun LoggedInAccountView(
                         modifier = Modifier
                             .size(56.dp)
                             .clip(CircleShape)
-                            .border(2.dp, FlameYellow, CircleShape)
+                            .border(2.dp, NeonPink, CircleShape)
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.th_logo),
+                            painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
                             contentDescription = "TH Logo",
                             modifier = Modifier.size(56.dp),
                             contentScale = ContentScale.Crop
@@ -1034,17 +1048,17 @@ private fun LoggedInAccountView(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "TRUSTED TOURNAMENT BY TH",
+                            text = appCustomization.appName,
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                             color = FlameYellow
                         )
                         Text(
-                            text = "অফিসিয়াল TH এস্পোর্টস ব্র্যান্ড • ১০০% বিশ্বস্ত ও নিরাপদ",
+                            text = appCustomization.appTagline,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "অফিসিয়াল বিকাশ: 01861583924",
+                            text = "অফিসিয়াল বিকাশ: ${appCustomization.officialBkashNumber}",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = BkashPink
                         )
@@ -1181,8 +1195,11 @@ private fun AccountMenuRow(
 
 @Composable
 private fun AuthView(
-    onLogin: (phoneOrEmail: String, password: String) -> Unit,
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String) -> Unit,
+    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
+    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit,
+    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String>,
+    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean,
+    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     var selectedAuthTab by remember { mutableIntStateOf(0) } // 0: Login, 1: Sign Up
@@ -1281,7 +1298,12 @@ private fun AuthView(
 
         if (selectedAuthTab == 0) {
             item {
-                LoginFormCard(onLogin = onLogin)
+                LoginFormCard(
+                    onLogin = onLogin,
+                    onRequestOtp = onRequestOtp,
+                    onVerifyOtp = onVerifyOtp,
+                    onResetPassword = onResetPassword
+                )
             }
         } else {
             item {
@@ -1293,11 +1315,15 @@ private fun AuthView(
 
 @Composable
 private fun LoginFormCard(
-    onLogin: (phoneOrEmail: String, password: String) -> Unit
+    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
+    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String>,
+    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean,
+    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean
 ) {
     var phoneOrEmail by remember { mutableStateOf("01861583924") }
     var password by remember { mutableStateOf("123456") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1378,8 +1404,31 @@ private fun LoginFormCard(
                 singleLine = true
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { showForgotPasswordDialog = true },
+                    modifier = Modifier.testTag("account_forgot_password_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LockReset,
+                        contentDescription = null,
+                        tint = FlameYellow,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "পাসওয়ার্ড ভুলে গেছেন? (Forgot Password)",
+                        color = FlameYellow,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            }
+
             errorMessage?.let { error ->
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = error,
                     color = MaterialTheme.colorScheme.error,
@@ -1387,7 +1436,7 @@ private fun LoginFormCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Login Button
             Button(
@@ -1396,7 +1445,14 @@ private fun LoginFormCard(
                         errorMessage = "মোবাইল নম্বর বা ইমেইল লিখুন"
                         return@Button
                     }
-                    onLogin(phoneOrEmail, password)
+                    if (password.isBlank()) {
+                        errorMessage = "আপনার পাসওয়ার্ড লিখুন"
+                        return@Button
+                    }
+                    val ok = onLogin(phoneOrEmail, password)
+                    if (!ok) {
+                        errorMessage = "ভুল নম্বর/UID অথবা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password এ চাপুন।"
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1434,11 +1490,26 @@ private fun LoginFormCard(
             }
         }
     }
+
+    if (showForgotPasswordDialog) {
+        ForgotPasswordDialog(
+            initialPhoneOrUid = phoneOrEmail,
+            onDismiss = { showForgotPasswordDialog = false },
+            onRequestOtp = onRequestOtp,
+            onVerifyOtp = onVerifyOtp,
+            onResetPassword = onResetPassword,
+            onPasswordResetSuccess = { updatedPhone, updatedPass ->
+                phoneOrEmail = updatedPhone
+                password = updatedPass
+                errorMessage = null
+            }
+        )
+    }
 }
 
 @Composable
 private fun SignUpFormCard(
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String) -> Unit
+    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var ign by remember { mutableStateOf("") }
@@ -1690,7 +1761,19 @@ private fun SignUpFormCard(
                         errorMessage = "মোবাইল নম্বর দিন"
                         return@Button
                     }
-                    onRegister(name, ign, uid, phone, if (bkash.isBlank()) phone else bkash, selectedAvatarId)
+                    if (password.trim().length < 4) {
+                        errorMessage = "কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন"
+                        return@Button
+                    }
+                    onRegister(
+                        name.trim(),
+                        ign.trim(),
+                        uid.trim(),
+                        phone.trim(),
+                        if (bkash.isBlank()) phone.trim() else bkash.trim(),
+                        selectedAvatarId,
+                        password.trim()
+                    )
                 },
                 modifier = Modifier
                     .fillMaxWidth()

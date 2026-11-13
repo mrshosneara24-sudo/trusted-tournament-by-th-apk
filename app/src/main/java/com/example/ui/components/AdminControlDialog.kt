@@ -280,7 +280,7 @@ private fun PublishRoomSection(
 
         // Match Select Buttons
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            matches.take(4).forEach { match ->
+            matches.forEach { match ->
                 val isSelected = match.id == selectedMatchId
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -434,7 +434,7 @@ private fun WhatsAppGroupSection(
     currentUrl: String,
     onUpdateUrl: (url: String) -> Unit
 ) {
-    var urlInput by remember { mutableStateOf(currentUrl) }
+    var urlInput by remember(currentUrl) { mutableStateOf(currentUrl) }
     var isSaved by remember { mutableStateOf(false) }
 
     Column {

@@ -1,13 +1,22 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,10 +32,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +48,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +99,7 @@ import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +147,7 @@ fun MainTournamentApp(
     val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
 
+    val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(snackbarMsg) {
@@ -145,15 +160,25 @@ fun MainTournamentApp(
     // Discord-inspired Onboarding & Captcha Screen for new downloads / logged-out users
     if (!isLoggedIn) {
         AuthOnboardingScreen(
-            onRegister = { name, ign, uid, phone, bkash ->
-                viewModel.register(name, ign, uid, phone, bkash, "avatar_1")
+            onRegister = { name, ign, uid, phone, bkash, pass ->
+                viewModel.register(name, ign, uid, phone, bkash, "avatar_1", pass)
             },
             onLogin = { phoneOrEmail, pass ->
                 viewModel.login(phoneOrEmail, pass)
             },
             onDemoOwnerLogin = {
                 viewModel.loginAsDemoOwner()
-            }
+            },
+            onRequestOtp = { phoneOrUid ->
+                viewModel.requestPasswordResetOtp(phoneOrUid)
+            },
+            onVerifyOtp = { phoneOrUid, otp ->
+                viewModel.verifyPasswordResetOtp(phoneOrUid, otp)
+            },
+            onResetPassword = { phoneOrUid, newPass ->
+                viewModel.resetPassword(phoneOrUid, newPass)
+            },
+            appCustomization = appCustomization
         )
         return
     }
@@ -168,142 +193,156 @@ fun MainTournamentApp(
         containerColor = DarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { viewModel.selectTab(TournamentTab.MATCHES) }
-                    ) {
-                        Image(
-                            painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
-                            contentDescription = "App Logo",
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = appCustomization.appName,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 0.5.sp
-                            ),
-                            color = Color.White,
-                            maxLines = 1
-                        )
-                    }
-                },
-                actions = {
-                    // Supreme Owner A-to-Z Master Editor Button (Crown)
-                    IconButton(
-                        onClick = { showMasterAppEditor = true },
-                        modifier = Modifier.testTag("appbar_owner_btn")
-                    ) {
-                        Text("👑", fontSize = 18.sp)
-                    }
-
-                    // Admin Control Button (One-tap Room publishing and WhatsApp link setup)
-                    IconButton(
-                        onClick = { viewModel.openAdminPanel() },
-                        modifier = Modifier.testTag("appbar_admin_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AdminPanelSettings,
-                            contentDescription = "Admin Control",
-                            tint = FlameYellow
-                        )
-                    }
-
-                    // Daily Streak Button (Fire Icon)
-                    IconButton(
-                        onClick = { viewModel.openDailyStreak() },
-                        modifier = Modifier.testTag("appbar_daily_streak_btn")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.LocalFireDepartment,
-                                contentDescription = "Daily Streak",
-                                tint = FlameOrange
+            Column {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { viewModel.selectTab(TournamentTab.MATCHES) }
+                        ) {
+                            Image(
+                                painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
+                                contentDescription = "App Logo",
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
                             )
-                            if (!dailyStreakInfo.isTodayClaimed) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .align(Alignment.TopEnd)
-                                        .clip(CircleShape)
-                                        .background(FlameYellow)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = appCustomization.appName,
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.4.sp
+                                ),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                    },
+                    actions = {
+                        // Supreme Owner A-to-Z Master Editor Button (Crown)
+                        IconButton(
+                            onClick = { showMasterAppEditor = true },
+                            modifier = Modifier.size(36.dp).testTag("appbar_owner_btn")
+                        ) {
+                            Text("👑", fontSize = 16.sp)
+                        }
+
+                        // Admin Control Button
+                        IconButton(
+                            onClick = { viewModel.openAdminPanel() },
+                            modifier = Modifier.size(36.dp).testTag("appbar_admin_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AdminPanelSettings,
+                                contentDescription = "Admin Control",
+                                tint = FlameYellow,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Daily Streak Button
+                        IconButton(
+                            onClick = { viewModel.openDailyStreak() },
+                            modifier = Modifier.size(36.dp).testTag("appbar_daily_streak_btn")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.LocalFireDepartment,
+                                    contentDescription = "Daily Streak",
+                                    tint = NeonPink,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                if (!dailyStreakInfo.isTodayClaimed) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .align(Alignment.TopEnd)
+                                            .clip(CircleShape)
+                                            .background(FlameYellow)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Talk with AI Button
+                        IconButton(
+                            onClick = { viewModel.openAiAssistant() },
+                            modifier = Modifier.size(36.dp).testTag("appbar_ai_chat_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.SmartToy,
+                                contentDescription = "Talk with AI",
+                                tint = FlameCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Settings Button
+                        IconButton(
+                            onClick = { viewModel.openSettings() },
+                            modifier = Modifier.size(36.dp).testTag("appbar_settings_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Settings",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // bKash Wallet Balance Pill
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = BkashPink,
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                            modifier = Modifier
+                                .padding(end = 8.dp, start = 2.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { viewModel.selectTab(TournamentTab.WALLET) }
+                                .testTag("appbar_wallet_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AccountBalanceWallet,
+                                    contentDescription = "Wallet",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "৳$walletBalance",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                    color = Color.White
                                 )
                             }
                         }
-                    }
-
-                    // Talk with AI Button (Robot Icon)
-                    IconButton(
-                        onClick = { viewModel.openAiAssistant() },
-                        modifier = Modifier.testTag("appbar_ai_chat_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SmartToy,
-                            contentDescription = "Talk with AI",
-                            tint = FlameCyan
-                        )
-                    }
-
-                    // Settings Button
-                    IconButton(
-                        onClick = { viewModel.openSettings() },
-                        modifier = Modifier.testTag("appbar_settings_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Settings",
-                            tint = Color.White
-                        )
-                    }
-
-                    // bKash Wallet Balance Pill
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = BkashPink,
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { viewModel.selectTab(TournamentTab.WALLET) }
-                            .testTag("appbar_wallet_btn")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AccountBalanceWallet,
-                                contentDescription = "Wallet",
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "৳$walletBalance",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                                color = Color.White
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = DarkSurface
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = DarkSurface
+                    )
                 )
-            )
+                HorizontalDivider(color = FlameYellow.copy(alpha = 0.28f), thickness = 1.dp)
+            }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = DarkSurface,
-                tonalElevation = 8.dp
-            ) {
+            Column {
+                HorizontalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
+                NavigationBar(
+                    containerColor = DarkSurface,
+                    tonalElevation = 8.dp
+                ) {
                 // Matches Tab
                 NavigationBarItem(
                     selected = currentTab == TournamentTab.MATCHES,
-                    onClick = { viewModel.selectTab(TournamentTab.MATCHES) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.selectTab(TournamentTab.MATCHES)
+                    },
                     icon = {
                         Icon(
                             imageVector = Icons.Filled.SportsEsports,
@@ -406,76 +445,130 @@ fun MainTournamentApp(
                 )
             }
         }
+        }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentTab) {
-                TournamentTab.MATCHES -> {
-                    MatchesScreen(
-                        matches = matches,
-                        myBookings = myBookings,
-                        selectedCategory = selectedCategory,
-                        searchQuery = searchQuery,
-                        walletBalance = walletBalance,
-                        onCategorySelected = { viewModel.selectCategory(it) },
-                        onSearchChanged = { viewModel.onSearchQueryChanged(it) },
-                        onWalletClick = { viewModel.selectTab(TournamentTab.WALLET) },
-                        onBookSlotClick = { viewModel.openSlotBooking(it) },
-                        onViewRoomClick = { viewModel.openRoomDetails(it) },
-                        onViewSlotGridClick = { viewModel.openSlotGrid(it) },
-                        onDailySpinClick = { viewModel.openLuckySpin() },
-                        onSupportChatClick = { viewModel.openSupportChat() },
-                        onDailyStreakClick = { viewModel.openDailyStreak() },
-                        dailyMissions = dailyMissions,
-                        onClaimMission = { viewModel.claimMission(it) },
-                        appCustomization = appCustomization
-                    )
+            if (appCustomization.isMaintenanceMode) {
+                Surface(
+                    color = Color(0xFF3A0919),
+                    border = BorderStroke(1.dp, NeonPink),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("maintenance_banner"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = "Maintenance Notice",
+                            tint = NeonPink,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = appCustomization.maintenanceMessage,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
                 }
+            }
 
-                TournamentTab.MY_MATCHES -> {
-                    MyMatchesScreen(
-                        bookings = myBookings,
-                        onViewRoomDetails = { viewModel.openRoomDetailsForBooking(it) },
-                        onExploreMatchesClick = { viewModel.selectTab(TournamentTab.MATCHES) }
-                    )
-                }
+            Box(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = currentTab,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(220)) +
+                            slideInVertically(animationSpec = tween(220)) { it / 28 })
+                            .togetherWith(fadeOut(animationSpec = tween(160)))
+                    },
+                    label = "tab_content_transition"
+                ) { activeTab ->
+                    when (activeTab) {
+                        TournamentTab.MATCHES -> {
+                            MatchesScreen(
+                                matches = matches,
+                                myBookings = myBookings,
+                                selectedCategory = selectedCategory,
+                                searchQuery = searchQuery,
+                                walletBalance = walletBalance,
+                                onCategorySelected = { viewModel.selectCategory(it) },
+                                onSearchChanged = { viewModel.onSearchQueryChanged(it) },
+                                onWalletClick = { viewModel.selectTab(TournamentTab.WALLET) },
+                                onBookSlotClick = { viewModel.openSlotBooking(it) },
+                                onViewRoomClick = { viewModel.openRoomDetails(it) },
+                                onViewSlotGridClick = { viewModel.openSlotGrid(it) },
+                                onDailySpinClick = { viewModel.openLuckySpin() },
+                                onSupportChatClick = { viewModel.openSupportChat() },
+                                onDailyStreakClick = { viewModel.openDailyStreak() },
+                                dailyMissions = dailyMissions,
+                                onClaimMission = { viewModel.claimMission(it) },
+                                appCustomization = appCustomization
+                            )
+                        }
 
-                TournamentTab.WALLET -> {
-                    WalletScreen(
-                        balance = walletBalance,
-                        transactions = transactions,
-                        onAddMoneyClick = { viewModel.openAddMoney() },
-                        onWithdrawClick = { viewModel.openWithdraw() }
-                    )
-                }
+                        TournamentTab.MY_MATCHES -> {
+                            MyMatchesScreen(
+                                bookings = myBookings,
+                                onViewRoomDetails = { viewModel.openRoomDetailsForBooking(it) },
+                                onExploreMatchesClick = { viewModel.selectTab(TournamentTab.MATCHES) },
+                                onViewTransactionHistoryClick = { viewModel.selectTab(TournamentTab.WALLET) }
+                            )
+                        }
 
-                TournamentTab.LEADERBOARD -> {
-                    LeaderboardScreen(
-                        players = leaderboard
-                    )
-                }
+                        TournamentTab.WALLET -> {
+                            WalletScreen(
+                                balance = walletBalance,
+                                transactions = transactions,
+                                onAddMoneyClick = { viewModel.openAddMoney() },
+                                onWithdrawClick = { viewModel.openWithdraw() }
+                            )
+                        }
 
-                TournamentTab.ACCOUNT -> {
-                    AccountScreen(
-                        userProfile = userProfile,
-                        walletBalance = walletBalance,
-                        onEditProfileClick = { viewModel.openEditProfile() },
-                        onLogin = { phoneOrEmail, password ->
-                            viewModel.login(phoneOrEmail, password)
-                        },
-                        onRegister = { name, ign, uid, phone, bkash, avatarId ->
-                            viewModel.register(name, ign, uid, phone, bkash, avatarId)
-                        },
-                        onLogout = { viewModel.logout() },
-                        onNavigateToWallet = { viewModel.selectTab(TournamentTab.WALLET) },
-                        onNavigateToMyMatches = { viewModel.selectTab(TournamentTab.MY_MATCHES) },
-                        onOpenRules = { viewModel.openRules() },
-                        onOpenSupportChat = { viewModel.openSupportChat() },
-                        onOpenOwnerPanel = { viewModel.openOwnerPanel() }
-                    )
+                        TournamentTab.LEADERBOARD -> {
+                            LeaderboardScreen(
+                                players = leaderboard
+                            )
+                        }
+
+                        TournamentTab.ACCOUNT -> {
+                            AccountScreen(
+                                userProfile = userProfile,
+                                walletBalance = walletBalance,
+                                onEditProfileClick = { viewModel.openEditProfile() },
+                                onLogin = { phoneOrEmail, password ->
+                                    viewModel.login(phoneOrEmail, password)
+                                },
+                                onRegister = { name, ign, uid, phone, bkash, avatarId, pass ->
+                                    viewModel.register(name, ign, uid, phone, bkash, avatarId, pass)
+                                },
+                                onRequestOtp = { phoneOrUid ->
+                                    viewModel.requestPasswordResetOtp(phoneOrUid)
+                                },
+                                onVerifyOtp = { phoneOrUid, otp ->
+                                    viewModel.verifyPasswordResetOtp(phoneOrUid, otp)
+                                },
+                                onResetPassword = { phoneOrUid, newPass ->
+                                    viewModel.resetPassword(phoneOrUid, newPass)
+                                },
+                                onLogout = { viewModel.logout() },
+                                onNavigateToWallet = { viewModel.selectTab(TournamentTab.WALLET) },
+                                onNavigateToMyMatches = { viewModel.selectTab(TournamentTab.MY_MATCHES) },
+                                onOpenRules = { viewModel.openRules() },
+                                onOpenSupportChat = { viewModel.openSupportChat() },
+                                onOpenOwnerPanel = { viewModel.openOwnerPanel() },
+                                appCustomization = appCustomization
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -483,10 +576,15 @@ fun MainTournamentApp(
 
     // Slot Booking Dialog
     bookingMatch?.let { match ->
+        val takenSlots = myBookings.filter { it.matchId == match.id }.map { it.slotNumber }.toSet()
         SlotBookingDialog(
             match = match,
-            officialBkashNumber = viewModel.officialBkashNumber,
+            officialBkashNumber = appCustomization.officialBkashNumber,
             initialSlotNumber = preselectedSlot,
+            defaultIgn = userProfile.ign,
+            defaultUid = userProfile.uid,
+            defaultBkash = userProfile.bkashNumber,
+            takenSlots = takenSlots,
             onDismiss = { viewModel.closeSlotBooking() },
             onConfirmBooking = { slot, ign, uid, senderBkash, trxId ->
                 viewModel.confirmSlotBooking(slot, ign, uid, senderBkash, trxId)
@@ -507,6 +605,9 @@ fun MainTournamentApp(
             },
             onCancelSlotBookingAndRefund = { bookingId ->
                 viewModel.cancelSlotBookingAndRefund(bookingId)
+            },
+            onCancelLegacySlot = { slotNumber ->
+                viewModel.cancelLegacySlotByNumber(match.id, slotNumber)
             }
         )
     }
@@ -526,7 +627,7 @@ fun MainTournamentApp(
     // Add Money Dialog
     if (showAddMoney) {
         AddMoneyDialog(
-            officialBkashNumber = viewModel.officialBkashNumber,
+            officialBkashNumber = appCustomization.officialBkashNumber,
             onDismiss = { viewModel.closeAddMoney() },
             onConfirmDeposit = { amount, senderBkash, trxId ->
                 viewModel.confirmAddMoney(amount, senderBkash, trxId)
@@ -538,6 +639,9 @@ fun MainTournamentApp(
     if (showWithdraw) {
         WithdrawDialog(
             currentBalance = walletBalance,
+            minWithdraw = appCustomization.minWithdraw,
+            maxWithdraw = appCustomization.maxWithdraw,
+            defaultBkashNumber = userProfile.bkashNumber,
             onDismiss = { viewModel.closeWithdraw() },
             onConfirmWithdraw = { amount, bkashNumber ->
                 viewModel.confirmWithdraw(amount, bkashNumber)
@@ -571,7 +675,7 @@ fun MainTournamentApp(
             onTabSelected = { tab -> viewModel.setSupportDialogTab(tab) },
             adminMessages = chatMessages,
             aiMessages = aiChatMessages,
-            officialBkashNumber = viewModel.officialBkashNumber,
+            officialBkashNumber = appCustomization.officialBkashNumber,
             onDismiss = { viewModel.closeSupportChat() },
             onSendAdminMessage = { text -> viewModel.sendChatMessage(text) },
             onSendAiMessage = { text -> viewModel.sendAiMessage(text) },
@@ -615,8 +719,9 @@ fun MainTournamentApp(
     // Settings Dialog
     if (showSettingsDialog) {
         SettingsDialog(
-            officialBkashNumber = viewModel.officialBkashNumber,
+            officialBkashNumber = appCustomization.officialBkashNumber,
             officialWhatsAppUrl = officialWhatsAppUrl,
+            appCustomization = appCustomization,
             onDismiss = { viewModel.closeSettings() },
             onOpenAdminPanel = {
                 viewModel.closeSettings()
@@ -720,10 +825,10 @@ fun MainTournamentApp(
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.5f))
             ) {
                 RulesAndSupportScreen(
-                    officialBkashNumber = viewModel.officialBkashNumber,
+                    officialBkashNumber = appCustomization.officialBkashNumber,
                     onOpenSupportChat = {
                         viewModel.closeRules()
                         viewModel.openSupportChat()

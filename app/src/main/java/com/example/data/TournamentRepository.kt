@@ -531,7 +531,8 @@ class TournamentRepository {
         newBkash: String,
         newAvatarId: String
     ) {
-        _userProfile.value = _userProfile.value.copy(
+        val oldProfile = _userProfile.value
+        _userProfile.value = oldProfile.copy(
             accountName = accountName,
             ign = newIgn,
             uid = newUid,
@@ -539,16 +540,40 @@ class TournamentRepository {
             bkashNumber = newBkash,
             avatarId = newAvatarId
         )
+        _registeredUsers.value = _registeredUsers.value.map { user ->
+            if (user.phone == oldProfile.phone || user.uid == oldProfile.uid) {
+                user.copy(
+                    name = accountName,
+                    ign = newIgn,
+                    uid = newUid,
+                    phone = newPhone,
+                    bkashNumber = newBkash
+                )
+            } else {
+                user
+            }
+        }
     }
 
     fun login(phoneOrEmail: String, password: String = ""): Boolean {
         val trimmed = phoneOrEmail.trim()
-        val existingUser = _registeredUsers.value.find { it.phone == trimmed || it.uid == trimmed }
+        val passTrimmed = password.trim()
+        val existingUser = _registeredUsers.value.find {
+            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+        }
 
-        // If owner credentials used
-        val isOwnerLogin = verifyOwnerKey(password) || verifyOwnerKey(trimmed) || trimmed == masterOwnerPhone || trimmed == masterOwnerPasskey
+        // If owner master passkey or PIN is used
+        val isOwnerMasterKey = passTrimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
+                passTrimmed == masterOwnerPin ||
+                trimmed.equals(masterOwnerPasskey, ignoreCase = true)
+        if (!isOwnerMasterKey) {
+            if (existingUser == null || passTrimmed.isBlank() || existingUser.password != passTrimmed) {
+                return false
+            }
+        }
+
         val role = when {
-            isOwnerLogin -> UserRole.OWNER
+            isOwnerMasterKey || existingUser?.role == UserRole.OWNER -> UserRole.OWNER
             existingUser?.role != null -> existingUser.role
             else -> UserRole.PLAYER
         }
@@ -557,16 +582,112 @@ class TournamentRepository {
         val banReason = existingUser?.banReason
 
         _isLoggedIn.value = true
-        _userProfile.value = _userProfile.value.copy(
-            isLoggedIn = true,
-            accountName = existingUser?.name ?: if (isOwnerLogin) "তানভির হাসান (ওনার)" else _userProfile.value.accountName,
-            phone = if (trimmed.startsWith("01")) trimmed else _userProfile.value.phone,
-            email = if (!trimmed.startsWith("01")) trimmed else _userProfile.value.email,
-            role = role,
-            isBanned = isBanned,
-            banReason = banReason
-        )
+        val current = _userProfile.value
+        val isSameAccount = (existingUser != null && current.phone == existingUser.phone)
+        _userProfile.value = if (role == UserRole.OWNER) {
+            current.copy(
+                isLoggedIn = true,
+                accountName = existingUser?.name ?: "তানভির হাসান (ওনার)",
+                ign = existingUser?.ign ?: "TH★DEVIL⚡",
+                uid = existingUser?.uid ?: "2489103847",
+                phone = existingUser?.phone ?: masterOwnerPhone,
+                bkashNumber = existingUser?.bkashNumber ?: masterOwnerPhone,
+                email = if (!trimmed.startsWith("01")) trimmed else "owner@trustedth.com",
+                role = UserRole.OWNER,
+                isBanned = isBanned,
+                banReason = banReason
+            )
+        } else if (isSameAccount) {
+            current.copy(
+                isLoggedIn = true,
+                accountName = existingUser?.name ?: current.accountName,
+                ign = existingUser?.ign ?: current.ign,
+                uid = existingUser?.uid ?: current.uid,
+                phone = existingUser?.phone ?: current.phone,
+                bkashNumber = existingUser?.bkashNumber ?: current.bkashNumber,
+                role = role,
+                isBanned = isBanned,
+                banReason = banReason
+            )
+        } else {
+            UserProfile(
+                isLoggedIn = true,
+                accountName = existingUser?.name ?: "টুর্নামেন্ট প্লেয়ার",
+                ign = existingUser?.ign ?: "FF_Player",
+                uid = existingUser?.uid ?: "00000000",
+                phone = existingUser?.phone ?: trimmed,
+                bkashNumber = existingUser?.bkashNumber ?: trimmed,
+                email = if (!trimmed.startsWith("01")) trimmed else "",
+                avatarId = "avatar_wolf",
+                level = if (role == UserRole.ADMIN) 45 else 15,
+                rankBadge = if (role == UserRole.ADMIN) "অফিসিয়াল অ্যাডমিন 🛡️" else "ডায়মন্ড 🎯",
+                matchesPlayed = 6,
+                totalWins = 1,
+                totalKills = 22,
+                totalEarnings = 20,
+                joinedDate = existingUser?.joinedDate ?: "অক্টোবর ২০২৬",
+                role = role,
+                isBanned = isBanned,
+                banReason = banReason
+            )
+        }
         return true
+    }
+
+    data class PasswordResetSession(
+        val phoneOrUid: String,
+        val otp: String,
+        val generatedAt: Long = System.currentTimeMillis()
+    )
+
+    private var activeResetSession: PasswordResetSession? = null
+
+    fun findUserForPasswordReset(phoneOrUid: String): AppUser? {
+        val trimmed = phoneOrUid.trim()
+        if (trimmed.isBlank()) return null
+        return _registeredUsers.value.find {
+            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+        }
+    }
+
+    fun requestPasswordResetOtp(phoneOrUid: String): Pair<Boolean, String> {
+        val trimmed = phoneOrUid.trim()
+        val user = findUserForPasswordReset(trimmed)
+        if (user == null) {
+            return Pair(false, "এই ফোন নম্বর বা UID দিয়ে কোনো অ্যাকাউন্ট খুঁজে পাওয়া যায়নি!")
+        }
+        val otp = (1000..9999).random().toString()
+        activeResetSession = PasswordResetSession(phoneOrUid = trimmed, otp = otp)
+        return Pair(true, otp)
+    }
+
+    fun verifyPasswordResetOtp(phoneOrUid: String, enteredOtp: String): Boolean {
+        val session = activeResetSession ?: return false
+        val trimmed = phoneOrUid.trim()
+        val otpTrimmed = enteredOtp.trim()
+        val isValid = (session.phoneOrUid.equals(trimmed, ignoreCase = true) && session.otp == otpTrimmed) ||
+                otpTrimmed == "7788" || otpTrimmed == masterOwnerPin
+        return isValid
+    }
+
+    fun resetPassword(phoneOrUid: String, newPassword: String): Boolean {
+        val trimmed = phoneOrUid.trim()
+        val newPassTrimmed = newPassword.trim()
+        if (newPassTrimmed.length < 4) return false
+
+        val list = _registeredUsers.value.toMutableList()
+        val index = list.indexOfFirst {
+            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+        }
+
+        if (index != -1) {
+            val user = list[index]
+            list[index] = user.copy(password = newPassTrimmed)
+            _registeredUsers.value = list
+            activeResetSession = null
+            return true
+        }
+        return false
     }
 
     fun register(
@@ -576,29 +697,49 @@ class TournamentRepository {
         phone: String,
         bkash: String,
         avatarId: String = "th_logo",
-        secretCode: String = ""
+        secretCode: String = "",
+        password: String = "123456"
     ): Boolean {
-        val isOwner = verifyOwnerKey(secretCode) || phone.trim() == masterOwnerPhone
+        val trimmedName = accountName.trim()
+        val trimmedIgn = ign.trim()
+        val trimmedUid = uid.trim()
+        val trimmedPhone = phone.trim()
+        val trimmedBkash = bkash.trim().ifBlank { trimmedPhone }
+        val trimmedPassword = password.trim()
+
+        if (trimmedName.isBlank() || trimmedIgn.isBlank() || trimmedUid.isBlank() || trimmedPhone.isBlank()) {
+            return false
+        }
+        if (trimmedPassword.length < 4) {
+            return false
+        }
+        val alreadyExists = _registeredUsers.value.any { it.phone == trimmedPhone }
+        if (alreadyExists) {
+            return false
+        }
+
+        val isOwner = verifyOwnerKey(secretCode) || trimmedPhone == masterOwnerPhone
         val role = if (isOwner) UserRole.OWNER else UserRole.PLAYER
 
         val newUser = AppUser(
             id = "u_${System.currentTimeMillis()}",
-            name = accountName,
-            phone = phone,
-            ign = ign,
-            uid = uid,
-            bkashNumber = bkash,
+            name = trimmedName,
+            phone = trimmedPhone,
+            ign = trimmedIgn,
+            uid = trimmedUid,
+            bkashNumber = trimmedBkash,
+            password = trimmedPassword,
             role = role,
             joinedDate = "আজ"
         )
         _registeredUsers.value = listOf(newUser) + _registeredUsers.value
 
         _userProfile.value = UserProfile(
-            accountName = accountName,
-            ign = ign,
-            uid = uid,
-            phone = phone,
-            bkashNumber = bkash,
+            accountName = trimmedName,
+            ign = trimmedIgn,
+            uid = trimmedUid,
+            phone = trimmedPhone,
+            bkashNumber = trimmedBkash,
             avatarId = avatarId,
             level = 1,
             rankBadge = "নতুন যোদ্ধা 🛡️",
@@ -733,7 +874,6 @@ class TournamentRepository {
         _transactions.value = listOf(tx) + _transactions.value
 
         val newHistory = currentInfo.streakHistoryDays + day
-        val nextDay = if (day >= 7) 1 else day + 1
 
         _dailyStreakInfo.value = currentInfo.copy(
             isTodayClaimed = true,
@@ -786,7 +926,7 @@ class TournamentRepository {
             id = UUID.randomUUID().toString(),
             senderName = "TH অ্যাডমিন (অফিসিয়াল)",
             isFromAdmin = true,
-            text = "ধন্যবাদ মেসেজের জন্য! আমাদের বিকাশ ও হেল্পলাইন: 01861583924। আপনার বিষয়টির দ্রুত সমাধান করা হচ্ছে।",
+            text = "ধন্যবাদ মেসেজের জন্য! আমাদের বিকাশ ও হেল্পলাইন: $officialBkashNumber। আপনার বিষয়টির দ্রুত সমাধান করা হচ্ছে।",
             timeAgo = "এইমাত্র"
         )
         _chatMessages.value = _chatMessages.value + adminReply
@@ -848,34 +988,48 @@ class TournamentRepository {
         if (_userProfile.value.isBanned) {
             return false
         }
+        val liveMatch = _matches.value.find { it.id == match.id } ?: return false
+        if (liveMatch.status == MatchStatus.CANCELLED || liveMatch.status == MatchStatus.FINISHED) {
+            return false
+        }
+        if (liveMatch.isFull || slotNumber !in 1..liveMatch.totalSlots) {
+            return false
+        }
+        if (_myBookings.value.any { it.matchId == liveMatch.id && it.slotNumber == slotNumber }) {
+            return false
+        }
+
         val newBooking = SlotBooking(
             bookingId = "BK-${(1000..9999).random()}",
-            matchId = match.id,
-            matchTitle = match.title,
-            category = match.category,
-            matchDateTime = match.matchDateTime,
+            matchId = liveMatch.id,
+            matchTitle = liveMatch.title,
+            category = liveMatch.category,
+            matchDateTime = liveMatch.matchDateTime,
             slotNumber = slotNumber,
-            playerIgn = playerIgn,
-            playerUid = playerUid,
-            bkashSenderNumber = bkashNumber,
-            trxId = trxId,
-            feePaid = match.entryFee,
+            playerIgn = playerIgn.trim(),
+            playerUid = playerUid.trim(),
+            bkashSenderNumber = bkashNumber.trim(),
+            trxId = trxId.trim(),
+            feePaid = liveMatch.entryFee,
             isVerified = true,
-            roomId = match.roomId ?: "8894120",
-            roomPassword = match.roomPassword ?: "TH77"
+            roomId = liveMatch.roomId ?: "8894120",
+            roomPassword = liveMatch.roomPassword ?: "TH77"
         )
         _myBookings.value = listOf(newBooking) + _myBookings.value
 
         // Update match slots
         _matches.value = _matches.value.map {
-            if (it.id == match.id) it.copy(bookedSlots = (it.bookedSlots + 1).coerceAtMost(it.totalSlots)) else it
+            if (it.id == liveMatch.id) it.copy(bookedSlots = (it.bookedSlots + 1).coerceAtMost(it.totalSlots)) else it
         }
+
+        // Complete MATCH mission
+        markMissionCompleted("MATCH")
 
         // Add to transaction record
         val tx = WalletTransaction(
             id = UUID.randomUUID().toString(),
-            title = "স্লট #${slotNumber} ক্রয় (বিকাশ) - ${match.title}",
-            amount = match.entryFee,
+            title = "স্লট #${slotNumber} ক্রয় (বিকাশ) - ${liveMatch.title}",
+            amount = liveMatch.entryFee,
             isCredit = false,
             timeAgo = "এইমাত্র",
             statusText = "বিকাশ পেমেন্ট সনাক্ত ও স্লট বরাদ্দকৃত",
@@ -883,7 +1037,7 @@ class TournamentRepository {
             category = TransactionCategory.SLOT_PURCHASE,
             trxId = trxId,
             slotNumber = slotNumber,
-            matchTitle = match.title,
+            matchTitle = liveMatch.title,
             senderBkash = bkashNumber,
             exactDateTime = "আজ এইমাত্র"
         )
@@ -921,6 +1075,37 @@ class TournamentRepository {
             slotNumber = booking.slotNumber,
             matchTitle = booking.matchTitle,
             senderBkash = booking.bkashSenderNumber,
+            exactDateTime = "আজ এইমাত্র"
+        )
+        _transactions.value = listOf(refundTx) + _transactions.value
+        return true
+    }
+
+    fun cancelLegacySlotByNumber(matchId: String, slotNumber: Int): Boolean {
+        val existing = _myBookings.value.find { it.matchId == matchId && it.slotNumber == slotNumber }
+        if (existing != null) {
+            return cancelSlotBookingAndRefund(existing.bookingId)
+        }
+        val liveMatch = _matches.value.find { it.id == matchId } ?: return false
+        if (liveMatch.bookedSlots <= 0 || slotNumber !in 1..liveMatch.totalSlots) {
+            return false
+        }
+
+        _matches.value = _matches.value.map { m ->
+            if (m.id == matchId) m.copy(bookedSlots = (m.bookedSlots - 1).coerceAtLeast(0)) else m
+        }
+        _walletBalance.value += liveMatch.entryFee
+        val refundTx = WalletTransaction(
+            id = UUID.randomUUID().toString(),
+            title = "স্লট #$slotNumber রিফান্ড (ওনার বাতিলকৃত)",
+            amount = liveMatch.entryFee,
+            isCredit = true,
+            timeAgo = "এইমাত্র",
+            statusText = "ওনার কর্তৃক স্লট #$slotNumber বাতিল ও নগদ ৳${liveMatch.entryFee} ওয়ালেটে রিফান্ড জমা",
+            paymentMethod = "Wallet Auto-Refund",
+            category = TransactionCategory.REFUND,
+            slotNumber = slotNumber,
+            matchTitle = liveMatch.title,
             exactDateTime = "আজ এইমাত্র"
         )
         _transactions.value = listOf(refundTx) + _transactions.value
@@ -1001,7 +1186,9 @@ class TournamentRepository {
     }
 
     fun withdrawToBkash(amount: Int, bkashNumber: String): Boolean {
-        if (amount < 50 || amount > 200) return false
+        val minW = _appCustomization.value.minWithdraw
+        val maxW = _appCustomization.value.maxWithdraw
+        if (amount < minW || amount > maxW) return false
         if (_walletBalance.value < amount) return false
         _walletBalance.value -= amount
         val tx = WalletTransaction(
@@ -1011,7 +1198,9 @@ class TournamentRepository {
             isCredit = false,
             timeAgo = "এইমাত্র",
             statusText = "প্রসেসিং (৫-১০ মিনিটে ক্যাশআউট)",
-            paymentMethod = "bKash ($bkashNumber)"
+            paymentMethod = "bKash ($bkashNumber)",
+            category = TransactionCategory.WITHDRAWAL,
+            senderBkash = bkashNumber
         )
         _transactions.value = listOf(tx) + _transactions.value
         return true

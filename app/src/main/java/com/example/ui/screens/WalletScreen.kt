@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +66,7 @@ import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -99,7 +101,11 @@ fun WalletScreen(
                     .testTag("wallet_balance_card"),
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                border = BorderStroke(
+                    1.5.dp,
+                    Brush.horizontalGradient(listOf(FlameYellow, NeonPink, Color.White.copy(alpha = 0.7f)))
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -107,8 +113,9 @@ fun WalletScreen(
                         .background(
                             Brush.linearGradient(
                                 colors = listOf(
-                                    BkashPink.copy(alpha = 0.25f),
-                                    Color(0xFF1E1E34)
+                                    Color(0xFF1F0C18),
+                                    Color(0xFF14131B),
+                                    Color(0xFF09090D)
                                 )
                             )
                         )
@@ -185,7 +192,7 @@ fun WalletScreen(
                                 onClick = onAddMoneyClick,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(46.dp)
+                                    .height(48.dp)
                                     .testTag("wallet_add_money_btn"),
                                 colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
                                 shape = RoundedCornerShape(12.dp)
@@ -199,14 +206,17 @@ fun WalletScreen(
                                 onClick = onWithdrawClick,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(46.dp)
+                                    .height(48.dp)
                                     .testTag("wallet_withdraw_btn"),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = FlameYellow,
+                                    contentColor = Color.Black
+                                ),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(imageVector = Icons.Filled.CallMade, contentDescription = "Withdraw", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("ক্যাশআউট", fontWeight = FontWeight.Bold)
+                                Text("ক্যাশআউট", fontWeight = FontWeight.Black)
                             }
                         }
                     }

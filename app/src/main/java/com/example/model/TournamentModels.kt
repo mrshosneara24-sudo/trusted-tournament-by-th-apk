@@ -180,6 +180,7 @@ data class AppUser(
     val ign: String,
     val uid: String,
     val bkashNumber: String,
+    val password: String = "123456",
     val role: UserRole = UserRole.PLAYER,
     val isBanned: Boolean = false,
     val banReason: String? = null,

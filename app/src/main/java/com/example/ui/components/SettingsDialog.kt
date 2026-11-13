@@ -68,18 +68,21 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.R
+import com.example.model.AppCustomization
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
 fun SettingsDialog(
     officialBkashNumber: String,
     officialWhatsAppUrl: String,
+    appCustomization: AppCustomization = AppCustomization(),
     onDismiss: () -> Unit,
     onOpenAdminPanel: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
@@ -308,7 +311,7 @@ fun SettingsDialog(
                 // A-to-Z Master App Editor Card (Requested by User)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFF261E0A),
+                    color = Color(0xFF240B1B),
                     border = androidx.compose.foundation.BorderStroke(2.dp, FlameYellow),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -521,7 +524,7 @@ fun SettingsDialog(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.45f))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -529,10 +532,10 @@ fun SettingsDialog(
                                 modifier = Modifier
                                     .size(46.dp)
                                     .clip(CircleShape)
-                                    .border(1.5.dp, FlameYellow, CircleShape)
+                                    .border(1.5.dp, NeonPink, CircleShape)
                             ) {
                                 Image(
-                                    painter = painterResource(id = R.drawable.th_logo),
+                                    painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
                                     contentDescription = "TH Logo",
                                     modifier = Modifier.size(46.dp),
                                     contentScale = ContentScale.Crop
@@ -541,7 +544,7 @@ fun SettingsDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "TRUSTED TOURNAMENT BY TH",
+                                    text = appCustomization.appName,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
                                     color = Color.White
                                 )
@@ -551,9 +554,9 @@ fun SettingsDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "১০০% বিশ্বস্ত • দ্রুত ক্যাশআউট • মোবাইল অনলি",
+                                    text = appCustomization.appTagline,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = VictoryGreen
+                                    color = FlameYellow
                                 )
                             }
                         }

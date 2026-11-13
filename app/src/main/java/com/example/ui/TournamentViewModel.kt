@@ -52,7 +52,8 @@ class TournamentViewModel(
     private val repository: TournamentRepository = TournamentRepository()
 ) : ViewModel() {
 
-    val officialBkashNumber: String = repository.officialBkashNumber
+    val officialBkashNumber: String
+        get() = appCustomization.value.officialBkashNumber
 
     private val _currentTab = MutableStateFlow(TournamentTab.MATCHES)
     val currentTab: StateFlow<TournamentTab> = _currentTab.asStateFlow()
@@ -77,15 +78,19 @@ class TournamentViewModel(
     val appCustomization: StateFlow<AppCustomization> = repository.appCustomization
     val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
 
-    // Dialog States
-    private val _bookingMatch = MutableStateFlow<TournamentMatch?>(null)
-    val bookingMatch: StateFlow<TournamentMatch?> = _bookingMatch.asStateFlow()
+    // Dialog States (derived reactively from repository.matches so live edits/refunds reflect immediately)
+    private val _bookingMatchId = MutableStateFlow<String?>(null)
+    val bookingMatch: StateFlow<TournamentMatch?> = combine(_bookingMatchId, repository.matches) { id, list ->
+        if (id == null) null else list.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _preselectedSlotNumber = MutableStateFlow<Int?>(null)
     val preselectedSlotNumber: StateFlow<Int?> = _preselectedSlotNumber.asStateFlow()
 
-    private val _roomSlotGridMatch = MutableStateFlow<TournamentMatch?>(null)
-    val roomSlotGridMatch: StateFlow<TournamentMatch?> = _roomSlotGridMatch.asStateFlow()
+    private val _roomSlotGridMatchId = MutableStateFlow<String?>(null)
+    val roomSlotGridMatch: StateFlow<TournamentMatch?> = combine(_roomSlotGridMatchId, repository.matches) { id, list ->
+        if (id == null) null else list.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _roomDetails = MutableStateFlow<RoomDetailsData?>(null)
     val roomDetails: StateFlow<RoomDetailsData?> = _roomDetails.asStateFlow()
@@ -164,21 +169,22 @@ class TournamentViewModel(
     }
 
     fun openSlotBooking(match: TournamentMatch, slot: Int? = null) {
-        _bookingMatch.value = match
+        _bookingMatchId.value = match.id
         _preselectedSlotNumber.value = slot
     }
 
     fun closeSlotBooking() {
-        _bookingMatch.value = null
+        _bookingMatchId.value = null
         _preselectedSlotNumber.value = null
     }
 
     fun openSlotGrid(match: TournamentMatch) {
-        _roomSlotGridMatch.value = match
+        _roomSlotGridMatchId.value = match.id
+        repository.markMissionCompleted("MATCH")
     }
 
     fun closeSlotGrid() {
-        _roomSlotGridMatch.value = null
+        _roomSlotGridMatchId.value = null
     }
 
     fun openRoomDetails(match: TournamentMatch) {
@@ -299,6 +305,7 @@ class TournamentViewModel(
 
     fun sendAiMessage(query: String) {
         repository.sendAiAssistantMessage(query)
+        repository.markMissionCompleted("AI_CHAT")
     }
 
     fun resetAiChat() {
@@ -351,7 +358,7 @@ class TournamentViewModel(
         senderBkash: String,
         trxId: String
     ) {
-        val match = _bookingMatch.value ?: return
+        val match = bookingMatch.value ?: return
         val success = repository.bookSlotWithBkash(
             match = match,
             slotNumber = slotNumber,
@@ -361,10 +368,13 @@ class TournamentViewModel(
             trxId = trxId
         )
         if (success) {
-            _bookingMatch.value = null
-            _roomSlotGridMatch.value = null
+            _bookingMatchId.value = null
+            _roomSlotGridMatchId.value = null
+            _preselectedSlotNumber.value = null
             _snackbarMessage.value = "পেমেন্ট সনাক্ত হয়েছে! স্লট #$slotNumber নিশ্চিত করা হয়েছে।"
             _currentTab.value = TournamentTab.MY_MATCHES
+        } else {
+            _snackbarMessage.value = "স্লট বুকিং ব্যর্থ হয়েছে! এই স্লটটি ইতিমধ্যেই পূর্ণ বা ম্যাচটি বন্ধ আছে।"
         }
     }
 
@@ -375,12 +385,14 @@ class TournamentViewModel(
     }
 
     fun confirmWithdraw(amount: Int, bkashNumber: String) {
-        if (amount < 50) {
-            _snackbarMessage.value = "সর্বনিম্ন ৫০ টাকা উইথড্র করা যাবে!"
+        val minW = appCustomization.value.minWithdraw
+        val maxW = appCustomization.value.maxWithdraw
+        if (amount < minW) {
+            _snackbarMessage.value = "সর্বনিম্ন $minW টাকা উইথড্র করা যাবে!"
             return
         }
-        if (amount > 200) {
-            _snackbarMessage.value = "সর্বোচ্চ ২০০ টাকা উইথড্র করা যাবে!"
+        if (amount > maxW) {
+            _snackbarMessage.value = "সর্বোচ্চ $maxW টাকা উইথড্র করা যাবে!"
             return
         }
         val success = repository.withdrawToBkash(amount, bkashNumber)
@@ -420,6 +432,8 @@ class TournamentViewModel(
         val success = repository.login(phoneOrEmail, password)
         if (success) {
             _snackbarMessage.value = "সফলভাবে লগইন হয়েছে! স্বাগতম ${userProfile.value.accountName}"
+        } else {
+            _snackbarMessage.value = "❌ ভুল নম্বর/UID বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password ব্যবহার করুন।"
         }
         return success
     }
@@ -430,13 +444,44 @@ class TournamentViewModel(
         uid: String,
         phone: String,
         bkash: String,
-        avatarId: String
+        avatarId: String,
+        password: String = "123456"
     ): Boolean {
-        val success = repository.register(accountName, ign, uid, phone, bkash, avatarId)
+        val success = repository.register(accountName, ign, uid, phone, bkash, avatarId, password = password)
         if (success) {
             _snackbarMessage.value = "একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম $accountName"
+        } else {
+            _snackbarMessage.value = "নিবন্ধন ব্যর্থ হয়েছে! এই নম্বরটি ইতিমধ্যেই নিবন্ধিত অথবা তথ্য অসম্পূর্ণ।"
         }
         return success
+    }
+
+    fun requestPasswordResetOtp(phoneOrUid: String): Pair<Boolean, String> {
+        val result = repository.requestPasswordResetOtp(phoneOrUid)
+        if (result.first) {
+            _snackbarMessage.value = "📲 ভেরিফিকেশন কোড (OTP): ${result.second}"
+        } else {
+            _snackbarMessage.value = result.second
+        }
+        return result
+    }
+
+    fun verifyPasswordResetOtp(phoneOrUid: String, enteredOtp: String): Boolean {
+        val ok = repository.verifyPasswordResetOtp(phoneOrUid, enteredOtp)
+        if (!ok) {
+            _snackbarMessage.value = "ভুল ভেরিফিকেশন কোড! আবার চেষ্টা করুন।"
+        }
+        return ok
+    }
+
+    fun resetPassword(phoneOrUid: String, newPass: String): Boolean {
+        val ok = repository.resetPassword(phoneOrUid, newPass)
+        if (ok) {
+            _snackbarMessage.value = "🎉 পাসওয়ার্ড সফলভাবে রিসেট করা হয়েছে! নতুন পাসওয়ার্ড দিয়ে লগইন করুন।"
+        } else {
+            _snackbarMessage.value = "পাসওয়ার্ড রিসেট ব্যর্থ হয়েছে! কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন।"
+        }
+        return ok
     }
 
     fun logout() {
@@ -448,6 +493,14 @@ class TournamentViewModel(
         val success = repository.cancelSlotBookingAndRefund(bookingId)
         if (success) {
             _snackbarMessage.value = "✅ স্লট সফলভাবে বাতিল এবং প্লেয়ারের ওয়ালেটে সম্পূর্ণ টাকা রিফান্ড করা হয়েছে!"
+        }
+        return success
+    }
+
+    fun cancelLegacySlotByNumber(matchId: String, slotNumber: Int): Boolean {
+        val success = repository.cancelLegacySlotByNumber(matchId, slotNumber)
+        if (success) {
+            _snackbarMessage.value = "✅ স্লট #$slotNumber সফলভাবে বাতিল এবং ওয়ালেটে রিফান্ড করা হয়েছে!"
         }
         return success
     }
@@ -626,6 +679,8 @@ class TournamentViewModel(
     fun deleteMatch(matchId: String): Boolean {
         val success = repository.deleteMatch(matchId)
         if (success) {
+            if (_bookingMatchId.value == matchId) _bookingMatchId.value = null
+            if (_roomSlotGridMatchId.value == matchId) _roomSlotGridMatchId.value = null
             _snackbarMessage.value = "🗑️ ম্যাচটি সম্পূর্ণ মুছে ফেলা হয়েছে ও স্লট ফি রিফান্ড করা হয়েছে!"
         }
         return success

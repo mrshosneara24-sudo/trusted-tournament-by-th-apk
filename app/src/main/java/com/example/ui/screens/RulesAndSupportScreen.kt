@@ -106,9 +106,9 @@ fun RulesAndSupportScreen(
                             onClick = onOpenOwnerRulesEditor,
                             colors = ButtonDefaults.buttonColors(containerColor = FlameYellow, contentColor = Color.Black),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier.height(48.dp)
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Filled.Edit, contentDescription = "এডিট রুলস", modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("এডিট রুলস", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
@@ -426,7 +426,7 @@ fun RulesAndSupportScreen(
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
-                                modifier = Modifier.height(34.dp)
+                                modifier = Modifier.height(48.dp)
                             ) {
                                 Text("কপি", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }

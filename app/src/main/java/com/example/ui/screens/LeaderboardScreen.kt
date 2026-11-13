@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,8 @@ import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.GoldChampagne
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -134,11 +138,20 @@ fun LeaderboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.5.dp, NeonPink.copy(alpha = 0.65f)),
                     colors = CardDefaults.cardColors(containerColor = DarkSurface)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF330A22),
+                                        Color(0xFF140A19)
+                                    )
+                                )
+                            )
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -148,7 +161,7 @@ fun LeaderboardScreen(
                                 modifier = Modifier
                                     .size(50.dp)
                                     .clip(CircleShape)
-                                    .background(FlameYellow),
+                                    .background(GoldChampagne),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -216,6 +229,7 @@ fun LeaderboardScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, if (player.ign.contains("আপনি")) NeonPink.copy(alpha = 0.6f) else DarkBorder),
                 colors = CardDefaults.cardColors(
                     containerColor = if (player.ign.contains("আপনি")) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else DarkSurface
                 )
@@ -231,7 +245,7 @@ fun LeaderboardScreen(
                         Surface(
                             shape = CircleShape,
                             color = when (player.rank) {
-                                1 -> FlameYellow
+                                1 -> GoldChampagne
                                 2 -> Color(0xFFC0C0C0)
                                 3 -> Color(0xFFCD7F32)
                                 else -> MaterialTheme.colorScheme.surfaceVariant

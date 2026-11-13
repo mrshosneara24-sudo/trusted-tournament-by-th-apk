@@ -42,9 +42,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
 import com.example.model.SlotBooking
+import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -156,6 +159,7 @@ fun MyMatchesScreen(
                         .fillMaxWidth()
                         .testTag("booked_match_${booking.bookingId}"),
                     shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, NeonPink.copy(alpha = 0.35f)),
                     colors = CardDefaults.cardColors(containerColor = DarkSurface)
                 ) {
                     Column(
@@ -301,6 +305,7 @@ fun MyMatchesScreen(
                             onClick = { onViewRoomDetails(booking) },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(48.dp)
                                 .testTag("view_room_btn_${booking.bookingId}"),
                             colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen),
                             shape = RoundedCornerShape(12.dp)

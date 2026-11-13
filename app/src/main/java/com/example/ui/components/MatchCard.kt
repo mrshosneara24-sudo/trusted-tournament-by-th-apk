@@ -1,6 +1,13 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
@@ -32,11 +40,18 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +61,7 @@ import com.example.model.TournamentMatch
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.NeonPink
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -57,6 +73,18 @@ fun MatchCard(
     onViewSlotGridClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+    var isHyped by rememberSaveable(match.id) { mutableStateOf(false) }
+    val baseHypeCount = remember(match.id) { 12 + (match.bookedSlots % 19) }
+    val isLiveMatch = match.status == MatchStatus.ROOM_OPEN || match.status == MatchStatus.ONGOING
+    val liveTransition = rememberInfiniteTransition(label = "match_status_${match.id}")
+    val statusDotAlpha by liveTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(750), RepeatMode.Reverse),
+        label = "dot_alpha"
+    )
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -65,7 +93,8 @@ fun MatchCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        border = BorderStroke(1.dp, DarkBorder),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
@@ -111,19 +140,62 @@ fun MatchCard(
                     }
                 }
 
-                // Match Status Badge
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = match.status.color.copy(alpha = 0.2f)
+                // Match Hype + Status Badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = match.status.banglaLabel,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = match.status.color
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isHyped) FlameYellow.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            1.dp,
+                            if (isHyped) FlameYellow else Color.White.copy(alpha = 0.16f)
                         ),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                isHyped = !isHyped
+                            }
+                            .testTag("hype_match_btn_${match.id}")
+                    ) {
+                        Text(
+                            text = "🔥 ${baseHypeCount + if (isHyped) 1 else 0}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = if (isHyped) FlameYellow else Color.White
+                            ),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = match.status.color.copy(alpha = 0.2f)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            if (isLiveMatch) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(match.status.color.copy(alpha = statusDotAlpha))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                            }
+                            Text(
+                                text = match.status.banglaLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = match.status.color
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
@@ -166,7 +238,8 @@ fun MatchCard(
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF261E0A)
+                    color = Color(0xFF221D08),
+                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f))
                 ) {
                     Text(
                         text = "⏱️ শুরু হতে বাকি: ${match.startsInMinutes} মিনিট",
@@ -306,6 +379,7 @@ fun MatchCard(
                     onClick = onViewRoomClick,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(48.dp)
                         .testTag("view_room_btn_${match.id}"),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = VictoryGreen
@@ -326,7 +400,9 @@ fun MatchCard(
             } else if (match.isFull) {
                 OutlinedButton(
                     onClick = onViewSlotGridClick,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Filled.GridView, contentDescription = "Grid", modifier = Modifier.size(16.dp))
@@ -345,6 +421,7 @@ fun MatchCard(
                             .height(48.dp)
                             .testTag("slot_grid_btn_${match.id}"),
                         shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.7f)),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = FlameYellow
                         )

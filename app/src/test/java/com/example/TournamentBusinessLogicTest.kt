@@ -389,5 +389,152 @@ class TournamentBusinessLogicTest {
         assertNotNull(bookedSlot)
         assertEquals("VIP_TH_WARRIOR", bookedSlot?.playerIgn)
     }
+
+    @Test
+    fun testForgotPasswordOtpFlowAndPasswordReset() {
+        val ownerPhone = "01861583924"
+
+        // 1. Unknown phone or UID returns false
+        val unknownResult = repository.requestPasswordResetOtp("01000000000")
+        assertFalse("Unknown user must not receive OTP", unknownResult.first)
+
+        // 2. Registered user receives a 4-digit OTP
+        val otpResult = repository.requestPasswordResetOtp(ownerPhone)
+        assertTrue("Registered user must receive OTP", otpResult.first)
+        val generatedOtp = otpResult.second
+        assertEquals("OTP must be 4 digits", 4, generatedOtp.length)
+
+        // 3. Wrong OTP fails verification
+        assertFalse("Wrong OTP must fail verification", repository.verifyPasswordResetOtp(ownerPhone, "0000"))
+
+        // 4. Generated OTP passes verification
+        assertTrue("Generated OTP must verify successfully", repository.verifyPasswordResetOtp(ownerPhone, generatedOtp))
+
+        // 5. Master recovery code also works if active session exists
+        assertTrue("Master recovery code 7788 must verify", repository.verifyPasswordResetOtp(ownerPhone, "7788"))
+
+        // 6. Password shorter than 4 chars must be rejected
+        assertFalse("Short password must be rejected", repository.resetPassword(ownerPhone, "123"))
+
+        // 7. Valid new password updates user password and clears session
+        assertTrue("Valid new password should reset successfully", repository.resetPassword(ownerPhone, "newPass2026"))
+
+        // 8. Old default password must now fail login
+        assertFalse("Old password must fail after reset", repository.login(ownerPhone, "123456"))
+
+        // 9. New password must succeed login
+        assertTrue("New password must succeed login", repository.login(ownerPhone, "newPass2026"))
+        assertTrue("isLoggedIn must be true", repository.isLoggedIn.value)
+    }
+
+    @Test
+    fun testRegistrationStoresPasswordAndLoginValidatesIt() {
+        val testPhone = "01712345678"
+        val testUid = "5566778899"
+
+        val registered = repository.register(
+            accountName = "Rahim Uddin",
+            ign = "TH_Rahim",
+            uid = testUid,
+            phone = testPhone,
+            bkash = testPhone,
+            password = "mySecret99"
+        )
+        assertTrue("Registration should succeed", registered)
+
+        repository.logout()
+        assertFalse("Should be logged out", repository.isLoggedIn.value)
+
+        // Wrong password must fail
+        assertFalse("Login with wrong password must fail", repository.login(testPhone, "wrongPass"))
+        assertFalse("User must stay logged out", repository.isLoggedIn.value)
+
+        // Correct password with UID or phone must succeed
+        assertTrue("Login with UID and right password must succeed", repository.login(testUid, "mySecret99"))
+        assertTrue("User must be logged in", repository.isLoggedIn.value)
+        assertEquals("TH_Rahim", repository.userProfile.value.ign)
+    }
+
+    @Test
+    fun testDynamicWithdrawLimitsAndWithdrawalCategory() {
+        repository.addMoneyWithBkash(500, "01711223344", "DEP_LIMIT_1")
+        repository.updateFinancialSettings(
+            bkash = "01900000001",
+            nagad = "01900000002",
+            whatsAppUrl = "https://chat.whatsapp.com/test",
+            minWithdraw = 100,
+            maxWithdraw = 400
+        )
+
+        // Amount 60 was valid under default 50..200, must now fail under updated 100..400
+        assertFalse("Amount below updated minWithdraw 100 must fail", repository.withdrawToBkash(60, "01711223344"))
+        // Amount 300 must now succeed under updated 100..400
+        assertTrue("Amount 300 within updated limits must succeed", repository.withdrawToBkash(300, "01711223344"))
+        val latestTx = repository.transactions.value.first()
+        assertEquals(com.example.model.TransactionCategory.WITHDRAWAL, latestTx.category)
+        assertEquals("01711223344", latestTx.senderBkash)
+    }
+
+    @Test
+    fun testBookSlotRejectsDuplicateSlotCancelledMatchAndFullMatch() {
+        val match = repository.matches.value.first()
+        val firstBook = repository.bookSlotWithBkash(match, 20, "Hero1", "111", "01711111111", "TRX_A")
+        assertTrue(firstBook)
+
+        // Duplicate same slot must be rejected
+        val duplicateBook = repository.bookSlotWithBkash(match, 20, "Hero2", "222", "01722222222", "TRX_B")
+        assertFalse("Duplicate booking on same slot #20 must fail", duplicateBook)
+
+        // Cancel match -> booking must fail
+        repository.cancelMatchAndRefundAll(match.id)
+        val cancelledMatch = repository.matches.value.first { it.id == match.id }
+        assertFalse(
+            "Booking on CANCELLED match must fail",
+            repository.bookSlotWithBkash(cancelledMatch, 21, "Hero3", "333", "01733333333", "TRX_C")
+        )
+    }
+
+    @Test
+    fun testLegacySlotCancellationAndRefund() {
+        val match = repository.matches.value.first { it.bookedSlots > 0 }
+        val initialBooked = match.bookedSlots
+        val initialBalance = repository.walletBalance.value
+
+        val refunded = repository.cancelLegacySlotByNumber(match.id, 1)
+        assertTrue("Cancelling legacy pre-seeded slot #1 must succeed", refunded)
+
+        val updatedMatch = repository.matches.value.first { it.id == match.id }
+        assertEquals("bookedSlots must decrement by 1", initialBooked - 1, updatedMatch.bookedSlots)
+        assertEquals(
+            "Wallet balance must increase by match.entryFee",
+            initialBalance + match.entryFee,
+            repository.walletBalance.value
+        )
+        assertEquals(
+            com.example.model.TransactionCategory.REFUND,
+            repository.transactions.value.first().category
+        )
+    }
+
+    @Test
+    fun testProfileUpdateSyncsRegisteredUsersAndRejectsDuplicateRegistration() {
+        val phone = "01699887766"
+        assertTrue(repository.register("Karim Mia", "TH_Karim", "77889900", phone, phone, password = "pass1234"))
+        assertFalse(
+            "Duplicate registration with same phone must fail",
+            repository.register("Fake Karim", "Fake", "1122", phone, phone, password = "pass9999")
+        )
+        assertFalse(
+            "Registration with short password must fail",
+            repository.register("Short Pass", "SP", "3344", "01600001111", "01600001111", password = "12")
+        )
+
+        repository.updateProfile("Karim Pro", "TH_Karim_VIP", "77889900", phone, "01699887700", "avatar_fire")
+        repository.logout()
+        assertTrue(repository.login(phone, "pass1234"))
+        assertEquals("Karim Pro", repository.userProfile.value.accountName)
+        assertEquals("TH_Karim_VIP", repository.userProfile.value.ign)
+        assertEquals("01699887700", repository.userProfile.value.bkashNumber)
+    }
 }
 

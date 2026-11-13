@@ -79,6 +79,10 @@ fun SlotBookingDialog(
     match: TournamentMatch,
     officialBkashNumber: String,
     initialSlotNumber: Int? = null,
+    defaultIgn: String = "",
+    defaultUid: String = "",
+    defaultBkash: String = "",
+    takenSlots: Set<Int> = emptySet(),
     onDismiss: () -> Unit,
     onConfirmBooking: (slotNumber: Int, ign: String, uid: String, bkashNumber: String, trxId: String) -> Unit
 ) {
@@ -86,12 +90,28 @@ fun SlotBookingDialog(
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
-    var selectedSlot by remember(initialSlotNumber) {
-        mutableIntStateOf(initialSlotNumber ?: (match.bookedSlots + 1).coerceAtMost(match.totalSlots))
+    val computedBookedSet = remember(match.id, match.bookedSlots, match.totalSlots, takenSlots) {
+        val set = takenSlots.toMutableSet()
+        var slotCandidate = 1
+        while (set.size < match.bookedSlots && slotCandidate <= match.totalSlots) {
+            if (slotCandidate !in set) {
+                set.add(slotCandidate)
+            }
+            slotCandidate++
+        }
+        set.toSet()
     }
-    var ign by remember { mutableStateOf("TH_Sniper_BD") }
-    var uid by remember { mutableStateOf("284710924") }
-    var senderBkash by remember { mutableStateOf("") }
+    val availableSlotsList = remember(match.totalSlots, computedBookedSet) {
+        (1..match.totalSlots).filter { it !in computedBookedSet }
+    }
+
+    var selectedSlot by remember(match.id, initialSlotNumber, availableSlotsList) {
+        val preferred = initialSlotNumber?.takeIf { it in 1..match.totalSlots && it !in computedBookedSet }
+        mutableIntStateOf(preferred ?: availableSlotsList.firstOrNull() ?: 1)
+    }
+    var ign by remember(defaultIgn) { mutableStateOf(defaultIgn) }
+    var uid by remember(defaultUid) { mutableStateOf(defaultUid) }
+    var senderBkash by remember(defaultBkash) { mutableStateOf(defaultBkash) }
     var trxId by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isVerifyingPayment by remember { mutableStateOf(false) }
@@ -106,7 +126,8 @@ fun SlotBookingDialog(
                 .heightIn(max = 700.dp)
                 .testTag("slot_booking_dialog"),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, BkashPink.copy(alpha = 0.6f))
         ) {
             Column(
                 modifier = Modifier
@@ -205,7 +226,7 @@ fun SlotBookingDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF0F0F1B))
+                                .background(Color(0xFF0B050F))
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -262,30 +283,39 @@ fun SlotBookingDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val availableSlotsList = (1..match.totalSlots).filter { it > match.bookedSlots }
-                    items(if (availableSlotsList.isEmpty()) listOf(1) else availableSlotsList) { slot ->
-                        val isSelected = selectedSlot == slot
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .border(
-                                    width = 1.dp,
-                                    color = if (isSelected) FlameYellow else DarkBorder,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .clickable { selectedSlot = slot }
-                                .testTag("slot_item_$slot"),
-                            contentAlignment = Alignment.Center
-                        ) {
+                    if (availableSlotsList.isEmpty()) {
+                        item {
                             Text(
-                                text = "#$slot",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                text = "কোনো ফাঁকা স্লট অবশিষ্ট নেই",
+                                color = Color(0xFFEF4444),
+                                style = MaterialTheme.typography.bodySmall
                             )
+                        }
+                    } else {
+                        items(availableSlotsList) { slot ->
+                            val isSelected = selectedSlot == slot
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) FlameYellow else DarkBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { selectedSlot = slot }
+                                    .testTag("slot_item_$slot"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "#$slot",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
                         }
                     }
                 }
