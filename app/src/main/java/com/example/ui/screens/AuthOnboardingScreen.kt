@@ -375,7 +375,7 @@ fun AuthOnboardingScreen(
                             color = Color.White
                         )
                         Text(
-                            text = "অ্যাকাউন্ট খুললেই পাচ্ছেন ফ্রি ৳১০ ওয়েলকাম বোনাস!",
+                            text = "অ্যাকাউন্ট খুললেই পাচ্ছেন ফ্রি ৳৫ ওয়েলকাম বোনাস!",
                             fontSize = 11.sp,
                             color = VictoryGreen
                         )
@@ -771,7 +771,7 @@ fun AuthOnboardingScreen(
                                     regPassword.trim().ifBlank { "123456" }
                                 )
                                 if (ok) {
-                                    Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! স্বাগতম $regName", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! ফ্রি ৳৫ ওয়েলকাম বোনাস যুক্ত হয়েছে। স্বাগতম $regName", Toast.LENGTH_LONG).show()
                                 } else {
                                     Toast.makeText(context, "❌ এই মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে বা তথ্য অসম্পূর্ণ!", Toast.LENGTH_LONG).show()
                                 }
@@ -802,7 +802,7 @@ fun AuthOnboardingScreen(
                         )
                     ) {
                         Text(
-                            text = if (selectedTab == 0) "🚀 অ্যাকাউন্ট খুলুন (৳১০ ফ্রি বোনাস)" else "🔑 সাইন ইন করুন",
+                            text = if (selectedTab == 0) "🚀 অ্যাকাউন্ট খুলুন (৳৫ ফ্রি বোনাস)" else "🔑 সাইন ইন করুন",
                             fontWeight = FontWeight.Black,
                             fontSize = 14.sp,
                             color = Color.Black

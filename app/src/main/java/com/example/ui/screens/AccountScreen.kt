@@ -1535,9 +1535,9 @@ private fun SignUpFormCard(
                 color = Color.White
             )
             Text(
-                text = "ফ্রি ফায়ার টুর্নামেন্টে যোগ দিতে সঠিক তথ্য দিন",
+                text = "ফ্রি ফায়ার টুর্নামেন্টে যোগ দিন • অ্যাকাউন্ট খুললেই ফ্রি ৳৫ বোনাস!",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = VictoryGreen
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -1783,7 +1783,7 @@ private fun SignUpFormCard(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(
-                    text = "সাইন আপ করুন (Create Account)",
+                    text = "সাইন আপ করুন (৳৫ ফ্রি বোনাস)",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )

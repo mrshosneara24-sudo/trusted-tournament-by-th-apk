@@ -449,7 +449,7 @@ class TournamentViewModel(
     ): Boolean {
         val success = repository.register(accountName, ign, uid, phone, bkash, avatarId, password = password)
         if (success) {
-            _snackbarMessage.value = "একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম $accountName"
+            _snackbarMessage.value = "🎉 একাউন্ট সফলভাবে তৈরি হয়েছে! ফ্রি ৳${TournamentRepository.SIGNUP_WELCOME_BONUS} ওয়েলকাম বোনাস ওয়ালেটে যুক্ত হয়েছে।"
         } else {
             _snackbarMessage.value = "নিবন্ধন ব্যর্থ হয়েছে! এই নম্বরটি ইতিমধ্যেই নিবন্ধিত অথবা তথ্য অসম্পূর্ণ।"
         }

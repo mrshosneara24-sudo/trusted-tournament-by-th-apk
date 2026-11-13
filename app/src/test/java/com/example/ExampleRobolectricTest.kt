@@ -47,8 +47,13 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
+        // Verify 5 Taka free welcome bonus copy on registration tab
+        composeTestRule.onNodeWithText("অ্যাকাউন্ট খুললেই পাচ্ছেন ফ্রি ৳৫ ওয়েলকাম বোনাস!").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("auth_submit_btn").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("🚀 অ্যাকাউন্ট খুলুন (৳৫ ফ্রি বোনাস)").assertIsDisplayed()
+
         // Switch to Sign In tab so forgot_password_btn is rendered
-        composeTestRule.onNodeWithText("সাইন ইন").performClick()
+        composeTestRule.onNodeWithText("সাইন ইন").performScrollTo().performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("forgot_password_btn").performScrollTo().assertIsDisplayed().performClick()

@@ -28,6 +28,10 @@ import com.example.model.TournamentRuleItem
 
 class TournamentRepository {
 
+    companion object {
+        const val SIGNUP_WELCOME_BONUS = 5
+    }
+
     private val _appCustomization = MutableStateFlow(AppCustomization())
     val appCustomization: StateFlow<AppCustomization> = _appCustomization.asStateFlow()
 
@@ -752,6 +756,20 @@ class TournamentRepository {
             role = role,
             isBanned = false
         )
+        _walletBalance.value = SIGNUP_WELCOME_BONUS
+        val welcomeBonusTx = WalletTransaction(
+            id = "tx_welcome_${System.currentTimeMillis()}",
+            title = "অ্যাকাউন্ট খোলার ফ্রি ওয়েলকাম বোনাস (৳$SIGNUP_WELCOME_BONUS)",
+            amount = SIGNUP_WELCOME_BONUS,
+            isCredit = true,
+            timeAgo = "এইমাত্র",
+            statusText = "নতুন অ্যাকাউন্ট খোলায় ফ্রি ৳৫ বোনাস যুক্ত হয়েছে",
+            paymentMethod = "Welcome Bonus",
+            category = TransactionCategory.ALL,
+            trxId = "WELCOME-5",
+            exactDateTime = "আজ এইমাত্র"
+        )
+        _transactions.value = listOf(welcomeBonusTx)
         _isLoggedIn.value = true
         return true
     }

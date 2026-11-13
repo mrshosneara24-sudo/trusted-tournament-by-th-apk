@@ -536,5 +536,24 @@ class TournamentBusinessLogicTest {
         assertEquals("TH_Karim_VIP", repository.userProfile.value.ign)
         assertEquals("01699887700", repository.userProfile.value.bkashNumber)
     }
+
+    @Test
+    fun testNewAccountRegistrationGrantsFiveTakaFreeBonus() {
+        val registered = repository.register(
+            accountName = "New Gamer",
+            ign = "TH_Newbie",
+            uid = "99001122",
+            phone = "01799001122",
+            bkash = "01799001122",
+            password = "pass1234"
+        )
+        assertTrue("New account registration should succeed", registered)
+        assertEquals(5, TournamentRepository.SIGNUP_WELCOME_BONUS)
+        assertEquals("New account wallet balance must start with 5 Taka free bonus", 5, repository.walletBalance.value)
+        val bonusTx = repository.transactions.value.firstOrNull()
+        assertNotNull("Welcome bonus transaction should be recorded", bonusTx)
+        assertEquals(5, bonusTx!!.amount)
+        assertTrue("Welcome bonus transaction must be credit", bonusTx.isCredit)
+    }
 }
 
