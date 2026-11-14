@@ -131,101 +131,141 @@ fun LeaderboardScreen(
             }
         }
 
-        // Top 1 Champion Spotlight Card
-        item {
-            val topPlayer = players.firstOrNull()
-            if (topPlayer != null) {
+        if (players.isEmpty()) {
+            item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp)
+                        .testTag("leaderboard_empty_state"),
                     shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.5.dp, NeonPink.copy(alpha = 0.65f)),
+                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
                     colors = CardDefaults.cardColors(containerColor = DarkSurface)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        Color(0xFF330A22),
-                                        Color(0xFF140A19)
-                                    )
-                                )
-                            )
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(CircleShape)
-                                    .background(GoldChampagne),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "১",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.Black
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = topPlayer.ign,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White
+                        Icon(
+                            imageVector = Icons.Filled.EmojiEvents,
+                            contentDescription = "Empty Leaderboard",
+                            tint = FlameYellow,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "লিডারবোর্ড এখনো ফাঁকা!",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "টুর্নামেন্ট ম্যাচ শুরু হলে খেলোয়াড়দের কিল, বুইয়া এবং মোট প্রাইজ অনুযায়ী শীর্ষ র‍্যাঙ্কিং এখানে প্রদর্শিত হবে।",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            // Top 1 Champion Spotlight Card
+            item {
+                val topPlayer = players.firstOrNull()
+                if (topPlayer != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.5.dp, NeonPink.copy(alpha = 0.65f)),
+                        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF330A22),
+                                            Color(0xFF140A19)
                                         )
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = "👑", fontSize = 14.sp)
-                                }
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                )
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(CircleShape)
+                                        .background(GoldChampagne),
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Text(
-                                        text = "UID: ${topPlayer.uid}",
-                                        style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(alpha = 0.8f))
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    BadgePill(
-                                        badge = topPlayer.primaryBadge,
-                                        compact = true,
-                                        onClick = { showBadgeDialog = true }
+                                        text = "১",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.Black
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = topPlayer.ign,
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = "👑", fontSize = 14.sp)
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "UID: ${topPlayer.uid}",
+                                            style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(alpha = 0.8f))
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        BadgePill(
+                                            badge = topPlayer.primaryBadge,
+                                            compact = true,
+                                            onClick = { showBadgeDialog = true }
+                                        )
+                                    }
+                                    Text(
+                                        text = "মোট কিল: ${topPlayer.totalKills} | বুইয়া: ${topPlayer.booyahs}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = "মোট কিল: ${topPlayer.totalKills} | বুইয়া: ${topPlayer.booyahs}",
+                                    text = "মোট ইনকাম",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            }
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "মোট ইনকাম",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "৳${topPlayer.totalEarnings}",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    color = VictoryGreen
+                                Text(
+                                    text = "৳${topPlayer.totalEarnings}",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Black,
+                                        color = VictoryGreen
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Leaderboard List
-        items(players) { player ->
+            // Leaderboard List
+            items(players) { player ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
@@ -297,6 +337,7 @@ fun LeaderboardScreen(
                     }
                 }
             }
+        }
         }
     }
 

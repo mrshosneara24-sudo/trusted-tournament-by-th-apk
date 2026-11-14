@@ -52,6 +52,9 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("auth_submit_btn").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("🚀 অ্যাকাউন্ট খুলুন (৳৫ ফ্রি বোনাস)").assertIsDisplayed()
 
+        // Verify 1-tap demo owner login shortcut is completely removed
+        composeTestRule.onNodeWithTag("demo_owner_login_btn").assertDoesNotExist()
+
         // Switch to Sign In tab so forgot_password_btn is rendered
         composeTestRule.onNodeWithText("সাইন ইন").performScrollTo().performClick()
         composeTestRule.waitForIdle()
@@ -63,7 +66,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `demo owner login renders matches missions maintenance banner and dynamic withdraw dialog`() {
+    fun `owner login with 01861583924 and 7788 renders matches missions maintenance banner empty leaderboard and withdraw dialog`() {
         val repo = TournamentRepository()
         val viewModel = TournamentViewModel(repo)
 
@@ -74,15 +77,23 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Scroll to and tap Demo Owner login
-        composeTestRule.onNodeWithTag("demo_owner_login_btn").performScrollTo().assertIsDisplayed().performClick()
+        // Owner signs in via 01861583924 + 7788
+        assertTrue(viewModel.login("01861583924", "7788"))
         composeTestRule.waitForIdle()
+
+        // Owner TopAppBar crown button is visible for OWNER
+        composeTestRule.onNodeWithTag("appbar_owner_btn").assertIsDisplayed()
 
         // Main dashboard renders with matches & daily missions
         composeTestRule.onNodeWithTag("matches_screen_list").assertIsDisplayed()
         composeTestRule.onNodeWithTag("matches_screen_list").performScrollToIndex(2)
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("mission_card_m1").assertIsDisplayed()
+
+        // Empty leaderboard state displays cleanly on fresh app
+        viewModel.selectTab(TournamentTab.LEADERBOARD)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("leaderboard_empty_state").assertIsDisplayed()
 
         // Toggle maintenance mode and verify Pink-Black maintenance banner shows live
         viewModel.toggleMaintenanceMode(true, "সার্ভার আপডেট চলছে")
@@ -129,7 +140,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `pro sensitivity lab opens from matches and match hype button toggles cleanly`() {
+    fun `new player registration grants 5 taka hides owner bar and opens pro sensitivity lab`() {
         val repo = TournamentRepository()
         val viewModel = TournamentViewModel(repo)
 
@@ -140,8 +151,14 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag("demo_owner_login_btn").performScrollTo().performClick()
+        // Register a fresh regular player
+        assertTrue(viewModel.register("Rashed", "TH_Rashed", "55443322", "01755443322", "01755443322", "avatar_fire", "pass123"))
         composeTestRule.waitForIdle()
+
+        // Regular player must NOT see Owner/Admin toolbar buttons
+        composeTestRule.onNodeWithTag("appbar_owner_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("appbar_admin_btn").assertDoesNotExist()
+        assertEquals(5, viewModel.walletBalance.value)
 
         // Scroll to item index 3 where Sensitivity Pro Lab card sits
         composeTestRule.onNodeWithTag("matches_screen_list").performScrollToIndex(3)

@@ -108,18 +108,13 @@ class TournamentRepository {
     private val _strictRules = MutableStateFlow<List<TournamentRuleItem>>(defaultRules)
     val strictRules: StateFlow<List<TournamentRuleItem>> = _strictRules.asStateFlow()
 
-    private val _walletBalance = MutableStateFlow(35) // ছোট ও বাস্তবসম্মত প্রারম্ভিক ব্যালেন্স ৳৩৫
+    private val _walletBalance = MutableStateFlow(0) // ফ্রেশ অ্যাপ ব্যালেন্স ৳০ (সাইন আপে ৳৫ বোনাস)
     val walletBalance: StateFlow<Int> = _walletBalance.asStateFlow()
 
-    private val _dailyStreakInfo = MutableStateFlow(DailyStreakInfo(currentStreakDay = 3, isTodayClaimed = false, streakHistoryDays = setOf(1, 2)))
+    private val _dailyStreakInfo = MutableStateFlow(DailyStreakInfo(currentStreakDay = 1, isTodayClaimed = false, streakHistoryDays = emptySet()))
     val dailyStreakInfo: StateFlow<DailyStreakInfo> = _dailyStreakInfo.asStateFlow()
 
-    private val _spinHistory = MutableStateFlow<List<SpinHistoryRecord>>(
-        listOf(
-            SpinHistoryRecord(UUID.randomUUID().toString(), 4, "গত সপ্তাহে", false),
-            SpinHistoryRecord(UUID.randomUUID().toString(), 3, "২ সপ্তাহ আগে", false)
-        )
-    )
+    private val _spinHistory = MutableStateFlow<List<SpinHistoryRecord>>(emptyList())
     val spinHistory: StateFlow<List<SpinHistoryRecord>> = _spinHistory.asStateFlow()
 
     private val _dailyMissions = MutableStateFlow<List<DailyGamerMission>>(
@@ -170,28 +165,13 @@ class TournamentRepository {
 
     private val _userProfile = MutableStateFlow(
         UserProfile(
-            accountName = "তানভির হাসান (ওনার)",
-            phone = "01861583924",
-            email = "owner@trustedth.com",
-            ign = "TH★DEVIL⚡",
-            uid = "2489103847",
-            bkashNumber = "01861583924",
-            avatarId = "th_logo",
-            level = 68,
-            rankBadge = "হিরোইক ⭐",
-            matchesPlayed = 24,
-            totalWins = 11,
-            totalKills = 89,
-            totalEarnings = 130,
-            joinedDate = "অক্টোবর ২০২৬",
             isLoggedIn = false,
-            role = UserRole.OWNER,
-            isBanned = false
+            role = UserRole.PLAYER
         )
     )
     val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
 
-    // Registered Users List for Owner Management & Fraud Ban
+    // Registered Users List (starts only with official Owner account; players register fresh)
     private val _registeredUsers = MutableStateFlow<List<AppUser>>(
         listOf(
             AppUser(
@@ -202,52 +182,7 @@ class TournamentRepository {
                 uid = "2489103847",
                 bkashNumber = "01861583924",
                 role = UserRole.OWNER,
-                joinedDate = "অক্টোবর ২০২৬"
-            ),
-            AppUser(
-                id = "u_admin1",
-                name = "রাকিব আহমেদ (অ্যাডমিন)",
-                phone = "01712984512",
-                ign = "TH★HUNTER🔥",
-                uid = "3829104921",
-                bkashNumber = "01712984512",
-                role = UserRole.ADMIN,
-                appointedDate = "গতকাল",
-                adminPasscode = "TH-ADMIN-2026",
-                joinedDate = "অক্টোবর ২০২৬"
-            ),
-            AppUser(
-                id = "u_player1",
-                name = "সাকিবুর রহমান",
-                phone = "01923485712",
-                ign = "OP_SAKIB_YT",
-                uid = "8291038491",
-                bkashNumber = "01923485712",
-                role = UserRole.PLAYER,
-                joinedDate = "১২ অক্টোবর ২০২৬"
-            ),
-            AppUser(
-                id = "u_fraud1",
-                name = "ফাহিম ইসলাম (চিটার/ফ্রড)",
-                phone = "01309182374",
-                ign = "PRO_BOT_99",
-                uid = "9918273645",
-                bkashNumber = "01309182374",
-                role = UserRole.PLAYER,
-                isBanned = true,
-                banReason = "ভুয়া বিকাশ TrxID দিয়ে ৩ বার ফ্রি স্লট নেয়ার চেষ্টা করেছিল",
-                bannedAt = "আজ দুপুর ২:১৫",
-                joinedDate = "৫ অক্টোবর ২০২৬"
-            ),
-            AppUser(
-                id = "u_player2",
-                name = "মাহমুদুল হাসান",
-                phone = "01682910384",
-                ign = "DEVIL_KING_FF",
-                uid = "7162534890",
-                bkashNumber = "01682910384",
-                role = UserRole.PLAYER,
-                joinedDate = "১৪ অক্টোবর ২০২৬"
+                joinedDate = "আজ"
             )
         )
     )
@@ -269,10 +204,10 @@ class TournamentRepository {
                 perKillPrize = 3,
                 booyahPrize = 100,
                 totalSlots = 48,
-                bookedSlots = 42,
-                status = MatchStatus.ROOM_OPEN,
-                roomId = "8894120",
-                roomPassword = "TH77",
+                bookedSlots = 0,
+                status = MatchStatus.UPCOMING,
+                roomId = null,
+                roomPassword = null,
                 version = "মোবাইল অনলি (সুপারফাস্ট এক্সপ্রেস)"
             ),
             TournamentMatch(
@@ -288,7 +223,7 @@ class TournamentRepository {
                 perKillPrize = 0,
                 booyahPrize = 25,
                 totalSlots = 2,
-                bookedSlots = 1,
+                bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
@@ -307,7 +242,7 @@ class TournamentRepository {
                 perKillPrize = 0,
                 booyahPrize = 70,
                 totalSlots = 8,
-                bookedSlots = 6,
+                bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
@@ -326,7 +261,7 @@ class TournamentRepository {
                 perKillPrize = 0,
                 booyahPrize = 35,
                 totalSlots = 4,
-                bookedSlots = 2,
+                bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
@@ -345,7 +280,7 @@ class TournamentRepository {
                 perKillPrize = 3,
                 booyahPrize = 100,
                 totalSlots = 48,
-                bookedSlots = 32,
+                bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
@@ -355,153 +290,27 @@ class TournamentRepository {
     )
     val matches: StateFlow<List<TournamentMatch>> = _matches.asStateFlow()
 
-    private val _myBookings = MutableStateFlow<List<SlotBooking>>(
-        listOf(
-            SlotBooking(
-                bookingId = "BK-8841",
-                matchId = "m1",
-                matchTitle = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০১ (সুপারফাস্ট এক্সপ্রেস)",
-                category = GameCategory.BR_RANK,
-                matchDateTime = "আজ বিকাল ৫:০০ PM",
-                slotNumber = 14,
-                playerIgn = "TH_Sniper_BD",
-                playerUid = "284710924",
-                bkashSenderNumber = "01861583924",
-                trxId = "9KJ3L49M",
-                feePaid = 10,
-                isVerified = true,
-                roomId = "8894120",
-                roomPassword = "TH77"
-            )
-        )
-    )
+    private val _myBookings = MutableStateFlow<List<SlotBooking>>(emptyList())
     val myBookings: StateFlow<List<SlotBooking>> = _myBookings.asStateFlow()
 
-    private val _results = MutableStateFlow<List<MatchResult>>(
-        listOf(
-            MatchResult(
-                id = "res-1",
-                matchTitle = "বিআর র‍্যাঙ্ক - উইকেন্ড কাপ #০৮",
-                category = GameCategory.BR_RANK,
-                completedDate = "আজ সন্ধ্যা ৬:০০ PM",
-                winnerIgn = "Viper_OneShot",
-                winnerUid = "837402914",
-                winnerKills = 7,
-                prizeMoney = 100,
-                runnerUpIgn = "TH_Sniper_BD (৪ কিল)",
-                totalPlayers = 48
-            ),
-            MatchResult(
-                id = "res-2",
-                matchTitle = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #০৮",
-                category = GameCategory.LONE_WOLF,
-                completedDate = "আজ বিকেল ৫:১৫ PM",
-                winnerIgn = "TH_Roxx_FF",
-                winnerUid = "198273942",
-                winnerKills = 5,
-                prizeMoney = 25,
-                runnerUpIgn = "Chittagong_Hero",
-                totalPlayers = 2
-            ),
-            MatchResult(
-                id = "res-3",
-                matchTitle = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ স্কোয়াড কাপ #১১",
-                category = GameCategory.CS_RANK,
-                completedDate = "গতকাল রাত ১০:৩০ PM",
-                winnerIgn = "Team_BD_Tigers",
-                winnerUid = "283749102",
-                winnerKills = 14,
-                prizeMoney = 70,
-                runnerUpIgn = "Team_Dhaka_Warriors",
-                totalPlayers = 8
-            )
-        )
-    )
+    private val _results = MutableStateFlow<List<MatchResult>>(emptyList())
     val results: StateFlow<List<MatchResult>> = _results.asStateFlow()
 
-    private val _transactions = MutableStateFlow<List<WalletTransaction>>(
-        listOf(
-            WalletTransaction(
-                id = "tx1",
-                title = "স্লট #১৪ ক্রয় - বিআর র‍্যাঙ্ক #০১",
-                amount = 10,
-                isCredit = false,
-                timeAgo = "১০ মিনিট আগে",
-                statusText = "স্বয়ংক্রিয়ভাবে সনাক্ত ও কনফার্মড",
-                paymentMethod = "bKash (01861583924)",
-                category = TransactionCategory.SLOT_PURCHASE,
-                trxId = "9KJ3L49M",
-                slotNumber = 14,
-                matchTitle = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০১",
-                senderBkash = "01861583924",
-                exactDateTime = "আজ রাত ৮:২০ PM"
-            ),
-            WalletTransaction(
-                id = "tx2",
-                title = "স্লট #১ ক্রয় - লোন উলফ কিং ডুয়েল #০৮",
-                amount = 15,
-                isCredit = false,
-                timeAgo = "আজ বিকেল ৫:০০ PM",
-                statusText = "বিকাশ পেমেন্ট সফল",
-                paymentMethod = "bKash (01861583924)",
-                category = TransactionCategory.SLOT_PURCHASE,
-                trxId = "8KL2M91X",
-                slotNumber = 1,
-                matchTitle = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #০৮",
-                senderBkash = "01861583924",
-                exactDateTime = "আজ বিকেল ৫:০০ PM"
-            ),
-            WalletTransaction(
-                id = "tx3",
-                title = "টুর্নামেন্ট বুইয়া প্রাইজ মানি",
-                amount = 25,
-                isCredit = true,
-                timeAgo = "আজ সন্ধ্যা ৬:৩০ PM",
-                statusText = "উইনিং ওয়ালেটে জমা",
-                paymentMethod = "Wallet",
-                category = TransactionCategory.PRIZE_WIN,
-                trxId = "WIN-88912",
-                slotNumber = null,
-                matchTitle = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #০৮",
-                senderBkash = null,
-                exactDateTime = "আজ সন্ধ্যা ৬:৩০ PM"
-            ),
-            WalletTransaction(
-                id = "tx4",
-                title = "বিকাশ ক্যাশআউট উইথড্র",
-                amount = 20,
-                isCredit = false,
-                timeAgo = "গতকাল",
-                statusText = "বিকাশে পরিশোধিত",
-                paymentMethod = "bKash (01861583924)",
-                category = TransactionCategory.WITHDRAWAL,
-                trxId = "WTH-99410",
-                slotNumber = null,
-                matchTitle = null,
-                senderBkash = "01861583924",
-                exactDateTime = "গতকাল রাত ৯:১৫ PM"
-            )
-        )
-    )
+    private val _transactions = MutableStateFlow<List<WalletTransaction>>(emptyList())
     val transactions: StateFlow<List<WalletTransaction>> = _transactions.asStateFlow()
 
-    private val _leaderboard = MutableStateFlow<List<LeaderboardPlayer>>(
-        listOf(
-            LeaderboardPlayer(1, "TH_Roxx_FF Ⓥ", "198273942", 142, 19, 320, "Ⓥ গোল্ডেন ভি-ব্যাজ (টপ স্পেন্ডার)", BadgeType.V_BADGE, totalSpent = 850, matchesPlayed = 45),
-            LeaderboardPlayer(2, "BD_Cyber_King ⚡", "283749102", 128, 15, 240, "⚡ প্রো প্লেয়ার (সর্বোচ্চ ম্যাচ)", BadgeType.PRO_PLAYER, totalSpent = 310, matchesPlayed = 38),
-            LeaderboardPlayer(3, "Viper_OneShot 🏆", "837402914", 110, 14, 190, "🏆 বুইয়া মাস্টার", BadgeType.BOOYAH_MASTER, totalSpent = 220, matchesPlayed = 29),
-            LeaderboardPlayer(4, "TH★DEVIL⚡ (ওনার)", "2489103847", 89, 11, 130, "🟢 গ্রিন ভেরিফাইড ওনার", BadgeType.GREEN_VERIFIED, totalSpent = 450, matchesPlayed = 24),
-            LeaderboardPlayer(5, "TH★HUNTER🔥 (অ্যাডমিন)", "3829104921", 78, 9, 85, "🛡️ টুর্নামেন্ট মডারেটর", BadgeType.MODERATOR, totalSpent = 160, matchesPlayed = 19),
-            LeaderboardPlayer(6, "Dhaka_Gladiator ⚡", "583920194", 65, 8, 60, "⚡ প্রো প্লেয়ার", BadgeType.PRO_PLAYER, totalSpent = 90, matchesPlayed = 15)
-        )
-    )
+    private val _leaderboard = MutableStateFlow<List<LeaderboardPlayer>>(emptyList())
     val leaderboard: StateFlow<List<LeaderboardPlayer>> = _leaderboard.asStateFlow()
 
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(
         listOf(
-            ChatMessage("c1", "TH অ্যাডমিন", true, "আসসালামু আলাইকুম! TRUSTED TOURNAMENT এ স্বাগতম। যে কোনো সমস্যায় এখানে মেসেজ দিন।", "১০ মিনিট আগে"),
-            ChatMessage("c2", "TH_Sniper_BD", false, "ভাইয়া রাত ৮:৩০ টার বিআর র‍্যাঙ্কের রুম আইডি কখন আসবে?", "৫ মিনিট আগে"),
-            ChatMessage("c3", "TH অ্যাডমিন", true, "৮:১৫ মিনিটে স্বয়ংক্রিয়ভাবে অ্যাপে রুম আইডি ও পাসওয়ার্ড আনলক হয়ে যাবে ভাইয়া। শুভকামনা!", "২ মিনিট আগে")
+            ChatMessage(
+                "c_welcome",
+                "TH অ্যাডমিন",
+                true,
+                "আসসালামু আলাইকুম! TRUSTED TOURNAMENT BY TH-এ স্বাগতম। যে কোনো সমস্যায় এখানে মেসেজ দিন।",
+                "এইমাত্র"
+            )
         )
     )
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
@@ -566,10 +375,15 @@ class TournamentRepository {
             it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
         }
 
-        // If owner master passkey or PIN is used
-        val isOwnerMasterKey = passTrimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
-                passTrimmed == masterOwnerPin ||
-                trimmed.equals(masterOwnerPasskey, ignoreCase = true)
+        // Owner automatic sign-in via 01861583924 + code 7788 (or master passkey)
+        val isOwnerPhoneOrKey = trimmed == masterOwnerPhone ||
+                trimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
+                existingUser?.role == UserRole.OWNER
+        val isOwnerMasterKey = isOwnerPhoneOrKey && (
+                passTrimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
+                        passTrimmed == masterOwnerPin ||
+                        trimmed.equals(masterOwnerPasskey, ignoreCase = true)
+                )
         if (!isOwnerMasterKey) {
             if (existingUser == null || passTrimmed.isBlank() || existingUser.password != passTrimmed) {
                 return false
@@ -618,18 +432,18 @@ class TournamentRepository {
                 isLoggedIn = true,
                 accountName = existingUser?.name ?: "টুর্নামেন্ট প্লেয়ার",
                 ign = existingUser?.ign ?: "FF_Player",
-                uid = existingUser?.uid ?: "00000000",
+                uid = existingUser?.uid ?: "",
                 phone = existingUser?.phone ?: trimmed,
                 bkashNumber = existingUser?.bkashNumber ?: trimmed,
                 email = if (!trimmed.startsWith("01")) trimmed else "",
                 avatarId = "avatar_wolf",
-                level = if (role == UserRole.ADMIN) 45 else 15,
-                rankBadge = if (role == UserRole.ADMIN) "অফিসিয়াল অ্যাডমিন 🛡️" else "ডায়মন্ড 🎯",
-                matchesPlayed = 6,
-                totalWins = 1,
-                totalKills = 22,
-                totalEarnings = 20,
-                joinedDate = existingUser?.joinedDate ?: "অক্টোবর ২০২৬",
+                level = 1,
+                rankBadge = if (role == UserRole.ADMIN) "অফিসিয়াল অ্যাডমিন 🛡️" else "নতুন যোদ্ধা 🛡️",
+                matchesPlayed = 0,
+                totalWins = 0,
+                totalKills = 0,
+                totalEarnings = 0,
+                joinedDate = existingUser?.joinedDate ?: "আজ",
                 role = role,
                 isBanned = isBanned,
                 banReason = banReason

@@ -129,10 +129,9 @@ private fun generateNewCaptcha(): CaptchaChallenge {
 fun AuthOnboardingScreen(
     onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> Boolean,
     onLogin: (phoneOrEmail: String, pass: String) -> Boolean,
-    onDemoOwnerLogin: () -> Unit,
-    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(true, "7788") },
-    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> true },
-    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> true },
+    onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
+    onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
+    onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
     appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
@@ -762,13 +761,17 @@ fun AuthOnboardingScreen(
                                     Toast.makeText(context, "সকল তথ্য পূরণ করুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
+                                if (regPassword.trim().length < 4) {
+                                    Toast.makeText(context, "কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
                                 val ok = onRegister(
                                     regName.trim(),
                                     regIgn.trim(),
                                     regUid.trim().ifEmpty { "1002345" },
                                     regPhone.trim(),
                                     regPhone.trim(),
-                                    regPassword.trim().ifBlank { "123456" }
+                                    regPassword.trim()
                                 )
                                 if (ok) {
                                     Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! ফ্রি ৳৫ ওয়েলকাম বোনাস যুক্ত হয়েছে। স্বাগতম $regName", Toast.LENGTH_LONG).show()
@@ -806,29 +809,6 @@ fun AuthOnboardingScreen(
                             fontWeight = FontWeight.Black,
                             fontSize = 14.sp,
                             color = Color.Black
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // 1-Tap Supreme Owner Demo Login Button
-                    OutlinedButton(
-                        onClick = onDemoOwnerLogin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("demo_owner_login_btn"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameYellow),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.6f))
-                    ) {
-                        Text("👑", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "১-ট্যাপ ওনার লগইন (তানভির হাসান)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = FlameYellow
                         )
                     }
                 }

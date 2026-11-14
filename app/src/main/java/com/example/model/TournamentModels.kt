@@ -197,41 +197,41 @@ data class AppUser(
 }
 
 data class DailyStreakInfo(
-    val currentStreakDay: Int = 3, // 1 to 7
+    val currentStreakDay: Int = 1, // 1 to 7
     val isTodayClaimed: Boolean = false,
-    val streakHistoryDays: Set<Int> = setOf(1, 2),
+    val streakHistoryDays: Set<Int> = emptySet(),
     val rewards: List<Int> = listOf(1, 1, 1, 1, 2, 2, 3)
 )
 
 data class UserProfile(
-    val accountName: String = "তানভির হাসান (ওনার)",
-    val phone: String = "01861583924",
-    val email: String = "owner@trustedth.com",
-    val ign: String = "TH★DEVIL⚡",
-    val uid: String = "2489103847",
-    val bkashNumber: String = "01861583924",
+    val accountName: String = "",
+    val phone: String = "",
+    val email: String = "",
+    val ign: String = "",
+    val uid: String = "",
+    val bkashNumber: String = "",
     val avatarId: String = "th_logo",
-    val level: Int = 68,
-    val rankBadge: String = "হিরোইক ⭐",
-    val matchesPlayed: Int = 24,
-    val totalWins: Int = 11,
-    val totalKills: Int = 89,
-    val totalEarnings: Int = 130,
-    val joinedDate: String = "অক্টোবর ২০২৬",
-    val isLoggedIn: Boolean = true,
-    val role: UserRole = UserRole.OWNER,
+    val level: Int = 1,
+    val rankBadge: String = "নতুন যোদ্ধা 🛡️",
+    val matchesPlayed: Int = 0,
+    val totalWins: Int = 0,
+    val totalKills: Int = 0,
+    val totalEarnings: Int = 0,
+    val joinedDate: String = "আজ",
+    val isLoggedIn: Boolean = false,
+    val role: UserRole = UserRole.PLAYER,
     val isBanned: Boolean = false,
     val banReason: String? = null,
-    val favoriteWeapon: String = "MP40 কোবরা (Cobra)",
-    val activeCharacter: String = "Alok / Tatsuya",
-    val headshotRate: Int = 64, // 64%
-    val kdRatio: Double = 3.85,
-    val guildName: String = "TH★ESPORTS BD",
-    val playerRole: String = "রাশার (Rusher)",
-    val battleTagline: String = "ওয়ান শট, ওয়ান নক! 🎯",
-    val totalSpinsDone: Int = 2,
-    val totalSpinEarnings: Int = 7,
-    val highestSpinWon: Int = 4
+    val favoriteWeapon: String = "MP40",
+    val activeCharacter: String = "Alok",
+    val headshotRate: Int = 0,
+    val kdRatio: Double = 0.0,
+    val guildName: String = "নেই",
+    val playerRole: String = "সোলো প্লেয়ার",
+    val battleTagline: String = "নতুন চ্যালেঞ্জার! 🎯",
+    val totalSpinsDone: Int = 0,
+    val totalSpinEarnings: Int = 0,
+    val highestSpinWon: Int = 0
 ) {
     val earnedBadges: List<BadgeType> get() {
         val list = mutableListOf<BadgeType>()

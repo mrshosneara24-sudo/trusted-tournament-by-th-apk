@@ -166,9 +166,6 @@ fun MainTournamentApp(
             onLogin = { phoneOrEmail, pass ->
                 viewModel.login(phoneOrEmail, pass)
             },
-            onDemoOwnerLogin = {
-                viewModel.loginAsDemoOwner()
-            },
             onRequestOtp = { phoneOrUid ->
                 viewModel.requestPasswordResetOtp(phoneOrUid)
             },
@@ -221,25 +218,29 @@ fun MainTournamentApp(
                         }
                     },
                     actions = {
-                        // Supreme Owner A-to-Z Master Editor Button (Crown)
-                        IconButton(
-                            onClick = { showMasterAppEditor = true },
-                            modifier = Modifier.size(36.dp).testTag("appbar_owner_btn")
-                        ) {
-                            Text("👑", fontSize = 16.sp)
+                        // Supreme Owner A-to-Z Master Editor Button (Visible ONLY to verified Owner)
+                        if (userProfile.role == UserRole.OWNER) {
+                            IconButton(
+                                onClick = { showMasterAppEditor = true },
+                                modifier = Modifier.size(36.dp).testTag("appbar_owner_btn")
+                            ) {
+                                Text("👑", fontSize = 16.sp)
+                            }
                         }
 
-                        // Admin Control Button
-                        IconButton(
-                            onClick = { viewModel.openAdminPanel() },
-                            modifier = Modifier.size(36.dp).testTag("appbar_admin_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AdminPanelSettings,
-                                contentDescription = "Admin Control",
-                                tint = FlameYellow,
-                                modifier = Modifier.size(20.dp)
-                            )
+                        // Admin Control Button (Visible ONLY to Owner & Admin)
+                        if (userProfile.role == UserRole.OWNER || userProfile.role == UserRole.ADMIN) {
+                            IconButton(
+                                onClick = { viewModel.openAdminPanel() },
+                                modifier = Modifier.size(36.dp).testTag("appbar_admin_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AdminPanelSettings,
+                                    contentDescription = "Admin Control",
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
 
                         // Daily Streak Button
@@ -695,8 +696,8 @@ fun MainTournamentApp(
         )
     }
 
-    // Admin Control Dialog
-    if (showAdminDialog) {
+    // Admin Control Dialog (Owner or Admin only)
+    if (showAdminDialog && (userProfile.role == UserRole.OWNER || userProfile.role == UserRole.ADMIN)) {
         AdminControlDialog(
             matches = allMatches,
             currentWhatsAppUrl = officialWhatsAppUrl,
@@ -722,6 +723,8 @@ fun MainTournamentApp(
             officialBkashNumber = appCustomization.officialBkashNumber,
             officialWhatsAppUrl = officialWhatsAppUrl,
             appCustomization = appCustomization,
+            isOwner = (userProfile.role == UserRole.OWNER),
+            isAdmin = (userProfile.role == UserRole.OWNER || userProfile.role == UserRole.ADMIN),
             onDismiss = { viewModel.closeSettings() },
             onOpenAdminPanel = {
                 viewModel.closeSettings()
@@ -763,8 +766,8 @@ fun MainTournamentApp(
         )
     }
 
-    // Master App Editor Dialog (A-to-Z control requested by user)
-    if (showMasterAppEditor) {
+    // Master App Editor Dialog (Owner only)
+    if (showMasterAppEditor && userProfile.role == UserRole.OWNER) {
         MasterAppEditorDialog(
             appCustomization = appCustomization,
             matches = allMatches,

@@ -1320,8 +1320,8 @@ private fun LoginFormCard(
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean,
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean
 ) {
-    var phoneOrEmail by remember { mutableStateOf("01861583924") }
-    var password by remember { mutableStateOf("123456") }
+    var phoneOrEmail by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
 
@@ -1465,27 +1465,6 @@ private fun LoginFormCard(
                     text = "লগইন করুন (Log In)",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Quick Demo Login Button
-            OutlinedButton(
-                onClick = {
-                    onLogin("01861583924", "123456")
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .testTag("demo_login_btn"),
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow)
-            ) {
-                Text(
-                    text = "⚡ এক ক্লিকে ডেমো একাউন্ট লগইন",
-                    color = FlameYellow,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
         }

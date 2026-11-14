@@ -496,12 +496,14 @@ class TournamentBusinessLogicTest {
 
     @Test
     fun testLegacySlotCancellationAndRefund() {
-        val match = repository.matches.value.first { it.bookedSlots > 0 }
-        val initialBooked = match.bookedSlots
+        val match = repository.matches.value.first()
+        repository.updateExistingMatch(match.copy(bookedSlots = 3))
+        val seededMatch = repository.matches.value.first { it.id == match.id }
+        val initialBooked = seededMatch.bookedSlots
         val initialBalance = repository.walletBalance.value
 
         val refunded = repository.cancelLegacySlotByNumber(match.id, 1)
-        assertTrue("Cancelling legacy pre-seeded slot #1 must succeed", refunded)
+        assertTrue("Cancelling legacy slot #1 must succeed when bookedSlots > 0", refunded)
 
         val updatedMatch = repository.matches.value.first { it.id == match.id }
         assertEquals("bookedSlots must decrement by 1", initialBooked - 1, updatedMatch.bookedSlots)
@@ -554,6 +556,39 @@ class TournamentBusinessLogicTest {
         assertNotNull("Welcome bonus transaction should be recorded", bonusTx)
         assertEquals(5, bonusTx!!.amount)
         assertTrue("Welcome bonus transaction must be credit", bonusTx.isCredit)
+    }
+
+    @Test
+    fun testFreshAppInitialStateHasNoFakeDemoData() {
+        assertFalse(repository.isLoggedIn.value)
+        assertEquals(0, repository.walletBalance.value)
+        assertTrue("Leaderboard must start empty", repository.leaderboard.value.isEmpty())
+        assertTrue("Bookings must start empty", repository.myBookings.value.isEmpty())
+        assertTrue("Transactions must start empty", repository.transactions.value.isEmpty())
+        assertTrue("Results must start empty", repository.results.value.isEmpty())
+        assertTrue("Spin history must start empty", repository.spinHistory.value.isEmpty())
+        assertEquals(1, repository.dailyStreakInfo.value.currentStreakDay)
+        assertEquals(1, repository.registeredUsers.value.size)
+        assertEquals(UserRole.OWNER, repository.registeredUsers.value.first().role)
+        assertTrue("All fresh matches start with 0 booked slots", repository.matches.value.all { it.bookedSlots == 0 })
+    }
+
+    @Test
+    fun testOwnerSignInWith01861583924AndCode7788GrantsOwnerRoleAndRejectsRandomPhone() {
+        // Random unregistered phone cannot hijack owner using 7788
+        assertFalse(
+            "Unregistered random phone with 7788 must be rejected",
+            repository.login("01711112222", "7788")
+        )
+        assertFalse(repository.isLoggedIn.value)
+
+        // Official owner phone 01861583924 + code 7788 automatically signs in as OWNER
+        assertTrue(
+            "Owner phone 01861583924 with code 7788 must sign in cleanly",
+            repository.login("01861583924", "7788")
+        )
+        assertTrue(repository.isLoggedIn.value)
+        assertEquals(UserRole.OWNER, repository.userProfile.value.role)
     }
 }
 

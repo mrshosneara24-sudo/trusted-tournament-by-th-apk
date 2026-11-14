@@ -305,7 +305,7 @@ fun ForgotPasswordDialog(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "নিরাপত্তা কোড: $sentOtpCode (অথবা মাস্টার কোড 7788)",
+                                    text = "নিরাপত্তা কোড (OTP): $sentOtpCode",
                                     fontSize = 11.sp,
                                     color = FlameYellow,
                                     fontWeight = FontWeight.Bold

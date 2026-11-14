@@ -249,7 +249,7 @@ private fun OwnerAuthGate(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "ডিফল্ট মাস্টার পাসকি: TH-OWNER-7788 অথবা পিন: 7788",
+                        text = "আপনার গোপন ওনার পাসকি বা পিন দিয়ে ভেরিফাই করুন",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = VictoryGreen,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -264,10 +264,11 @@ private fun OwnerAuthGate(
             value = ownerKeyInput,
             onValueChange = onKeyChange,
             label = { Text("ওনার মাস্টার পাসকি বা পিন") },
-            placeholder = { Text("TH-OWNER-7788 বা 7788") },
+            placeholder = { Text("গোপন পাসকি বা পিন লিখুন") },
             leadingIcon = {
                 Icon(Icons.Filled.Key, contentDescription = null, tint = FlameYellow)
             },
+            visualTransformation = PasswordVisualTransformation(),
             singleLine = true,
             isError = unlockError != null,
             modifier = Modifier

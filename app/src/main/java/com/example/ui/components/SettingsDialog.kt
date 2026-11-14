@@ -83,6 +83,8 @@ fun SettingsDialog(
     officialBkashNumber: String,
     officialWhatsAppUrl: String,
     appCustomization: AppCustomization = AppCustomization(),
+    isOwner: Boolean = false,
+    isAdmin: Boolean = false,
     onDismiss: () -> Unit,
     onOpenAdminPanel: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
@@ -247,165 +249,169 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Section 2: Admin Control Quick Access
-                Text(
-                    text = "অ্যাডমিন কন্ট্রোল সেন্টার",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = FlameYellow
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                if (isOwner || isAdmin) {
+                    // Section 2: Admin / Owner Control Quick Access (Authorized Roles Only)
+                    Text(
+                        text = "অ্যাডমিন ও ওনার কন্ট্রোল সেন্টার",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = FlameYellow
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.3f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onDismiss()
-                            onOpenAdminPanel()
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = DarkCard,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.3f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onDismiss()
+                                onOpenAdminPanel()
+                            }
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(FlameOrange.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(FlameOrange.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AdminPanelSettings,
+                                    contentDescription = null,
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "🛡️ TH অ্যাডমিন কন্ট্রোল প্যানেল",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "১-ট্যাপে রুম আইডি প্রকাশ ও WhatsApp লিঙ্ক আপডেট",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Icon(
-                                imageVector = Icons.Filled.AdminPanelSettings,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                                 contentDescription = null,
                                 tint = FlameYellow,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "🛡️ TH অ্যাডমিন কন্ট্রোল প্যানেল",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            Text(
-                                text = "১-ট্যাপে রুম আইডি প্রকাশ ও WhatsApp লিঙ্ক আপডেট",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = FlameYellow,
-                            modifier = Modifier.size(14.dp)
-                        )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    if (isOwner) {
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                // A-to-Z Master App Editor Card (Requested by User)
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFF240B1B),
-                    border = androidx.compose.foundation.BorderStroke(2.dp, FlameYellow),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onDismiss()
-                            onOpenMasterEditor()
-                        }
-                        .testTag("open_master_editor_from_settings")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
+                        // A-to-Z Master App Editor Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF240B1B),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, FlameYellow),
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(FlameYellow),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onOpenMasterEditor()
+                                }
+                                .testTag("open_master_editor_from_settings")
                         ) {
-                            Text("🛠️", fontSize = 20.sp)
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(FlameYellow),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🛠️", fontSize = 20.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "👑 A-to-Z ওনার অ্যাপ এডিটর",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
+                                        color = FlameYellow
+                                    )
+                                    Text(
+                                        text = "লোগো নির্বাচন, স্লট ক্রিয়েট/ডিলিট, ম্যাচ এডিট ও কঠোর রুলস",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = null,
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "👑 A-to-Z ওনার অ্যাপ এডিটর",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
-                                color = FlameYellow
-                            )
-                            Text(
-                                text = "লোগো নির্বাচন, স্লট ক্রিয়েট/ডিলিট, ম্যাচ এডিট ও কঠোর রুলস",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = FlameYellow,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                // Owner Only Supreme Panel Card
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, FlameYellow.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onDismiss()
-                            onOpenOwnerPanel()
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
+                        // Owner Only Supreme Panel Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = DarkCard,
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, FlameYellow.copy(alpha = 0.5f)),
                             modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(FlameYellow.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onOpenOwnerPanel()
+                                }
                         ) {
-                            Text("👑", fontSize = 20.sp)
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(FlameYellow.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("👑", fontSize = 20.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "👑 TH সুপ্রিম ওনার প্যানেল (মালিকানা)",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
+                                        color = FlameYellow
+                                    )
+                                    Text(
+                                        text = "প্রতারক প্লেয়ার ব্যান ও নতুন অ্যাডমিন নিয়োগ (Owner Only)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.85f)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = null,
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "👑 TH সুপ্রিম ওনার প্যানেল (মালিকানা)",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
-                                color = FlameYellow
-                            )
-                            Text(
-                                text = "প্রতারক প্লেয়ার ব্যান ও নতুন অ্যাডমিন নিয়োগ (Owner Only)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.85f)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = FlameYellow,
-                            modifier = Modifier.size(14.dp)
-                        )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
 
                 // Section 3: Official Links & Helpline
                 Text(
