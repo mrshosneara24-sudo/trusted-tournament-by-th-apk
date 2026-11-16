@@ -45,9 +45,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
 import com.example.model.SlotBooking
 import com.example.ui.theme.DarkBorder
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -75,13 +81,17 @@ fun MyMatchesScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "আমার বুকড ম্যাচসমূহ",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontFamily = DisplayFontFamily,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = TextPrimary
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "আপনার কেনা সব টুর্নামেন্ট স্লট এবং কাস্টম রুমের তথ্য",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = TextSecondary
                         )
                     }
                 }
@@ -112,40 +122,51 @@ fun MyMatchesScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 40.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface)
+                        .padding(vertical = 28.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, DarkBorder),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
+                            .padding(26.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.SportsEsports,
-                            contentDescription = "No bookings",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(DarkElevated),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.SportsEsports,
+                                contentDescription = "No bookings",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "আপনি এখনো কোনো ম্যাচে জয়েন করেননি",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = TextPrimary
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "লোন উলফ বা বিআর র‍্যাঙ্ক ম্যাচে বিকাশ দিয়ে স্লট বুকিং করুন এবং প্রতিদিন জিতে নিন নগদ পুরস্কার!",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = TextSecondary,
+                            lineHeight = 18.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                         Button(
                             onClick = onExploreMatchesClick,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(46.dp)
                         ) {
                             Text("ম্যাচ তালিকা দেখুন", fontWeight = FontWeight.Bold)
                         }

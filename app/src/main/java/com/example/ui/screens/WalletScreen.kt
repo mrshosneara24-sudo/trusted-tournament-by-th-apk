@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,12 +24,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallReceived
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,7 +38,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,22 +50,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.DepositRequest
+import com.example.model.RequestStatus
 import com.example.model.TransactionCategory
 import com.example.model.WalletTransaction
+import com.example.model.WithdrawRequest
 import com.example.ui.components.PaymentReceiptDialog
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
+import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
+import com.example.ui.theme.WalletHeroBrush
 
 @Composable
 fun WalletScreen(
@@ -75,16 +81,35 @@ fun WalletScreen(
     transactions: List<WalletTransaction>,
     onAddMoneyClick: () -> Unit,
     onWithdrawClick: () -> Unit,
+    matchesPlayed: Int = 0,
+    depositRequests: List<DepositRequest> = emptyList(),
+    withdrawRequests: List<WithdrawRequest> = emptyList(),
+    currentUserPhone: String = "",
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
     var selectedCategory by remember { mutableStateOf(TransactionCategory.ALL) }
     var selectedReceiptTx by remember { mutableStateOf<WalletTransaction?>(null) }
 
-    val filteredTransactions = transactions.filter {
-        selectedCategory == TransactionCategory.ALL || it.category == selectedCategory
+    val userTransactions = remember(transactions, currentUserPhone) {
+        if (currentUserPhone.isBlank()) transactions
+        else transactions.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
     }
+    val userDeposits = remember(depositRequests, currentUserPhone) {
+        if (currentUserPhone.isBlank()) depositRequests
+        else depositRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+    }
+    val userWithdraws = remember(withdrawRequests, currentUserPhone) {
+        if (currentUserPhone.isBlank()) withdrawRequests
+        else withdrawRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+    }
+
+    val filteredTransactions = remember(userTransactions, selectedCategory) {
+        userTransactions.filter {
+            selectedCategory == TransactionCategory.ALL || it.category == selectedCategory
+        }
+    }
+
+    val isWithdrawUnlocked = matchesPlayed >= 1
 
     LazyColumn(
         modifier = modifier
@@ -99,26 +124,24 @@ fun WalletScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("wallet_balance_card"),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
                 border = BorderStroke(
-                    1.5.dp,
-                    Brush.horizontalGradient(listOf(FlameYellow, NeonPink, Color.White.copy(alpha = 0.7f)))
+                    1.dp,
+                    Brush.horizontalGradient(
+                        listOf(
+                            FlameYellow.copy(alpha = 0.65f),
+                            NeonPink.copy(alpha = 0.55f),
+                            DarkBorder
+                        )
+                    )
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFF1F0C18),
-                                    Color(0xFF14131B),
-                                    Color(0xFF09090D)
-                                )
-                            )
-                        )
+                        .background(WalletHeroBrush)
                         .padding(20.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -130,7 +153,7 @@ fun WalletScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(34.dp)
                                         .clip(CircleShape)
                                         .background(BkashPink),
                                     contentAlignment = Alignment.Center
@@ -142,24 +165,25 @@ fun WalletScreen(
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "বিকাশ ওয়ালেট ব্যালেন্স",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    text = "বিকাশ ও নগদ ওয়ালেট",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = TextPrimary
                                 )
                             }
 
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = VictoryGreen.copy(alpha = 0.2f)
+                                shape = RoundedCornerShape(10.dp),
+                                color = VictoryGreen.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.45f))
                             ) {
                                 Text(
-                                    text = "সক্রিয়",
+                                    text = "● সক্রিয়",
                                     color = VictoryGreen,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                                 )
                             }
                         }
@@ -169,21 +193,99 @@ fun WalletScreen(
                         Text(
                             text = "৳$balance",
                             style = MaterialTheme.typography.headlineLarge.copy(
+                                fontFamily = MonoFontFamily,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 38.sp
+                                fontSize = 40.sp,
+                                letterSpacing = (-0.5).sp
                             ),
-                            color = Color.White
+                            color = TextPrimary
                         )
+
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "টুর্নামেন্টের উইনিং মানি এবং রিচার্জ ফান্ড",
+                            text = "টুর্নামেন্টের উইনিং মানি এবং ডিপোজিট ব্যালেন্স",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = TextSecondary
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Action Buttons: Add Money & Withdraw
+                        // Career Withdraw Status Pill
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isWithdrawUnlocked) VictoryGreen.copy(alpha = 0.16f) else Color(0xFF340C17),
+                            border = BorderStroke(1.dp, if (isWithdrawUnlocked) VictoryGreen.copy(alpha = 0.6f) else NeonPink.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("wallet_withdraw_eligibility_pill")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isWithdrawUnlocked) Icons.Filled.CheckCircle else Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = if (isWithdrawUnlocked) VictoryGreen else NeonPink,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isWithdrawUnlocked) {
+                                        "✅ উইথড্র আনলকড • ক্যারিয়ার ম্যাচ: $matchesPlayed টি"
+                                    } else {
+                                        "🔒 ১টি ম্যাচ খেললে প্রথম উইথড্র আনলক হবে (খেলেছেন: ০ টি)"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isWithdrawUnlocked) VictoryGreen else Color.White
+                                )
+                            }
+                        }
+
+                        // Quick Pending Stats Row if any deposit/withdraw requests exist
+                        val pendingDeposits = userDeposits.count { it.status == RequestStatus.PENDING }
+                        val pendingWithdraws = userWithdraws.count { it.status == RequestStatus.PENDING }
+                        if (pendingDeposits > 0 || pendingWithdraws > 0) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = DarkCard,
+                                    border = BorderStroke(1.dp, BkashPink.copy(alpha = 0.45f)),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "📥 পেন্ডিং ডিপোজিট: $pendingDeposits",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameYellow,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = DarkCard,
+                                    border = BorderStroke(1.dp, FlameOrange.copy(alpha = 0.45f)),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "📤 পেন্ডিং উইথড্র: $pendingWithdraws",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameOrange,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Action Buttons: Deposit & Withdraw
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -195,11 +297,11 @@ fun WalletScreen(
                                     .height(48.dp)
                                     .testTag("wallet_add_money_btn"),
                                 colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(14.dp)
                             ) {
                                 Icon(imageVector = Icons.Filled.Add, contentDescription = "Add", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("টাকা যোগ করুন", fontWeight = FontWeight.Bold)
+                                Text("ডিপোজিট করুন", fontWeight = FontWeight.Black)
                             }
 
                             Button(
@@ -212,11 +314,182 @@ fun WalletScreen(
                                     containerColor = FlameYellow,
                                     contentColor = Color.Black
                                 ),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(14.dp)
                             ) {
                                 Icon(imageVector = Icons.Filled.CallMade, contentDescription = "Withdraw", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("ক্যাশআউট", fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deposit & Withdraw System Guide Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("wallet_system_guide_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = FlameYellow,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "ডিপোজিট ও উইথড্র সিস্টেম গাইড",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                            color = FlameYellow
+                        )
+                    }
+                    Text(
+                        text = "• ডিপোজিট: বিকাশ/নগদ সেন্ড মানি করে TrxID সাবমিট করুন। ওনার/অ্যাডমিন যাচাই করে অ্যাপ্রুভ করলেই ওয়ালেটে টাকা যোগ হবে।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        text = "• ম্যাচ জয়েন: ওয়ালেট ব্যালেন্স দিয়েও সরাসরি টুর্নামেন্ট স্লট কেনা যাবে।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        text = "• প্রথম উইথড্র নিয়ম: প্রথমবার ক্যাশআউট করতে পুরো অ্যাপ ক্যারিয়ারে কমপক্ষে ১টি ম্যাচ খেলা বাধ্যতামূলক।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FlameOrange,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+
+        // Live Deposit & Withdraw Requests Status
+        if (userDeposits.isNotEmpty() || userWithdraws.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "চলমান ও সাম্প্রতিক ডিপোজিট / উইথড্র রিকোয়েস্ট",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+
+                    userDeposits.take(5).forEach { req ->
+                        val statusColor = when (req.status) {
+                            RequestStatus.PENDING -> FlameYellow
+                            RequestStatus.APPROVED -> VictoryGreen
+                            RequestStatus.REJECTED -> Color(0xFFEF4444)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = DarkSurface,
+                            border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "ডিপোজিট • ${req.paymentMethod.displayName} (৳${req.amount})",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "TrxID: ${req.trxId} • নম্বর: ${req.senderNumber}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                    if (req.adminNote.isNotBlank()) {
+                                        Text(
+                                            text = req.adminNote,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = statusColor
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = statusColor.copy(alpha = 0.18f)
+                                ) {
+                                    Text(
+                                        text = req.status.banglaLabel,
+                                        color = statusColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    userWithdraws.take(5).forEach { req ->
+                        val statusColor = when (req.status) {
+                            RequestStatus.PENDING -> FlameYellow
+                            RequestStatus.APPROVED -> VictoryGreen
+                            RequestStatus.REJECTED -> Color(0xFFEF4444)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = DarkSurface,
+                            border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "উইথড্র • ${req.paymentMethod.displayName} (৳${req.amount})",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "প্রাপক নম্বর: ${req.targetNumber}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                    if (req.adminNote.isNotBlank()) {
+                                        Text(
+                                            text = req.adminNote,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = statusColor
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = statusColor.copy(alpha = 0.18f)
+                                ) {
+                                    Text(
+                                        text = req.status.banglaLabel,
+                                        color = statusColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -258,12 +531,11 @@ fun WalletScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Filter Chips Row
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(TransactionCategory.values()) { cat ->
+                    items(TransactionCategory.entries, key = { it.name }) { cat ->
                         val isSelected = selectedCategory == cat
                         FilterChip(
                             selected = isSelected,
@@ -320,7 +592,7 @@ fun WalletScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = if (tx.category == TransactionCategory.SLOT_PURCHASE) Color(0xFF1C1322) else DarkSurface
                     ),
-                    border = androidx.compose.foundation.BorderStroke(
+                    border = BorderStroke(
                         1.dp,
                         if (tx.category == TransactionCategory.SLOT_PURCHASE) BkashPink.copy(alpha = 0.35f) else DarkBorder
                     )
@@ -330,13 +602,15 @@ fun WalletScreen(
                             .fillMaxWidth()
                             .padding(14.dp)
                     ) {
-                        // Top Row: Category tag and Amount
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Box(
                                     modifier = Modifier
                                         .size(34.dp)
@@ -385,7 +659,6 @@ fun WalletScreen(
                             )
                         }
 
-                        // Specific metadata row for Slot Purchases
                         if (tx.category == TransactionCategory.SLOT_PURCHASE) {
                             Spacer(modifier = Modifier.height(10.dp))
 
@@ -445,7 +718,8 @@ fun WalletScreen(
                                 Text(
                                     text = tx.paymentMethod,
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Text(
                                     text = tx.statusText,
@@ -460,7 +734,6 @@ fun WalletScreen(
         }
     }
 
-    // Payment Receipt Dialog
     selectedReceiptTx?.let { tx ->
         PaymentReceiptDialog(
             transaction = tx,

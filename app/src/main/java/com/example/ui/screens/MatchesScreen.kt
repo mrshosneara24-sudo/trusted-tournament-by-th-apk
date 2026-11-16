@@ -56,16 +56,19 @@ import com.example.model.TournamentMatch
 import com.example.ui.components.MatchCard
 import com.example.ui.components.SensitivityProDialog
 import com.example.ui.components.TournamentHeader
+import com.example.model.AppCustomization
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
-
-import com.example.model.AppCustomization
 
 @Composable
 fun MatchesScreen(
@@ -88,7 +91,7 @@ fun MatchesScreen(
     appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
-    val bookedMatchIds = myBookings.map { it.matchId }.toSet()
+    val bookedMatchIds = remember(myBookings) { myBookings.map { it.matchId }.toSet() }
     var showSensitivityLab by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -107,74 +110,88 @@ fun MatchesScreen(
             )
         }
 
-        // Action Quick Row: Lucky Spin & Daily Streak (Pink & Black Blend)
+        // Action Quick Row: Lucky Spin & Daily Streak
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Lucky Spin card (Black + Yellow + White vibe)
                 Card(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .clickable { onDailySpinClick() }
                         .testTag("daily_spin_card"),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF15141C)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.65f))
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "Spin",
-                            tint = FlameYellow,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(FlameYellow.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = "Spin",
+                                tint = FlameYellow,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "লাকি স্পিন 🎡",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                 color = FlameYellow
                             )
                             Text(
-                                text = "৩-৫৳ নিশ্চিত (জ্যাকপট ৩০৳)",
+                                text = "৳৩-৳৩০ জয়ের সুযোগ",
                                 fontSize = 10.sp,
-                                color = Color.White
+                                color = TextSecondary
                             )
                         }
                     }
                 }
 
-                // Daily Streak card (Black + Pink + White vibe)
                 Card(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .clickable { onDailyStreakClick() }
                         .testTag("daily_streak_card"),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF19121B)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.6f))
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.5f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.LocalFireDepartment,
-                            contentDescription = "Daily Streak",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BkashPink.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.LocalFireDepartment,
+                                contentDescription = "Daily Streak",
+                                tint = BkashPink,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "দৈনিক স্ট্রিক 🔥",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
                             )
                             Text(
                                 text = "৭ দিনের নগদ বোনাস",
@@ -316,27 +333,27 @@ fun MatchesScreen(
             }
         }
 
-        // 24/7 AI & Support + Pro Sensitivity Lab (Black, White & Yellow Cool Vibe)
+        // Pro Sensitivity Lab & 24/7 AI Help Cards
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { showSensitivityLab = true }
                         .testTag("sensitivity_lab_card"),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF16151D)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f))
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(FlameYellow.copy(alpha = 0.16f)),
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(FlameYellow.copy(alpha = 0.14f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -346,25 +363,30 @@ fun MatchesScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "🎯 FF প্রো হেডশট সেনসিটিভিটি ল্যাব",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                     color = FlameYellow
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "PRO LAB",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Black),
-                                    color = Color.White
-                                )
+                                Surface(shape = RoundedCornerShape(5.dp), color = DarkElevated) {
+                                    Text(
+                                        text = "PRO",
+                                        fontFamily = MonoFontFamily,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
                             }
                             Text(
-                                text = "ফোনের RAM ও খেলার স্টাইল অনুযায়ী সেরা One-Tap ও Rush সেটিংস কপি করুন",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.85f)
+                                text = "ফোনের RAM ও খেলার স্টাইল অনুযায়ী সেরা One-Tap সেটিংস কপি করুন",
+                                fontSize = 11.sp,
+                                color = TextSecondary
                             )
                         }
                     }
@@ -373,49 +395,49 @@ fun MatchesScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onSupportChatClick() }
                         .testTag("support_chat_card"),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF13141C)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.35f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(FlameYellow.copy(alpha = 0.16f)),
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(FlameCyan.copy(alpha = 0.14f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.SmartToy,
                                 contentDescription = "Talk with AI",
-                                tint = FlameYellow,
-                                modifier = Modifier.size(22.dp)
+                                tint = FlameCyan,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "🤖 Talk with AI (এআই সহকারী)",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = FlameYellow
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "24/7 লাইভ",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
                                     color = VictoryGreen
                                 )
                             }
                             Text(
                                 text = "ডিপোজিট, ক্যাশআউট বা রুম কোড সংক্রান্ত যেকোনো সমস্যায় তাৎক্ষণিক সাহায্য নিন",
-                                fontSize = 10.sp,
-                                color = Color.White.copy(alpha = 0.85f)
+                                fontSize = 11.sp,
+                                color = TextSecondary
                             )
                         }
                     }
@@ -428,12 +450,18 @@ fun MatchesScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChanged,
-                placeholder = { Text("ম্যাচ খুঁজুন (যেমন: লোন উলফ, বারমুডা)") },
+                placeholder = {
+                    Text(
+                        "ম্যাচ খুঁজুন (যেমন: লোন উলফ, বারমুডা)",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Filled.Search,
                         contentDescription = "Search",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = FlameYellow
                     )
                 },
                 modifier = Modifier
@@ -441,14 +469,14 @@ fun MatchesScreen(
                     .testTag("match_search_input"),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = DarkSurface,
-                    unfocusedContainerColor = DarkSurface,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedContainerColor = DarkCard,
+                    unfocusedContainerColor = DarkCard,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedBorderColor = FlameYellow,
                     unfocusedBorderColor = DarkBorder
                 ),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(16.dp)
             )
         }
 
@@ -456,31 +484,31 @@ fun MatchesScreen(
         item {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "টুর্নামেন্ট ক্যাটাগরি:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    text = "টুর্নামেন্ট ক্যাটাগরি",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(GameCategory.values()) { cat ->
+                    items(GameCategory.entries, key = { it.name }) { cat ->
                         val isSelected = selectedCategory == cat
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else DarkCard,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
                                 if (isSelected) FlameYellow else DarkBorder
                             ),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .clickable { onCategorySelected(cat) }
                                 .testTag("category_tab_${cat.name}")
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
@@ -492,7 +520,7 @@ fun MatchesScreen(
                                     text = cat.banglaTitle,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSelected) Color.White else TextSecondary
                                     )
                                 )
                             }
@@ -513,17 +541,25 @@ fun MatchesScreen(
                     text = "উপলব্ধ টুর্নামেন্ট (${matches.size} টি)",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = TextPrimary
                     )
                 )
 
-                Text(
-                    text = "বিকাশ নম্বর: ${appCustomization.officialBkashNumber}",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = FlameYellow
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = DarkCard,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = "বিকাশ: ${appCustomization.officialBkashNumber}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = MonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = FlameYellow
+                        ),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
-                )
+                }
             }
         }
 

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
@@ -55,9 +58,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
@@ -81,6 +84,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.MilitaryTech
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -88,10 +93,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppUser
+import com.example.model.AppealStatus
+import com.example.model.BadgeAppeal
+import com.example.model.BadgeType
+import com.example.model.DepositRequest
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
 import com.example.model.UserProfile
 import com.example.model.UserRole
+import com.example.model.WithdrawRequest
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
@@ -106,6 +116,8 @@ fun OwnerControlDialog(
     allUsers: List<AppUser>,
     allBookings: List<SlotBooking> = emptyList(),
     matches: List<TournamentMatch> = emptyList(),
+    depositRequests: List<DepositRequest> = emptyList(),
+    withdrawRequests: List<WithdrawRequest> = emptyList(),
     onDismiss: () -> Unit,
     onClaimOwner: (key: String) -> Boolean,
     onBanUser: (userIdOrPhone: String, reason: String) -> Unit,
@@ -114,7 +126,19 @@ fun OwnerControlDialog(
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
     onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit = {},
-    onCancelMatchAndRefundAll: (matchId: String) -> Unit = {}
+    onCancelMatchAndRefundAll: (matchId: String) -> Unit = {},
+    onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean = { _, _, _, _ -> false },
+    onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean = { _, _ -> false },
+    onApproveDeposit: (requestId: String) -> Boolean = { false },
+    onRejectDeposit: (requestId: String) -> Boolean = { false },
+    onApproveWithdraw: (requestId: String) -> Boolean = { false },
+    onRejectWithdraw: (requestId: String) -> Boolean = { false },
+    onGrantBadge: (target: String, badge: BadgeType) -> Boolean = { _, _ -> false },
+    onRevokeBadge: (target: String, badge: BadgeType) -> Boolean = { _, _ -> false },
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
 ) {
     val context = LocalContext.current
     var isUnlocked by remember { mutableStateOf(userProfile.role == UserRole.OWNER) }
@@ -164,6 +188,8 @@ fun OwnerControlDialog(
                     allUsers = allUsers,
                     allBookings = allBookings,
                     matches = matches,
+                    depositRequests = depositRequests,
+                    withdrawRequests = withdrawRequests,
                     onDismiss = onDismiss,
                     onBanUser = onBanUser,
                     onUnbanUser = onUnbanUser,
@@ -171,7 +197,19 @@ fun OwnerControlDialog(
                     onDemoteAdmin = onDemoteAdmin,
                     onUpdateMasterPin = onUpdateMasterPin,
                     onCancelSlotAndRefund = onCancelSlotAndRefund,
-                    onCancelMatchAndRefundAll = onCancelMatchAndRefundAll
+                    onCancelMatchAndRefundAll = onCancelMatchAndRefundAll,
+                    onAdjustUserBalance = onAdjustUserBalance,
+                    onIncrementUserMatchesPlayed = onIncrementUserMatchesPlayed,
+                    onApproveDeposit = onApproveDeposit,
+                    onRejectDeposit = onRejectDeposit,
+                    onApproveWithdraw = onApproveWithdraw,
+                    onRejectWithdraw = onRejectWithdraw,
+                    onGrantBadge = onGrantBadge,
+                    onRevokeBadge = onRevokeBadge,
+                    badgeAppeals = badgeAppeals,
+                    onApproveBadgeAppeal = onApproveBadgeAppeal,
+                    onDenyBadgeAppeal = onDenyBadgeAppeal,
+                    onSendAppealChat = onSendAppealChat
                 )
             }
         }
@@ -326,6 +364,8 @@ private fun OwnerDashboardContent(
     allUsers: List<AppUser>,
     allBookings: List<SlotBooking>,
     matches: List<TournamentMatch>,
+    depositRequests: List<DepositRequest>,
+    withdrawRequests: List<WithdrawRequest>,
     onDismiss: () -> Unit,
     onBanUser: (userIdOrPhone: String, reason: String) -> Unit,
     onUnbanUser: (userIdOrPhone: String) -> Unit,
@@ -333,15 +373,42 @@ private fun OwnerDashboardContent(
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
     onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit,
-    onCancelMatchAndRefundAll: (matchId: String) -> Unit
+    onCancelMatchAndRefundAll: (matchId: String) -> Unit,
+    onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean,
+    onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean,
+    onApproveDeposit: (requestId: String) -> Boolean,
+    onRejectDeposit: (requestId: String) -> Boolean,
+    onApproveWithdraw: (requestId: String) -> Boolean,
+    onRejectWithdraw: (requestId: String) -> Boolean,
+    onGrantBadge: (target: String, badge: BadgeType) -> Boolean,
+    onRevokeBadge: (target: String, badge: BadgeType) -> Boolean,
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
+    val badgeTabTitle = if (pendingBadgeAppealsCount > 0) "🏅 ব্যাজ কন্ট্রোল ($pendingBadgeAppealsCount)" else "🏅 ব্যাজ কন্ট্রোল"
     val tabs = listOf(
+        "💰 ব্যালেন্স",
+        "💳 ডিপোজিট/উইথড্র",
+        badgeTabTitle,
         "🚫 ফ্রড ব্যান",
         "🛡️ অ্যাডমিন নিয়োগ",
         "🎟️ স্লট ও রিফান্ড",
         "📖 ওনার গাইড",
         "⚙️ সেটিংস"
+    )
+    val tabTags = listOf(
+        "owner_tab_balance",
+        "owner_tab_requests",
+        "owner_tab_badges",
+        "owner_tab_ban",
+        "owner_tab_admins",
+        "owner_tab_slots",
+        "owner_tab_guide",
+        "owner_tab_settings"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -375,7 +442,7 @@ private fun OwnerDashboardContent(
                             color = FlameYellow
                         )
                         Text(
-                            text = "সর্বোচ্চ ক্ষমতা • প্রতারক ব্যান ও স্লট অটো-রিফান্ড",
+                            text = "ব্যালেন্স, ব্যাজ, ডিপোজিট/উইথড্র ও সম্পূর্ণ নিয়ন্ত্রণ",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.7f)
                         )
@@ -388,9 +455,10 @@ private fun OwnerDashboardContent(
             }
         }
 
-        // Tabs
-        TabRow(
+        // Scrollable Tabs
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
+            edgePadding = 8.dp,
             containerColor = DarkSurface,
             contentColor = FlameYellow,
             indicator = { tabPositions ->
@@ -405,6 +473,7 @@ private fun OwnerDashboardContent(
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
+                    modifier = Modifier.testTag(tabTags[index]),
                     text = {
                         Text(
                             text = title,
@@ -428,24 +497,62 @@ private fun OwnerDashboardContent(
                 .background(DarkSurface)
         ) {
             when (selectedTab) {
-                0 -> FraudBanTab(
+                0 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        UserBalanceControlContent(
+                            allUsers = allUsers,
+                            onAdjustUserBalance = onAdjustUserBalance,
+                            onIncrementUserMatchesPlayed = onIncrementUserMatchesPlayed
+                        )
+                    }
+                }
+                1 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        DepositWithdrawQueueContent(
+                            depositRequests = depositRequests,
+                            withdrawRequests = withdrawRequests,
+                            onApproveDeposit = onApproveDeposit,
+                            onRejectDeposit = onRejectDeposit,
+                            onApproveWithdraw = onApproveWithdraw,
+                            onRejectWithdraw = onRejectWithdraw
+                        )
+                    }
+                }
+                2 -> BadgeManagementTab(
+                    users = allUsers,
+                    onGrantBadge = onGrantBadge,
+                    onRevokeBadge = onRevokeBadge,
+                    badgeAppeals = badgeAppeals,
+                    onApproveBadgeAppeal = onApproveBadgeAppeal,
+                    onDenyBadgeAppeal = onDenyBadgeAppeal,
+                    onSendAppealChat = onSendAppealChat
+                )
+                3 -> FraudBanTab(
                     users = allUsers,
                     onBanUser = onBanUser,
                     onUnbanUser = onUnbanUser
                 )
-                1 -> AdminManagementTab(
+                4 -> AdminManagementTab(
                     users = allUsers,
                     onPromoteToAdmin = onPromoteToAdmin,
                     onDemoteAdmin = onDemoteAdmin
                 )
-                2 -> SlotRefundControlTab(
+                5 -> SlotRefundControlTab(
                     bookings = allBookings,
                     matches = matches,
                     onCancelSlotAndRefund = onCancelSlotAndRefund,
                     onCancelMatchAndRefundAll = onCancelMatchAndRefundAll
                 )
-                3 -> OwnerInstructionsGuideTab()
-                4 -> OwnerSettingsTab(onUpdateMasterPin = onUpdateMasterPin)
+                6 -> OwnerInstructionsGuideTab()
+                7 -> OwnerSettingsTab(onUpdateMasterPin = onUpdateMasterPin)
             }
         }
     }
@@ -1859,4 +1966,546 @@ private fun SlotRefundControlTab(
         )
     }
 }
+
+// ==========================================
+// TAB: OWNER BADGE CONTROL (GRANT & REVOKE)
+// ==========================================
+@Composable
+private fun BadgeManagementTab(
+    users: List<AppUser>,
+    onGrantBadge: (target: String, badge: BadgeType) -> Boolean,
+    onRevokeBadge: (target: String, badge: BadgeType) -> Boolean,
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
+) {
+    var targetInput by remember { mutableStateOf("") }
+    var userSearchQuery by remember { mutableStateOf("") }
+    var feedbackBanner by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    val cleanTarget = targetInput.trim()
+    val matchedUser = remember(users, cleanTarget) {
+        if (cleanTarget.isBlank()) null
+        else users.find {
+            it.id == cleanTarget ||
+                it.phone == cleanTarget ||
+                it.uid == cleanTarget ||
+                it.bkashNumber == cleanTarget ||
+                it.ign.equals(cleanTarget, ignoreCase = true)
+        }
+    }
+
+    val filteredUsers = remember(users, userSearchQuery) {
+        if (userSearchQuery.isBlank()) users
+        else users.filter {
+            it.name.contains(userSearchQuery, ignoreCase = true) ||
+                it.phone.contains(userSearchQuery) ||
+                it.uid.contains(userSearchQuery) ||
+                it.ign.contains(userSearchQuery, ignoreCase = true)
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(14.dp)
+            .testTag("owner_badge_manage_section"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Overview Header Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.MilitaryTech,
+                            contentDescription = null,
+                            tint = FlameYellow,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "🏅 ওনার ব্যাজ কন্ট্রোল (ব্যাজ দিন ও নিন)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                            color = FlameYellow
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "যেকোনো প্লেয়ার বা অ্যাডমিনের ফোন নম্বর, UID অথবা IGN নির্বাচন করে যেকোনো ব্যাজ দিতে বা তুলে নিতে পারবেন। নিচের তালিকা থেকে প্লেয়ার ট্যাপ করলেও সিলেক্ট হবে।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+
+        // Badge Appeals Queue (Accept -> Select Badge OR Deny -> +1 Warn / 7-day Ban)
+        item {
+            BadgeAppealsReviewSection(
+                appeals = badgeAppeals,
+                allUsers = users,
+                onApproveAppeal = onApproveBadgeAppeal,
+                onDenyAppeal = onDenyBadgeAppeal,
+                onSendAppealChat = onSendAppealChat
+            )
+        }
+
+        // Target User Input Field
+        item {
+            OutlinedTextField(
+                value = targetInput,
+                onValueChange = {
+                    targetInput = it
+                    feedbackBanner = null
+                },
+                label = { Text("টার্গেট প্লেয়ার (ফোন নম্বর, UID বা IGN)") },
+                placeholder = { Text("যেমন: 017xxxxxxxx বা IGN") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = FlameYellow)
+                },
+                trailingIcon = {
+                    if (targetInput.isNotEmpty()) {
+                        IconButton(onClick = {
+                            targetInput = ""
+                            feedbackBanner = null
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear", tint = Color.White)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("owner_badge_target_input"),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedLabelColor = FlameYellow,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                )
+            )
+        }
+
+        // Quick-Pick Player Chips Row (1-tap select without scrolling)
+        if (users.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    users.forEach { user ->
+                        val isChipSelected = matchedUser?.id == user.id
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isChipSelected) FlameYellow else DarkCard,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isChipSelected) FlameYellow else DarkBorder
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    targetInput = user.phone
+                                    feedbackBanner = null
+                                }
+                                .testTag("owner_badge_quick_chip_${user.phone}")
+                        ) {
+                            Text(
+                                text = "${user.ign} (${user.effectiveBadges.size})",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isChipSelected) Color.Black else Color.White,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Selected / Matched User Active Badges Card
+        if (matchedUser != null) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("owner_badge_selected_user_card"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF172030)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.6f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "সিলেক্টেড: ${matchedUser.name}",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "IGN: ${matchedUser.ign} • ফোন: ${matchedUser.phone} • UID: ${matchedUser.uid}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = FlameYellow
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = VictoryGreen.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = "${matchedUser.effectiveBadges.size}টি ব্যাজ",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = VictoryGreen,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val activeBadges = matchedUser.effectiveBadges
+                        if (activeBadges.isEmpty()) {
+                            Text(
+                                text = "বর্তমানে এই ইউজারের কোনো সক্রিয় ব্যাজ নেই।",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                activeBadges.forEach { badge ->
+                                    BadgePill(badge = badge, compact = true)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Action Feedback Banner
+        feedbackBanner?.let { (isSuccess, msg) ->
+            item {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSuccess) VictoryGreen.copy(alpha = 0.16f) else BkashPink.copy(alpha = 0.18f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isSuccess) VictoryGreen else BkashPink
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("owner_badge_feedback_banner")
+                ) {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+
+        // Section: All 9 Badges with Grant & Revoke Actions
+        item {
+            Text(
+                text = "ব্যাজ নির্বাচন করুন (${BadgeType.values().size}টি ব্যাজ — দিন বা তুলে নিন):",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = FlameYellow
+            )
+        }
+
+        items(BadgeType.values().toList(), key = { it.name }) { badge ->
+            val badgeColor = Color(badge.hexColor)
+            val userHasBadge = matchedUser?.effectiveBadges?.contains(badge) == true
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("owner_badge_card_${badge.name}"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (userHasBadge) badgeColor.copy(alpha = 0.13f) else DarkCard
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = if (userHasBadge) 1.5.dp else 1.dp,
+                    color = if (userHasBadge) badgeColor else DarkBorder
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            BadgeEmblemArt(badge = badge, size = 42.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = badge.title,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = badgeColor
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    BadgePill(badge = badge, compact = true)
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = badgeColor.copy(alpha = 0.16f)
+                                    ) {
+                                        Text(
+                                            text = badge.tierLabel,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Black
+                                            ),
+                                            color = badgeColor,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (matchedUser != null) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (userHasBadge) VictoryGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f)
+                            ) {
+                                Text(
+                                    text = if (userHasBadge) "সক্রিয় ✓" else "নেই",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (userHasBadge) VictoryGreen else Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = badge.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.82f),
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "🎯 শর্ত: ${badge.criteria}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = FlameYellow,
+                        fontSize = 10.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val ok = onGrantBadge(cleanTarget, badge)
+                                feedbackBanner = if (ok) {
+                                    true to "✅ '${badge.title}' ব্যাজটি সফলভাবে দেওয়া হয়েছে!"
+                                } else {
+                                    false to "⚠️ দয়া করে সঠিক প্লেয়ারের ফোন, UID বা IGN লিখুন।"
+                                }
+                            },
+                            enabled = cleanTarget.isNotBlank() && !userHasBadge,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = VictoryGreen,
+                                disabledContainerColor = VictoryGreen.copy(alpha = 0.25f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .testTag("grant_badge_btn_${badge.name}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (userHasBadge) "দেওয়া আছে" else "ব্যাজ দিন",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val ok = onRevokeBadge(cleanTarget, badge)
+                                feedbackBanner = if (ok) {
+                                    true to "🗑️ '${badge.title}' ব্যাজটি প্লেয়ারের থেকে তুলে নেওয়া হয়েছে!"
+                                } else {
+                                    false to "⚠️ এই প্লেয়ারের কাছে '${badge.title}' ব্যাজটি নেই বা প্লেয়ার পাওয়া যায়নি।"
+                                }
+                            },
+                            enabled = cleanTarget.isNotBlank() && (matchedUser == null || userHasBadge),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = BkashPink,
+                                disabledContentColor = Color.White.copy(alpha = 0.3f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (cleanTarget.isNotBlank() && (matchedUser == null || userHasBadge)) BkashPink else DarkBorder
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .testTag("revoke_badge_btn_${badge.name}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.RemoveCircleOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "ব্যাজ নিন",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Quick-Pick Registered Users List
+        item {
+            HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                text = "দ্রুত প্লেয়ার নির্বাচন করুন (${filteredUsers.size} জন):",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = FlameYellow
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedTextField(
+                value = userSearchQuery,
+                onValueChange = { userSearchQuery = it },
+                placeholder = { Text("তালিকা থেকে নাম, ফোন বা IGN খুঁজুন...") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = FlameYellow) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                )
+            )
+        }
+
+        items(filteredUsers, key = { "badge_user_${it.id}" }) { user ->
+            val isSelected = matchedUser?.id == user.id
+            val badges = user.effectiveBadges
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        targetInput = user.phone
+                        feedbackBanner = null
+                    }
+                    .testTag("owner_badge_user_row_${user.phone}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) FlameYellow.copy(alpha = 0.14f) else DarkCard
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isSelected) FlameYellow else DarkBorder
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${user.name} (${user.ign})",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                            Text(
+                                text = "ফোন: ${user.phone} • UID: ${user.uid}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) FlameYellow else FlameOrange.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = if (isSelected) "সিলেক্টেড ✓" else "সিলেক্ট",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isSelected) Color.Black else FlameYellow,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (badges.isEmpty()) {
+                        Text(
+                            text = "কোনো ব্যাজ নেই",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            badges.forEach { b ->
+                                BadgePill(badge = b, compact = true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 

@@ -64,8 +64,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import com.example.data.TournamentAiAssistant
+import com.example.model.AppUser
 import com.example.model.ChatMessage
+import com.example.model.UserProfile
 import com.example.ui.SupportTabType
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
@@ -87,13 +93,27 @@ fun SupportChatDialog(
     onSendAdminMessage: (String) -> Unit,
     onSendAiMessage: (String) -> Unit,
     onResetAiChat: () -> Unit,
-    onAiActionClick: (String) -> Unit
+    onAiActionClick: (String) -> Unit,
+    registeredUsers: List<AppUser> = emptyList(),
+    currentUser: UserProfile = UserProfile(),
+    onPlayerProfileClick: ((PlayerProfileCardData) -> Unit)? = null,
+    onGiveKudos: ((String) -> Int)? = null
 ) {
     var inputText by remember { mutableStateOf("") }
     var isAiTyping by remember { mutableStateOf(false) }
+    var localPlayerProfileCard by remember { mutableStateOf<PlayerProfileCardData?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val aiListState = rememberLazyListState()
     val adminListState = rememberLazyListState()
+
+    val openSenderProfile: (ChatMessage) -> Unit = { msg ->
+        val profileData = msg.toPlayerProfileCard(registeredUsers, currentUser)
+        if (onPlayerProfileClick != null) {
+            onPlayerProfileClick(profileData)
+        } else {
+            localPlayerProfileCard = profileData
+        }
+    }
 
     // Auto scroll when messages change
     LaunchedEffect(aiMessages.size, isAiTyping) {
@@ -370,6 +390,7 @@ fun SupportChatDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(adminMessages, key = { it.id }) { msg ->
+                            val senderProfile = msg.toPlayerProfileCard(registeredUsers, currentUser)
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = if (msg.isFromAdmin) Alignment.Start else Alignment.End
@@ -385,13 +406,40 @@ fun SupportChatDialog(
                                     modifier = Modifier.fillMaxWidth(0.85f)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = msg.senderName,
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (msg.isFromAdmin) FlameYellow else Color.White
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { openSenderProfile(msg) }
+                                                .padding(vertical = 2.dp, horizontal = 2.dp)
+                                                .testTag("chat_sender_profile_btn_${msg.id}")
+                                        ) {
+                                            ProfileAvatarImage(
+                                                avatarId = senderProfile.avatarId,
+                                                customPfpUri = senderProfile.customPfpUri,
+                                                role = senderProfile.role,
+                                                contentDescription = msg.senderName,
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .border(1.dp, if (msg.isFromAdmin) FlameYellow else Color.White, CircleShape)
                                             )
-                                        )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = msg.senderName,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (msg.isFromAdmin) FlameYellow else Color.White
+                                                )
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "প্রোফাইল ›",
+                                                fontSize = 9.sp,
+                                                color = if (msg.isFromAdmin) FlameCyan else Color.White.copy(alpha = 0.85f),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = msg.text,
@@ -480,6 +528,14 @@ fun SupportChatDialog(
                 }
             }
         }
+    }
+
+    localPlayerProfileCard?.let { profileData ->
+        PlayerProfileCardDialog(
+            profile = profileData,
+            onDismiss = { localPlayerProfileCard = null },
+            onGiveKudos = onGiveKudos
+        )
     }
 }
 

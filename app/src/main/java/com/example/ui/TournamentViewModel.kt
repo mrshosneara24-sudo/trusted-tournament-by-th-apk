@@ -1,15 +1,21 @@
 package com.example.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.TournamentRepository
 import com.example.model.AppCustomization
 import com.example.model.AppLogoOption
 import com.example.model.AppUser
+import com.example.model.BadgeAppeal
+import com.example.model.BadgeType
 import com.example.model.ChatMessage
 import com.example.model.DailyGamerMission
 import com.example.model.DailyStreakInfo
+import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.MatchResult
 import com.example.model.MatchType
@@ -19,7 +25,9 @@ import com.example.model.TournamentMatch
 import com.example.model.TournamentRuleItem
 import com.example.model.UserProfile
 import com.example.model.UserRole
+import com.example.model.WalletPaymentMethod
 import com.example.model.WalletTransaction
+import com.example.model.WithdrawRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,10 +37,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 enum class TournamentTab(val banglaLabel: String) {
-    MATCHES("টুর্নামেন্ট"),
-    MY_MATCHES("আমার ম্যাচ"),
+    MATCHES("ম্যাচ"),
+    MY_MATCHES("বুকিং"),
     WALLET("ওয়ালেট"),
-    LEADERBOARD("লিডারবোর্ড"),
+    LEADERBOARD("র‍্যাঙ্ক"),
+    GLOBAL_CHAT("গ্লোবাল"),
     ACCOUNT("প্রোফাইল")
 }
 
@@ -52,6 +61,18 @@ class TournamentViewModel(
     private val repository: TournamentRepository = TournamentRepository()
 ) : ViewModel() {
 
+    companion object {
+        fun factory(context: Context): ViewModelProvider.Factory {
+            val appContext = context.applicationContext
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return TournamentViewModel(TournamentRepository.getInstance(appContext)) as T
+                }
+            }
+        }
+    }
+
     val officialBkashNumber: String
         get() = appCustomization.value.officialBkashNumber
 
@@ -68,15 +89,19 @@ class TournamentViewModel(
     val userProfile: StateFlow<UserProfile> = repository.userProfile
     val myBookings: StateFlow<List<SlotBooking>> = repository.myBookings
     val transactions: StateFlow<List<WalletTransaction>> = repository.transactions
+    val depositRequests: StateFlow<List<DepositRequest>> = repository.depositRequests
+    val withdrawRequests: StateFlow<List<WithdrawRequest>> = repository.withdrawRequests
     val leaderboard: StateFlow<List<LeaderboardPlayer>> = repository.leaderboard
     val results: StateFlow<List<MatchResult>> = repository.results
     val chatMessages: StateFlow<List<ChatMessage>> = repository.chatMessages
+    val globalChatMessages: StateFlow<List<GlobalChatMessage>> = repository.globalChatMessages
     val hasSpunToday: StateFlow<Boolean> = repository.hasSpunToday
     val hasSpunThisWeek: StateFlow<Boolean> = repository.hasSpunThisWeek
     val spinHistory: StateFlow<List<SpinHistoryRecord>> = repository.spinHistory
     val dailyMissions: StateFlow<List<DailyGamerMission>> = repository.dailyMissions
     val appCustomization: StateFlow<AppCustomization> = repository.appCustomization
     val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
+    val badgeAppeals: StateFlow<List<BadgeAppeal>> = repository.badgeAppeals
 
     // Dialog States (derived reactively from repository.matches so live edits/refunds reflect immediately)
     private val _bookingMatchId = MutableStateFlow<String?>(null)
@@ -303,6 +328,34 @@ class TournamentViewModel(
         repository.sendSupportMessage(text)
     }
 
+    fun sendGlobalChatMessage(
+        text: String,
+        replyToId: String? = null,
+        pinAnnouncement: Boolean = false
+    ): Pair<Boolean, String> {
+        val res = repository.sendGlobalChatMessage(text, replyToId, pinAnnouncement)
+        if (!res.first || pinAnnouncement) {
+            _snackbarMessage.value = res.second
+        }
+        return res
+    }
+
+    fun togglePinGlobalChatMessage(messageId: String): Pair<Boolean, String> {
+        val res = repository.togglePinGlobalChatMessage(messageId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deleteGlobalChatMessage(messageId: String): Pair<Boolean, String> {
+        val res = repository.deleteGlobalChatMessage(messageId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun reactToGlobalChatMessage(messageId: String, emoji: String): Boolean {
+        return repository.reactToGlobalChatMessage(messageId, emoji)
+    }
+
     fun sendAiMessage(query: String) {
         repository.sendAiAssistantMessage(query)
         repository.markMissionCompleted("AI_CHAT")
@@ -378,30 +431,110 @@ class TournamentViewModel(
         }
     }
 
+    fun confirmSlotBookingWithWallet(
+        slotNumber: Int,
+        playerIgn: String,
+        playerUid: String
+    ) {
+        val match = bookingMatch.value ?: return
+        val (success, msg) = repository.bookSlotWithWallet(
+            match = match,
+            slotNumber = slotNumber,
+            playerIgn = playerIgn,
+            playerUid = playerUid
+        )
+        if (success) {
+            _bookingMatchId.value = null
+            _roomSlotGridMatchId.value = null
+            _preselectedSlotNumber.value = null
+            _snackbarMessage.value = msg
+            _currentTab.value = TournamentTab.MY_MATCHES
+        } else {
+            _snackbarMessage.value = msg
+        }
+    }
+
+    fun submitDepositRequest(
+        amount: Int,
+        paymentMethod: WalletPaymentMethod,
+        senderNumber: String,
+        trxId: String
+    ): Boolean {
+        val (success, msg) = repository.submitDepositRequest(amount, paymentMethod, senderNumber, trxId)
+        _snackbarMessage.value = msg
+        if (success) {
+            _showAddMoneyDialog.value = false
+        }
+        return success
+    }
+
     fun confirmAddMoney(amount: Int, bkashNumber: String, trxId: String) {
-        repository.addMoneyWithBkash(amount, bkashNumber, trxId)
-        _showAddMoneyDialog.value = false
-        _snackbarMessage.value = "৳$amount সফলভাবে ওয়ালেটে যোগ হয়েছে!"
+        submitDepositRequest(amount, WalletPaymentMethod.BKASH, bkashNumber, trxId)
+    }
+
+    fun submitWithdrawRequest(
+        amount: Int,
+        paymentMethod: WalletPaymentMethod,
+        targetNumber: String
+    ): Boolean {
+        val (success, msg) = repository.submitWithdrawRequest(amount, paymentMethod, targetNumber)
+        _snackbarMessage.value = msg
+        if (success) {
+            _showWithdrawDialog.value = false
+        }
+        return success
     }
 
     fun confirmWithdraw(amount: Int, bkashNumber: String) {
-        val minW = appCustomization.value.minWithdraw
-        val maxW = appCustomization.value.maxWithdraw
-        if (amount < minW) {
-            _snackbarMessage.value = "সর্বনিম্ন $minW টাকা উইথড্র করা যাবে!"
-            return
-        }
-        if (amount > maxW) {
-            _snackbarMessage.value = "সর্বোচ্চ $maxW টাকা উইথড্র করা যাবে!"
-            return
-        }
-        val success = repository.withdrawToBkash(amount, bkashNumber)
-        _showWithdrawDialog.value = false
-        if (success) {
-            _snackbarMessage.value = "৳$amount ক্যাশআউট রিকোয়েস্ট সফল! ৫-১০ মিনিটের মধ্যে বিকাশে পাঠানো হবে।"
-        } else {
-            _snackbarMessage.value = "পর্যাপ্ত ব্যালেন্স নেই!"
-        }
+        submitWithdrawRequest(amount, WalletPaymentMethod.BKASH, bkashNumber)
+    }
+
+    fun adjustUserBalance(
+        targetPhoneOrUidOrId: String,
+        amount: Int,
+        isAdd: Boolean,
+        reason: String = "",
+        performedBy: String = if (userProfile.value.role == UserRole.OWNER) "ওনার" else "অ্যাডমিন"
+    ): Boolean {
+        val (success, msg) = repository.adjustUserBalance(
+            targetPhoneOrUidOrId = targetPhoneOrUidOrId,
+            amount = amount,
+            isAdd = isAdd,
+            reason = reason,
+            performedBy = performedBy
+        )
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun incrementUserMatchesPlayed(targetPhoneOrUidOrId: String, delta: Int = 1): Boolean {
+        val (success, msg) = repository.incrementUserMatchesPlayed(targetPhoneOrUidOrId, delta)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun approveDepositRequest(requestId: String): Boolean {
+        val (success, msg) = repository.approveDepositRequest(requestId)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun rejectDepositRequest(requestId: String, reason: String = "ভুয়া বা ভুল TrxID"): Boolean {
+        val (success, msg) = repository.rejectDepositRequest(requestId, reason)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun approveWithdrawRequest(requestId: String): Boolean {
+        val (success, msg) = repository.approveWithdrawRequest(requestId)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun rejectWithdrawRequest(requestId: String, reason: String = "নম্বর বা তথ্যে ত্রুটি"): Boolean {
+        val (success, msg) = repository.rejectWithdrawRequest(requestId, reason)
+        _snackbarMessage.value = msg
+        return success
     }
 
     fun openEditProfile() {
@@ -525,11 +658,49 @@ class TournamentViewModel(
         newUid: String,
         newPhone: String,
         newBkash: String,
-        newAvatarId: String
+        newAvatarId: String,
+        newBio: String = userProfile.value.battleTagline,
+        newCustomPfpUri: String? = userProfile.value.customPfpUri,
+        newCustomBannerUri: String? = userProfile.value.customBannerUri,
+        newBannerColorId: String = userProfile.value.bannerColorId
     ) {
-        repository.updateProfile(accountName, newIgn, newUid, newPhone, newBkash, newAvatarId)
+        repository.updateProfile(
+            accountName = accountName,
+            newIgn = newIgn,
+            newUid = newUid,
+            newPhone = newPhone,
+            newBkash = newBkash,
+            newAvatarId = newAvatarId,
+            newBio = newBio,
+            newCustomPfpUri = newCustomPfpUri,
+            newCustomBannerUri = newCustomBannerUri,
+            newBannerColorId = newBannerColorId
+        )
         _showEditProfileDialog.value = false
-        _snackbarMessage.value = "প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে!"
+        _snackbarMessage.value = "প্রোফাইল তথ্য ও ব্যানার সফলভাবে আপডেট হয়েছে!"
+    }
+
+    fun updateProfileAppearance(
+        customPfpUri: String?,
+        customBannerUri: String?,
+        bannerColorId: String
+    ): Pair<Boolean, String> {
+        val result = repository.updateProfileAppearance(customPfpUri, customBannerUri, bannerColorId)
+        _snackbarMessage.value = result.second
+        return result
+    }
+
+    fun updateBio(newBio: String) {
+        repository.updateBio(newBio)
+        _snackbarMessage.value = "প্রোফাইল বায়ো আপডেট হয়েছে!"
+    }
+
+    fun giveProfileKudos(targetKey: String): Int {
+        val count = repository.giveProfileKudos(targetKey)
+        if (count > 0) {
+            _snackbarMessage.value = "🔥 প্লেয়ারকে রেস্পেক্ট (GG) পাঠানো হয়েছে!"
+        }
+        return count
     }
 
     fun openAdminPanel() {
@@ -639,6 +810,53 @@ class TournamentViewModel(
         return success
     }
 
+    fun grantBadgeToUser(targetPhoneOrUidOrId: String, badge: BadgeType): Boolean {
+        val (success, msg) = repository.grantBadgeToUser(targetPhoneOrUidOrId, badge)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun revokeBadgeFromUser(targetPhoneOrUidOrId: String, badge: BadgeType): Boolean {
+        val (success, msg) = repository.revokeBadgeFromUser(targetPhoneOrUidOrId, badge)
+        _snackbarMessage.value = msg
+        return success
+    }
+
+    fun submitBadgeAppeal(requestedBadge: BadgeType, reasonNote: String): Pair<Boolean, String> {
+        val result = repository.submitBadgeAppeal(requestedBadge, reasonNote)
+        _snackbarMessage.value = result.second
+        return result
+    }
+
+    fun approveBadgeAppeal(appealId: String, selectedBadgeToGrant: BadgeType): Pair<Boolean, String> {
+        val reviewer = if (userProfile.value.role == UserRole.OWNER) "ওনার" else "অ্যাডমিন"
+        val result = repository.approveBadgeAppeal(appealId, selectedBadgeToGrant, reviewer)
+        _snackbarMessage.value = result.second
+        return result
+    }
+
+    fun denyBadgeAppeal(
+        appealId: String,
+        reason: String = "ব্যাজের নির্ধারিত শর্ত পূরণ হয়নি (অসম্পূর্ণ বা মিথ্যা আবেদন)"
+    ): Pair<Boolean, String> {
+        val reviewer = if (userProfile.value.role == UserRole.OWNER) "ওনার" else "অ্যাডমিন"
+        val result = repository.denyBadgeAppeal(appealId, reason, reviewer)
+        _snackbarMessage.value = result.second
+        return result
+    }
+
+    fun sendAppealChatMessage(
+        appealId: String,
+        text: String,
+        proofImageUri: String? = null
+    ): Pair<Boolean, String> {
+        val result = repository.sendAppealChatMessage(appealId, text, proofImageUri)
+        if (!result.first) {
+            _snackbarMessage.value = result.second
+        }
+        return result
+    }
+
     // ==================== A TO Z OWNER APP MANAGEMENT ====================
 
     fun updateAppBranding(
@@ -738,6 +956,21 @@ class TournamentViewModel(
     fun resetDefaultRules() {
         repository.resetDefaultRules()
         _snackbarMessage.value = "🔄 ডিফল্ট ৮টি কঠোর টুর্নামেন্ট নিয়মে রিসেট করা হয়েছে!"
+    }
+
+    fun resetAppForFreshDownload() {
+        repository.resetAppForFreshDownload()
+        _bookingMatchId.value = null
+        _roomSlotGridMatchId.value = null
+        _preselectedSlotNumber.value = null
+        _roomDetails.value = null
+        _showAddMoneyDialog.value = false
+        _showWithdrawDialog.value = false
+        _showSettingsDialog.value = false
+        _showAdminDialog.value = false
+        _showOwnerDialog.value = false
+        _currentTab.value = TournamentTab.MATCHES
+        _snackbarMessage.value = "🔄 অ্যাপ সম্পূর্ণ ফ্রেশ ডাউনলোড অবস্থায় রিসেট করা হয়েছে!"
     }
 }
 

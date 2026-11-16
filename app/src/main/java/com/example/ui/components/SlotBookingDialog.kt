@@ -78,13 +78,15 @@ import kotlinx.coroutines.launch
 fun SlotBookingDialog(
     match: TournamentMatch,
     officialBkashNumber: String,
+    walletBalance: Int = 0,
     initialSlotNumber: Int? = null,
     defaultIgn: String = "",
     defaultUid: String = "",
     defaultBkash: String = "",
     takenSlots: Set<Int> = emptySet(),
     onDismiss: () -> Unit,
-    onConfirmBooking: (slotNumber: Int, ign: String, uid: String, bkashNumber: String, trxId: String) -> Unit
+    onConfirmBooking: (slotNumber: Int, ign: String, uid: String, bkashNumber: String, trxId: String) -> Unit,
+    onConfirmWalletBooking: (slotNumber: Int, ign: String, uid: String) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -108,6 +110,9 @@ fun SlotBookingDialog(
     var selectedSlot by remember(match.id, initialSlotNumber, availableSlotsList) {
         val preferred = initialSlotNumber?.takeIf { it in 1..match.totalSlots && it !in computedBookedSet }
         mutableIntStateOf(preferred ?: availableSlotsList.firstOrNull() ?: 1)
+    }
+    var useWalletPay by remember(match.id, walletBalance) {
+        mutableStateOf(walletBalance >= match.entryFee)
     }
     var ign by remember(defaultIgn) { mutableStateOf(defaultIgn) }
     var uid by remember(defaultUid) { mutableStateOf(defaultUid) }
@@ -174,99 +179,213 @@ fun SlotBookingDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Official bKash Payment Box with 01861583924
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = BkashPink.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
+                // Payment Mode Toggle (Wallet Balance vs bKash Send Money)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (useWalletPay) VictoryGreen.copy(alpha = 0.22f) else DarkCard,
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (useWalletPay) 1.5.dp else 1.dp,
+                            if (useWalletPay) VictoryGreen else DarkBorder
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                useWalletPay = true
+                                errorMessage = null
+                            }
+                            .testTag("booking_pay_wallet_tab")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(BkashPink),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Payment,
-                                        contentDescription = "bKash",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
+                            Text(
+                                text = "💳 ওয়ালেট (৳$walletBalance)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (useWalletPay) VictoryGreen else Color.White.copy(alpha = 0.8f)
+                            )
+                            Text(
+                                text = if (walletBalance >= match.entryFee) "ব্যালেন্স পর্যাপ্ত" else "কমপক্ষে ৳${match.entryFee} লাগবে",
+                                fontSize = 10.sp,
+                                color = if (walletBalance >= match.entryFee) VictoryGreen else Color(0xFFFCA5A5)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (!useWalletPay) BkashPink.copy(alpha = 0.22f) else DarkCard,
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (!useWalletPay) 1.5.dp else 1.dp,
+                            if (!useWalletPay) BkashPink else DarkBorder
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                useWalletPay = false
+                                errorMessage = null
+                            }
+                            .testTag("booking_pay_bkash_tab")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📱 বিকাশ সেন্ড মানি",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (!useWalletPay) BkashPink else Color.White.copy(alpha = 0.8f)
+                            )
+                            Text(
+                                text = "সরাসরি TrxID দিয়ে জয়েন",
+                                fontSize = 10.sp,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (useWalletPay) {
+                    val hasEnough = walletBalance >= match.entryFee
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (hasEnough) VictoryGreen.copy(alpha = 0.14f) else Color(0xFF340C17),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (hasEnough) VictoryGreen.copy(alpha = 0.6f) else Color(0xFFEF4444)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "অ্যাপ ওয়ালেট পেমেন্ট",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = if (hasEnough) VictoryGreen else Color(0xFFFCA5A5)
+                                )
+                                Text(
+                                    text = "ফি: ৳${match.entryFee}",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                                    color = FlameYellow
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (hasEnough) {
+                                    "বর্তমান ব্যালেন্স ৳$walletBalance → বুকিংয়ের পর থাকবে ৳${walletBalance - match.entryFee}। তাৎক্ষণিক স্লট কনফার্ম হবে।"
+                                } else {
+                                    "আপনার ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই (বর্তমান: ৳$walletBalance, প্রয়োজন: ৳${match.entryFee})। ওয়ালেট থেকে ডিপোজিট করুন অথবা বিকাশ সেন্ড মানি ব্যবহার করুন।"
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                } else {
+                    // Official bKash Payment Box with 01861583924
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = BkashPink.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(BkashPink),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Payment,
+                                            contentDescription = "bKash",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "বিকাশ সেন্ড মানি (Send Money)",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
+
                                 Text(
-                                    text = "বিকাশ সেন্ড মানি (Send Money)",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    text = "ফি: ৳${match.entryFee}",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Black,
+                                        color = BkashPink
+                                    )
                                 )
                             }
 
-                            Text(
-                                text = "ফি: ৳${match.entryFee}",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    color = BkashPink
-                                )
-                            )
-                        }
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Copyable bKash Number Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF0B050F))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = officialBkashNumber,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                ),
-                                color = FlameYellow
-                            )
-
-                            Button(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(officialBkashNumber))
-                                    Toast.makeText(context, "বিকাশ নম্বর ($officialBkashNumber) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
-                                shape = RoundedCornerShape(8.dp),
+                            // Copyable bKash Number Bar
+                            Row(
                                 modifier = Modifier
-                                    .height(34.dp)
-                                    .testTag("copy_bkash_btn")
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF0B050F))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentCopy,
-                                    contentDescription = "Copy",
-                                    modifier = Modifier.size(14.dp)
+                                Text(
+                                    text = officialBkashNumber,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    ),
+                                    color = FlameYellow
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "কপি করুন", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
 
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "উপরের নম্বরে বিকাশ থেকে ৳${match.entryFee} সেন্ড মানি করুন। অ্যাপ স্বয়ংক্রিয়ভাবে আপনার পেমেন্ট সনাক্ত করে আপনার স্লট বরাদ্দ করবে।",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                                Button(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(officialBkashNumber))
+                                        Toast.makeText(context, "বিকাশ নম্বর ($officialBkashNumber) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("copy_bkash_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = "Copy",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "কপি করুন", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "উপরের নম্বরে বিকাশ থেকে ৳${match.entryFee} সেন্ড মানি করুন। অ্যাপ স্বয়ংক্রিয়ভাবে আপনার পেমেন্ট সনাক্ত করে আপনার স্লট বরাদ্দ করবে।",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
@@ -366,120 +485,122 @@ fun SlotBookingDialog(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                if (!useWalletPay) {
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // Input: Sender bKash Number
-                OutlinedTextField(
-                    value = senderBkash,
-                    onValueChange = { senderBkash = it },
-                    label = { Text("যে বিকাশ নম্বর থেকে টাকা পাঠিয়েছেন") },
-                    placeholder = { Text("যেমন: 018XXXXXXXX") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Filled.PhoneAndroid, contentDescription = "bKash", tint = BkashPink)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_sender_bkash"),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BkashPink,
-                        unfocusedBorderColor = DarkBorder,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    ),
-                    singleLine = true
-                )
+                    // Input: Sender bKash Number
+                    OutlinedTextField(
+                        value = senderBkash,
+                        onValueChange = { senderBkash = it },
+                        label = { Text("যে বিকাশ নম্বর থেকে টাকা পাঠিয়েছেন") },
+                        placeholder = { Text("যেমন: 018XXXXXXXX") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Filled.PhoneAndroid, contentDescription = "bKash", tint = BkashPink)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_sender_bkash"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BkashPink,
+                            unfocusedBorderColor = DarkBorder,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        singleLine = true
+                    )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // Input: Transaction ID (TrxID)
-                OutlinedTextField(
-                    value = trxId,
-                    onValueChange = { trxId = it.uppercase() },
-                    label = { Text("বিকাশ ট্রানজেকশন আইডি (TrxID)") },
-                    placeholder = { Text("যেমন: 9KJ3L49M") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = "TrxID", tint = VictoryGreen)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_trx_id"),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = VictoryGreen,
-                        unfocusedBorderColor = DarkBorder,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    ),
-                    singleLine = true
-                )
+                    // Input: Transaction ID (TrxID)
+                    OutlinedTextField(
+                        value = trxId,
+                        onValueChange = { trxId = it.uppercase() },
+                        label = { Text("বিকাশ ট্রানজেকশন আইডি (TrxID)") },
+                        placeholder = { Text("যেমন: 9KJ3L49M") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = "TrxID", tint = VictoryGreen)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_trx_id"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = VictoryGreen,
+                            unfocusedBorderColor = DarkBorder,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        singleLine = true
+                    )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                // TrxID Helper Guide Box
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Info,
-                                contentDescription = null,
-                                tint = FlameYellow,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                    // TrxID Helper Guide Box
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DarkCard,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription = null,
+                                    tint = FlameYellow,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "💡 TrxID কী এবং কোথায় পাবেন?",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = FlameYellow
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "💡 TrxID কী এবং কোথায় পাবেন?",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = FlameYellow
+                                text = "বিকাশ অ্যাপ বা *247# দিয়ে সেন্ড মানি করার পর বিকাশ থেকে আসা কনফার্মেশন SMS-এ বা বিকাশ অ্যাপের 'ইনবক্স > লেনদেন' অপশনে ৮-১০ অক্ষরের একটি ইউনিক কোড থাকে (যেমন: 9KJ3L49M)। এটিই আপনার ট্রানজেকশন আইডি (TrxID)।",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
+                                color = Color.White.copy(alpha = 0.9f)
                             )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "বিকাশ অ্যাপ বা *247# দিয়ে সেন্ড মানি করার পর বিকাশ থেকে আসা কনফার্মেশন SMS-এ বা বিকাশ অ্যাপের 'ইনবক্স > লেনদেন' অপশনে ৮-১০ অক্ষরের একটি ইউনিক কোড থাকে (যেমন: 9KJ3L49M)। এটিই আপনার ট্রানজেকশন আইডি (TrxID)।",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
-                            color = Color.White.copy(alpha = 0.9f)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.45f),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, VictoryGreen.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.45f),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, VictoryGreen.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "📩 বিকাশ SMS এর নমুনা:",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = VictoryGreen,
-                                        fontSize = 10.sp
-                                    )
-                                    Text(
-                                        text = "Send Money Tk ${match.entryFee}.00 successful... TrxID 9KJ3L49M",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                        color = Color.White,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        trxId = "9KJ3L49M"
-                                        Toast.makeText(context, "নমুনা TrxID যুক্ত করা হয়েছে!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen.copy(alpha = 0.25f)),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen),
-                                    shape = RoundedCornerShape(6.dp),
-                                    modifier = Modifier.height(28.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("নমুনা বসান", fontSize = 10.sp, color = VictoryGreen, fontWeight = FontWeight.Bold)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "📩 বিকাশ SMS এর নমুনা:",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = VictoryGreen,
+                                            fontSize = 10.sp
+                                        )
+                                        Text(
+                                            text = "Send Money Tk ${match.entryFee}.00 successful... TrxID 9KJ3L49M",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                            color = Color.White,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            trxId = "9KJ3L49M"
+                                            Toast.makeText(context, "নমুনা TrxID যুক্ত করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen.copy(alpha = 0.25f)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(28.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Text("নমুনা বসান", fontSize = 10.sp, color = VictoryGreen, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -495,7 +616,27 @@ fun SlotBookingDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF281014),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("slot_booking_strict_policy_strip")
+                ) {
+                    Text(
+                        text = "⚠️ কঠোর নিয়ম: মোবাইল অনলি, নিজের স্লটে বসা ও আসল TrxID আবশ্যক — ভঙ্গ করলে ফি বাজেয়াপ্ত ও স্থায়ী ব্যান হবে।",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFFCA5A5),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (isVerifyingPayment) {
                     // Auto-detection status display
@@ -541,23 +682,32 @@ fun SlotBookingDialog(
                                 errorMessage = "দয়া করে আপনার ফ্রি ফায়ার ইউআইডি দিন"
                                 return@Button
                             }
-                            if (senderBkash.length < 11) {
-                                errorMessage = "সঠিক ১১ ডিজিটের বিকাশ নম্বর দিন"
-                                return@Button
-                            }
-                            if (trxId.isBlank()) {
-                                errorMessage = "বিকাশ TrxID দিন"
-                                return@Button
-                            }
+                            if (useWalletPay) {
+                                if (walletBalance < match.entryFee) {
+                                    errorMessage = "ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই! অনুগ্রহ করে ডিপোজিট করুন।"
+                                    return@Button
+                                }
+                                errorMessage = null
+                                onConfirmWalletBooking(selectedSlot, ign.trim(), uid.trim())
+                            } else {
+                                if (senderBkash.length < 11) {
+                                    errorMessage = "সঠিক ১১ ডিজিটের বিকাশ নম্বর দিন"
+                                    return@Button
+                                }
+                                if (trxId.isBlank()) {
+                                    errorMessage = "বিকাশ TrxID দিন"
+                                    return@Button
+                                }
 
-                            errorMessage = null
-                            isVerifyingPayment = true
+                                errorMessage = null
+                                isVerifyingPayment = true
 
-                            // Simulate real-time payment detection
-                            scope.launch {
-                                delay(1200) // Realistic detection delay
-                                isVerifyingPayment = false
-                                onConfirmBooking(selectedSlot, ign, uid, senderBkash, trxId)
+                                // Simulate real-time payment detection
+                                scope.launch {
+                                    delay(1200) // Realistic detection delay
+                                    isVerifyingPayment = false
+                                    onConfirmBooking(selectedSlot, ign, uid, senderBkash, trxId)
+                                }
                             }
                         },
                         modifier = Modifier
@@ -565,8 +715,8 @@ fun SlotBookingDialog(
                             .height(50.dp)
                             .testTag("confirm_booking_submit_btn"),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = BkashPink,
-                            contentColor = Color.White
+                            containerColor = if (useWalletPay) VictoryGreen else BkashPink,
+                            contentColor = if (useWalletPay) Color.Black else Color.White
                         ),
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -577,7 +727,11 @@ fun SlotBookingDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "পেমেন্ট সনাক্ত ও স্লট বুক করুন (৳${match.entryFee})",
+                            text = if (useWalletPay) {
+                                "ওয়ালেট দিয়ে স্লট বুক করুন (৳${match.entryFee})"
+                            } else {
+                                "পেমেন্ট সনাক্ত ও স্লট বুক করুন (৳${match.entryFee})"
+                            },
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp

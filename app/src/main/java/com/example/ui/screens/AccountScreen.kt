@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -89,18 +92,27 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.model.AppCustomization
+import com.example.model.AppUser
+import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.UserProfile
 import com.example.ui.components.BadgePill
 import com.example.ui.components.BadgeShowcaseDialog
+import com.example.ui.components.PlayerProfileCardData
+import com.example.ui.components.PlayerProfileCardDialog
 import com.example.ui.components.ForgotPasswordDialog
+import com.example.ui.components.InteractiveProfileBadgeTile
 import com.example.ui.components.getAvailableAvatars
 import com.example.ui.components.getAvatarDrawableRes
 import com.example.ui.components.getLogoDrawable
+import com.example.ui.components.toPlayerProfileCard
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
@@ -121,10 +133,18 @@ fun AccountScreen(
     onOpenRules: () -> Unit,
     onOpenSupportChat: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    pendingRequestsCount: Int = 0,
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
     appCustomization: AppCustomization = AppCustomization(),
+    registeredUsers: List<AppUser> = emptyList(),
+    onOpenPlayerProfile: ((PlayerProfileCardData) -> Unit)? = null,
+    onGiveKudos: ((String) -> Int)? = null,
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
+    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -151,7 +171,15 @@ fun AccountScreen(
             onOpenRules = onOpenRules,
             onOpenSupportChat = onOpenSupportChat,
             onOpenOwnerPanel = onOpenOwnerPanel,
+            onOpenSettings = onOpenSettings,
+            pendingRequestsCount = pendingRequestsCount,
             appCustomization = appCustomization,
+            registeredUsers = registeredUsers,
+            onOpenPlayerProfile = onOpenPlayerProfile,
+            onGiveKudos = onGiveKudos,
+            badgeAppeals = badgeAppeals,
+            onSubmitBadgeAppeal = onSubmitBadgeAppeal,
+            onSendAppealChat = onSendAppealChat,
             modifier = modifier
         )
     }
@@ -204,12 +232,30 @@ private fun LoggedInAccountView(
     onOpenRules: () -> Unit,
     onOpenSupportChat: () -> Unit,
     onOpenOwnerPanel: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    pendingRequestsCount: Int = 0,
     appCustomization: AppCustomization = AppCustomization(),
+    registeredUsers: List<AppUser> = emptyList(),
+    onOpenPlayerProfile: ((PlayerProfileCardData) -> Unit)? = null,
+    onGiveKudos: ((String) -> Int)? = null,
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
+    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var showBadgeDialog by remember { mutableStateOf(false) }
+    var highlightedProfileBadge by remember { mutableStateOf<BadgeType?>(null) }
+    var localPlayerProfileCard by remember { mutableStateOf<PlayerProfileCardData?>(null) }
+
+    val openPlayerProfileCard: (PlayerProfileCardData) -> Unit = { data ->
+        if (onOpenPlayerProfile != null) {
+            onOpenPlayerProfile(data)
+        } else {
+            localPlayerProfileCard = data
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -268,14 +314,24 @@ private fun LoggedInAccountView(
             }
         }
 
-        // Banned Notice Banner (if user is banned)
+        // Banned Notice Banner (if user is banned) or Active Warnings Notice
         if (userProfile.isBanned) {
             item {
+                val banExpiry = userProfile.banExpiresAtMillis
+                val remainingText = if (banExpiry != null) {
+                    val remainingMs = (banExpiry - System.currentTimeMillis()).coerceAtLeast(0L)
+                    val remainingDays = ((remainingMs + 86_399_999L) / 86_400_000L).toInt().coerceAtLeast(1)
+                    "⏳ ৭ দিনের অস্থায়ী অ্যাপ ব্যান — আনব্যান হতে বাকি: প্রায় $remainingDays দিন"
+                } else {
+                    null
+                }
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = BkashPink.copy(alpha = 0.2f),
                     border = androidx.compose.foundation.BorderStroke(1.5.dp, BkashPink),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("account_banned_banner")
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -299,13 +355,57 @@ private fun LoggedInAccountView(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White
                             )
+                            if (remainingText != null) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = remainingText,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = FlameYellow
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (userProfile.warningsCount > 0) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = FlameOrange.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, FlameOrange),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("account_warnings_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = "Warnings",
+                            tint = FlameYellow,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "⚠️ অ্যাকাউন্ট সতর্কতা (ওয়ার্নিং): ${userProfile.warningsCount}/৩টি",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                                color = FlameYellow
+                            )
+                            Text(
+                                text = "৩টির বেশি ওয়ার্নিং পেলে ৭ দিনের জন্য অ্যাপ থেকে ব্যান করা হবে।",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Profile Hero Header Card
+        // Profile Hero Header Card (Esports Banner + Overlapping Circular PFP)
         item {
             Card(
                 modifier = Modifier
@@ -315,53 +415,120 @@ private fun LoggedInAccountView(
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Avatar with edit photo button and rank badge
-                    Box(contentAlignment = Alignment.BottomEnd) {
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp)
-                                .clip(CircleShape)
-                                .border(
-                                    width = 3.dp,
-                                    brush = Brush.linearGradient(
-                                        listOf(FlameYellow, FlameOrange, BkashPink)
-                                    ),
-                                    shape = CircleShape
-                                )
-                                .clickable { onEditProfileClick() }
-                        ) {
-                            Image(
-                                painter = painterResource(id = getAvatarDrawableRes(userProfile.avatarId)),
-                                contentDescription = "Profile Photo",
-                                modifier = Modifier.size(96.dp),
-                                contentScale = ContentScale.Crop
-                            )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    // Top Profile Banner (Animated GIF for Owner/Admin, Picture/Color for Prime 8, Locked App Color for normal players)
+                    com.example.ui.components.ProfileBannerBackground(
+                        role = userProfile.role,
+                        badges = userProfile.earnedBadges,
+                        customBannerUri = userProfile.customBannerUri,
+                        bannerColorId = userProfile.bannerColorId,
+                        isBanned = userProfile.isBanned,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(106.dp)
+                            .testTag("account_profile_banner")
+                    ) {
+                        val canUseGif = userProfile.role.canUseAnimatedGifProfileMedia()
+                        val canCustomBanner = com.example.model.canCustomizeProfileBanner(userProfile.role, userProfile.earnedBadges)
+                        val bannerLabel = when {
+                            userProfile.customBannerUri != null && canUseGif && com.example.model.isAnimatedGifPathOrUri(userProfile.customBannerUri) -> "✨ GIF BANNER"
+                            userProfile.customBannerUri != null && canCustomBanner -> "🖼️ PRIME BANNER"
+                            canCustomBanner -> "🎨 CUSTOM BANNER"
+                            else -> "🎨 APP COLOUR"
                         }
-
-                        // Camera / Edit badge
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                                .border(1.5.dp, Color.White, CircleShape)
-                                .clickable { onEditProfileClick() },
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.CameraAlt,
-                                contentDescription = "Change Photo",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                            ) {
+                                Text(
+                                    text = bannerLabel,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (canCustomBanner) FlameYellow else Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Black.copy(alpha = 0.55f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onEditProfileClick() }
+                                    .testTag("account_banner_edit_pill")
+                            ) {
+                                Text(
+                                    text = if (canUseGif) "GIF / PFP এডিট ✎" else "PFP এডিট ✎",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FlameYellow,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 58.dp, start = 20.dp, end = 20.dp, bottom = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Avatar with edit photo button and rank badge
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            Box(
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .clip(CircleShape)
+                                    .background(DarkSurface)
+                                    .padding(4.dp)
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = 3.dp,
+                                        brush = Brush.linearGradient(
+                                            listOf(FlameYellow, FlameOrange, BkashPink)
+                                        ),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { onEditProfileClick() }
+                            ) {
+                                com.example.ui.components.ProfileAvatarImage(
+                                    avatarId = userProfile.avatarId,
+                                    customPfpUri = userProfile.customPfpUri,
+                                    role = userProfile.role,
+                                    contentDescription = "Profile Photo",
+                                    showGifBadge = true,
+                                    modifier = Modifier
+                                        .size(96.dp)
+                                        .clip(CircleShape)
+                                )
+                            }
+
+                            // Camera / Edit badge
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .border(1.5.dp, Color.White, CircleShape)
+                                    .clickable { onEditProfileClick() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CameraAlt,
+                                    contentDescription = "Change Photo",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -386,61 +553,231 @@ private fun LoggedInAccountView(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Rank & Level Badge
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = FlameOrange.copy(alpha = 0.2f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.5f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "লেভেল ${userProfile.level}",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = FlameYellow
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "•",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = userProfile.rankBadge,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                    // Role / Rank Pill (clean official identity for Owner/Admin; level+rank for Players)
+                    when (userProfile.role) {
+                        UserRole.OWNER -> {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = VictoryGreen.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.7f)),
+                                modifier = Modifier.testTag("owner_clean_rank_pill")
+                            ) {
+                                Text(
+                                    text = "👑 অফিসিয়াল অ্যাপ ওনার • ভেরিফাইড",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                    color = FlameYellow,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                        UserRole.ADMIN -> {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = FlameCyan.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.55f))
+                            ) {
+                                Text(
+                                    text = "🛡️ অফিসিয়াল অ্যাডমিন • ভেরিফাইড",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                    color = FlameCyan,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                        UserRole.PLAYER -> {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = FlameOrange.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, FlameOrange.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "লেভেল ${userProfile.level}",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = FlameYellow
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "•",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = userProfile.rankBadge,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Active Player Badges Showcase Row
+                    // Active Player Badges Showcase Row with Subtle Scale-Up Animations
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { showBadgeDialog = true }
+                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        userProfile.earnedBadges.take(3).forEach { badge ->
-                            BadgePill(badge = badge, compact = true)
+                        userProfile.earnedBadges.forEachIndexed { idx, badge ->
+                            BadgePill(
+                                badge = badge,
+                                compact = true,
+                                animateEntrance = true,
+                                staggerIndex = idx,
+                                onClick = {
+                                    highlightedProfileBadge = if (highlightedProfileBadge == badge) null else badge
+                                }
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
                         }
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = FlameYellow.copy(alpha = 0.15f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f))
+                            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { showBadgeDialog = true }
+                                .testTag("account_view_all_badges_chip")
                         ) {
                             Text(
-                                text = "🏆 ব্যাজ",
+                                text = "🏆 সব ব্যাজ",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
                                 color = FlameYellow,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
+                        }
+                    }
+
+                    // Interactive Animated Badge Emblems Strip in User Profile Area
+                    if (userProfile.earnedBadges.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = DarkCard,
+                            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_animated_badges_strip")
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "✨ অর্জিত ব্যাজ (ট্যাপে প্রিভিউ)",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = FlameYellow
+                                    )
+                                    Text(
+                                        text = "${userProfile.earnedBadges.size}টি সক্রিয়",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = VictoryGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    userProfile.earnedBadges.forEachIndexed { idx, badge ->
+                                        InteractiveProfileBadgeTile(
+                                            badge = badge,
+                                            staggerIndex = idx,
+                                            isHighlighted = highlightedProfileBadge == badge,
+                                            onClick = {
+                                                highlightedProfileBadge =
+                                                    if (highlightedProfileBadge == badge) null else badge
+                                            }
+                                        )
+                                    }
+                                }
+                                highlightedProfileBadge?.let { selected ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(selected.hexColor).copy(alpha = 0.14f),
+                                        border = BorderStroke(1.dp, Color(selected.hexColor).copy(alpha = 0.45f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showBadgeDialog = true }
+                                    ) {
+                                        Text(
+                                            text = "🏅 ${selected.title} — ${selected.description}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Bio, Join Date & Quick Player Profile Card Trigger
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DarkCard,
+                        border = BorderStroke(1.dp, DarkBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                val ownKudos = registeredUsers.firstOrNull {
+                                    it.phone == userProfile.phone || it.uid == userProfile.uid
+                                }?.kudosCount ?: 0
+                                openPlayerProfileCard(userProfile.toPlayerProfileCard(ownKudos))
+                            }
+                            .testTag("open_own_player_profile_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "📝 বায়ো: ${userProfile.battleTagline}",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "📅 জয়েন: ${userProfile.joinedDate} • 💸 মোট খরচ: ৳${userProfile.totalSpent}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = FlameCyan
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = FlameCyan.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "প্রোফাইল কার্ড",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = FlameCyan,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -619,11 +956,13 @@ private fun LoggedInAccountView(
                         )
                     }
                 }
+                }
             }
         }
 
-        // Free Fire Pro Esports ID Battle Card
+        // Free Fire Pro Esports ID / Clean Official Owner Card
         item {
+            val isOwnerAccount = userProfile.role == UserRole.OWNER
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -632,7 +971,10 @@ private fun LoggedInAccountView(
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
                 border = androidx.compose.foundation.BorderStroke(
                     1.5.dp,
-                    Brush.linearGradient(listOf(FlameYellow, FlameCyan, FlameOrange))
+                    Brush.linearGradient(
+                        if (isOwnerAccount) listOf(FlameYellow, VictoryGreen, FlameYellow)
+                        else listOf(FlameYellow, FlameCyan, FlameOrange)
+                    )
                 )
             ) {
                 Column(
@@ -640,7 +982,7 @@ private fun LoggedInAccountView(
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
-                    // Header with Esports Tag & Guild
+                    // Header with Esports/Owner Tag & Guild
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -649,20 +991,20 @@ private fun LoggedInAccountView(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = FlameYellow.copy(alpha = 0.2f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow)
+                                color = if (isOwnerAccount) VictoryGreen.copy(alpha = 0.2f) else FlameYellow.copy(alpha = 0.2f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isOwnerAccount) VictoryGreen else FlameYellow)
                             ) {
                                 Text(
-                                    text = "⚡ FF ESPORTS ID",
+                                    text = if (isOwnerAccount) "👑 OFFICIAL OWNER ID" else "⚡ FF ESPORTS ID",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = FlameYellow,
+                                    color = if (isOwnerAccount) VictoryGreen else FlameYellow,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = userProfile.guildName,
+                                text = userProfile.guildName.ifBlank { "TRUSTED TH" },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = FlameCyan
@@ -671,13 +1013,13 @@ private fun LoggedInAccountView(
 
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            color = if (isOwnerAccount) FlameYellow.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = userProfile.playerRole,
+                                text = if (isOwnerAccount) "অফিসিয়াল ওনার" else userProfile.playerRole,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = if (isOwnerAccount) FlameYellow else Color.White,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -685,129 +1027,167 @@ private fun LoggedInAccountView(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Player IGN & Character/Weapon Row
+                    // Player IGN & Active Primary Badge Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = userProfile.ign,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Black,
                                 color = Color.White
+                            ),
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        val primaryEarnedBadge = userProfile.earnedBadges.firstOrNull()
+                        if (primaryEarnedBadge != null) {
+                            BadgePill(
+                                badge = primaryEarnedBadge,
+                                compact = true,
+                                animateEntrance = true,
+                                onClick = { showBadgeDialog = true }
                             )
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Ⓥ",
-                            fontSize = 18.sp,
-                            color = FlameYellow,
-                            fontWeight = FontWeight.Bold
-                        )
+                        }
                     }
 
                     Text(
-                        text = "UID: ${userProfile.uid} • ${userProfile.rankBadge}",
+                        text = if (isOwnerAccount) {
+                            "UID: ${userProfile.uid} • অফিসিয়াল ওনার 👑"
+                        } else {
+                            "UID: ${userProfile.uid} • ${userProfile.rankBadge}"
+                        },
                         fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.75f)
+                        color = Color.White.copy(alpha = 0.78f)
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Weapon & Character chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = DarkSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text("ফেভারিট গান / স্কিন", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(userProfile.favoriteWeapon, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = DarkSurface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text("অ্যাক্টিভ ক্যারেক্টার", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(userProfile.activeCharacter, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameCyan)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Pro Stats: Headshot Rate & KD Ratio
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = VictoryGreen.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.4f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("হেডশট রেট:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
-                                Text("${userProfile.headshotRate}% 🎯", fontSize = 12.sp, fontWeight = FontWeight.Black, color = VictoryGreen)
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = FlameOrange.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.4f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("K/D রেশিও:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
-                                Text("${userProfile.kdRatio} ⚔️", fontSize = 12.sp, fontWeight = FontWeight.Black, color = FlameOrange)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF240B1B),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    if (isOwnerAccount) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🎡", fontSize = 12.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("লাকি স্পিন পরিসংখ্যান:", fontSize = 10.sp, color = FlameYellow, fontWeight = FontWeight.Bold)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = DarkSurface,
+                                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text("প্ল্যাটফর্ম", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("TRUSTED TOURNAMENT", fontSize = 11.sp, fontWeight = FontWeight.Black, color = FlameYellow)
+                                }
                             }
-                            Text(
-                                text = "মোট ${userProfile.totalSpinsDone} টি • জয় ৳${userProfile.totalSpinEarnings}",
-                                fontSize = 10.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = VictoryGreen.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.45f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text("অ্যাকাউন্ট স্ট্যাটাস", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("ভেরিফাইড ওনার 🟢", fontSize = 11.sp, fontWeight = FontWeight.Black, color = VictoryGreen)
+                                }
+                            }
+                        }
+                    } else {
+                        // Weapon & Character chips
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = DarkSurface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text("ফেভারিট গান / স্কিন", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(userProfile.favoriteWeapon, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = DarkSurface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text("অ্যাক্টিভ ক্যারেক্টার", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(userProfile.activeCharacter, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameCyan)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Pro Stats: Headshot Rate & KD Ratio
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = VictoryGreen.copy(alpha = 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("হেডশট রেট:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                    Text("${userProfile.headshotRate}% 🎯", fontSize = 12.sp, fontWeight = FontWeight.Black, color = VictoryGreen)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = FlameOrange.copy(alpha = 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("K/D রেশিও:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                    Text("${userProfile.kdRatio} ⚔️", fontSize = 12.sp, fontWeight = FontWeight.Black, color = FlameOrange)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF240B1B),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🎡", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("লাকি স্পিন পরিসংখ্যান:", fontSize = 10.sp, color = FlameYellow, fontWeight = FontWeight.Bold)
+                                }
+                                Text(
+                                    text = "মোট ${userProfile.totalSpinsDone} টি • জয় ৳${userProfile.totalSpinEarnings}",
+                                    fontSize = 10.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
@@ -825,23 +1205,35 @@ private fun LoggedInAccountView(
                     // Copy & Share Card Button
                     Button(
                         onClick = {
-                            val cardText = """
-                                🎮 TRUSTED TOURNAMENT - FREE FIRE ESPORTS CARD
-                                ━━━━━━━━━━━━━━━━━━━━
-                                👤 IGN: ${userProfile.ign}
-                                🆔 UID: ${userProfile.uid}
-                                🔰 গিল্ড: ${userProfile.guildName}
-                                🎖️ রোল: ${userProfile.playerRole}
-                                🔫 ফেভারিট গান: ${userProfile.favoriteWeapon}
-                                ⚡ ক্যারেক্টার: ${userProfile.activeCharacter}
-                                🎯 হেডশট রেট: ${userProfile.headshotRate}%
-                                ⚔️ K/D রেশিও: ${userProfile.kdRatio}
-                                🏆 বুইয়া: ${userProfile.totalWins} | কিল: ${userProfile.totalKills}
-                                ━━━━━━━━━━━━━━━━━━━━
-                                📱 TRUSTED TOURNAMENT BY TH তে খেলুন ও নগদ টাকা জিতুন!
-                            """.trimIndent()
+                            val cardText = if (isOwnerAccount) {
+                                """
+                                    👑 TRUSTED TOURNAMENT BY TH - OFFICIAL OWNER
+                                    ━━━━━━━━━━━━━━━━━━━━
+                                    👤 IGN: ${userProfile.ign}
+                                    🆔 UID: ${userProfile.uid}
+                                    🔰 প্ল্যাটফর্ম: ${userProfile.guildName}
+                                    🛡️ স্ট্যাটাস: অফিসিয়াল ওনার (ভেরিফাইড)
+                                    ━━━━━━━━━━━━━━━━━━━━
+                                """.trimIndent()
+                            } else {
+                                """
+                                    🎮 TRUSTED TOURNAMENT - FREE FIRE ESPORTS CARD
+                                    ━━━━━━━━━━━━━━━━━━━━
+                                    👤 IGN: ${userProfile.ign}
+                                    🆔 UID: ${userProfile.uid}
+                                    🔰 গিল্ড: ${userProfile.guildName}
+                                    🎖️ রোল: ${userProfile.playerRole}
+                                    🔫 ফেভারিট গান: ${userProfile.favoriteWeapon}
+                                    ⚡ ক্যারেক্টার: ${userProfile.activeCharacter}
+                                    🎯 হেডশট রেট: ${userProfile.headshotRate}%
+                                    ⚔️ K/D রেশিও: ${userProfile.kdRatio}
+                                    🏆 বুইয়া: ${userProfile.totalWins} | কিল: ${userProfile.totalKills}
+                                    ━━━━━━━━━━━━━━━━━━━━
+                                    📱 TRUSTED TOURNAMENT BY TH তে খেলুন ও নগদ টাকা জিতুন!
+                                """.trimIndent()
+                            }
                             clipboardManager.setText(AnnotatedString(cardText))
-                            Toast.makeText(context, "ফ্রি ফায়ার প্লেয়ার কার্ড ক্লিপবোর্ডে কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "আইডি কার্ড ক্লিপবোর্ডে কপি হয়েছে!", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -854,7 +1246,7 @@ private fun LoggedInAccountView(
                         Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, tint = FlameYellow, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "প্লেয়ার আইডি কার্ড কপি ও শেয়ার করুন",
+                            text = if (isOwnerAccount) "অফিসিয়াল ওনার কার্ড কপি করুন" else "প্লেয়ার আইডি কার্ড কপি ও শেয়ার করুন",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = FlameYellow
@@ -864,75 +1256,200 @@ private fun LoggedInAccountView(
             }
         }
 
-        // Tournament Performance Stats Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MilitaryTech,
-                            contentDescription = null,
-                            tint = FlameYellow,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "টুর্নামেন্ট ক্যারিয়ার পরিসংখ্যান",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
+        // Tournament Performance Stats Card (Shown for Players/Admins; kept clean for Owner)
+        if (userProfile.role != UserRole.OWNER) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MilitaryTech,
+                                contentDescription = null,
+                                tint = FlameYellow,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "টুর্নামেন্ট ক্যারিয়ার পরিসংখ্যান",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            StatBox(
+                                title = "মোট ম্যাচ",
+                                value = "${userProfile.matchesPlayed}",
+                                subtitle = "খেলা হয়েছে",
+                                color = FlameOrange,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatBox(
+                                title = "মোট বুইয়া",
+                                value = "${userProfile.totalWins}",
+                                subtitle = "চ্যাম্পিয়ন",
+                                color = VictoryGreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            StatBox(
+                                title = "মোট কিল",
+                                value = "${userProfile.totalKills}",
+                                subtitle = "শত্রু খতম",
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatBox(
+                                title = "মোট প্রাইজ আর্ন",
+                                value = "৳${userProfile.totalEarnings}",
+                                subtitle = "ক্যাশ প্রাইজ",
+                                color = BkashPink,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+        // Community Players Clickable Profiles Strip
+        if (registeredUsers.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("account_community_players_card"),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                    border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.45f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "👥 কমিউনিটি প্লেয়ার প্রোফাইল (গেমার কার্ড)",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                                    color = FlameCyan
+                                )
+                                Text(
+                                    text = "যেকোনো প্লেয়ারে ট্যাপ করে ম্যাচ, খরচ, জয়েন ও বায়ো দেখুন",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = FlameCyan.copy(alpha = 0.14f)
+                            ) {
+                                Text(
+                                    text = "${registeredUsers.size} জন",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FlameCyan,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatBox(
-                            title = "মোট ম্যাচ",
-                            value = "${userProfile.matchesPlayed}",
-                            subtitle = "খেলা হয়েছে",
-                            color = FlameOrange,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatBox(
-                            title = "মোট বুইয়া",
-                            value = "${userProfile.totalWins}",
-                            subtitle = "চ্যাম্পিয়ন",
-                            color = VictoryGreen,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatBox(
-                            title = "মোট কিল",
-                            value = "${userProfile.totalKills}",
-                            subtitle = "শত্রু খতম",
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatBox(
-                            title = "মোট প্রাইজ আর্ন",
-                            value = "৳${userProfile.totalEarnings}",
-                            subtitle = "ক্যাশ প্রাইজ",
-                            color = BkashPink,
-                            modifier = Modifier.weight(1f)
-                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(registeredUsers, key = { it.id }) { member ->
+                                val isSelf = (userProfile.phone.isNotBlank() && member.phone == userProfile.phone) ||
+                                    (userProfile.uid.isNotBlank() && member.uid == userProfile.uid)
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = DarkCard,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (member.role == com.example.model.UserRole.OWNER) FlameYellow.copy(alpha = 0.7f) else DarkBorder
+                                    ),
+                                    modifier = Modifier
+                                        .width(136.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable {
+                                            openPlayerProfileCard(member.toPlayerProfileCard(isSelf = isSelf))
+                                        }
+                                        .testTag("community_player_chip_${member.uid}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Box(modifier = Modifier.size(46.dp)) {
+                                            com.example.ui.components.ProfileAvatarImage(
+                                                avatarId = member.avatarId,
+                                                customPfpUri = member.customPfpUri,
+                                                role = member.role,
+                                                contentDescription = member.ign,
+                                                showGifBadge = true,
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        1.5.dp,
+                                                        if (member.role == com.example.model.UserRole.OWNER) FlameYellow else FlameCyan,
+                                                        CircleShape
+                                                    )
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(DarkCard)
+                                                    .padding(2.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (member.isBanned) Color(0xFFEF4444) else Color(0xFF23A55A))
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = member.ign,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${member.role.badge} ${member.matchesPlayed} ম্যাচ • ৳${member.totalSpent}",
+                                            fontSize = 9.sp,
+                                            color = FlameYellow,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -953,6 +1470,17 @@ private fun LoggedInAccountView(
                         title = "বিকাশ ওয়ালেট ও লেনদেন হিস্ট্রি",
                         subtitle = "বর্তমান ব্যালেন্স: ৳$walletBalance",
                         onClick = onNavigateToWallet
+                    )
+
+                    HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(horizontal = 16.dp))
+
+                    AccountMenuRow(
+                        icon = Icons.Filled.Verified,
+                        iconTint = FlameYellow,
+                        title = "💳 ডিপোজিট ও উইথড্র রিকোয়েস্ট (সেটিংস)",
+                        subtitle = if (pendingRequestsCount > 0) "অপেক্ষমাণ রিকোয়েস্ট: $pendingRequestsCount টি • ম্যানেজ ও ট্র্যাক করুন" else "রিকোয়েস্ট পাঠান, স্ট্যাটাস দেখুন ও সেটিংস",
+                        onClick = onOpenSettings,
+                        rowTag = "account_deposit_withdraw_row"
                     )
 
                     HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(horizontal = 16.dp))
@@ -995,15 +1523,17 @@ private fun LoggedInAccountView(
                         onClick = onOpenSupportChat
                     )
 
-                    HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(horizontal = 16.dp))
+                    if (userProfile.role == com.example.model.UserRole.OWNER) {
+                        HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(horizontal = 16.dp))
 
-                    AccountMenuRow(
-                        icon = Icons.Filled.Shield,
-                        iconTint = FlameYellow,
-                        title = if (userProfile.role == com.example.model.UserRole.OWNER) "👑 ওনার কন্ট্রোল প্যানেল (Owner Only)" else "🔑 ওনার ভেরিফিকেশন (Claim Owner)",
-                        subtitle = if (userProfile.role == com.example.model.UserRole.OWNER) "প্রতারক ইউজার ব্যান ও নতুন অ্যাডমিন নিয়োগ" else "মাস্টার পাসকি দিয়ে ওনার মোড চালু করুন",
-                        onClick = onOpenOwnerPanel
-                    )
+                        AccountMenuRow(
+                            icon = Icons.Filled.Shield,
+                            iconTint = FlameYellow,
+                            title = "👑 ওনার কন্ট্রোল প্যানেল (Owner Only)",
+                            subtitle = "ব্যালেন্স, ডিপোজিট/উইথড্র, ফ্রড ব্যান ও অ্যাডমিন নিয়োগ",
+                            onClick = onOpenOwnerPanel
+                        )
+                    }
 
                     HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(horizontal = 16.dp))
 
@@ -1099,7 +1629,29 @@ private fun LoggedInAccountView(
     if (showBadgeDialog) {
         BadgeShowcaseDialog(
             currentBadges = userProfile.earnedBadges,
-            onDismiss = { showBadgeDialog = false }
+            onDismiss = { showBadgeDialog = false },
+            userProfile = userProfile,
+            badgeAppeals = badgeAppeals,
+            onSubmitBadgeAppeal = onSubmitBadgeAppeal,
+            onSendAppealChat = onSendAppealChat
+        )
+    }
+
+    localPlayerProfileCard?.let { profileData ->
+        PlayerProfileCardDialog(
+            profile = profileData,
+            onDismiss = { localPlayerProfileCard = null },
+            onEditOwnProfile = if (profileData.isSelf) {
+                {
+                    localPlayerProfileCard = null
+                    onEditProfileClick()
+                }
+            } else null,
+            onGiveKudos = onGiveKudos,
+            onViewAllBadges = {
+                localPlayerProfileCard = null
+                showBadgeDialog = true
+            }
         )
     }
 }
@@ -1148,13 +1700,15 @@ private fun AccountMenuRow(
     iconTint: Color,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    rowTag: String? = null
 ) {
+    val baseModifier = Modifier
+        .fillMaxWidth()
+        .clickable { onClick() }
+        .padding(horizontal = 16.dp, vertical = 14.dp)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier = if (rowTag != null) baseModifier.testTag(rowTag) else baseModifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

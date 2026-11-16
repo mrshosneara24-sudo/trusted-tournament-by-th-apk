@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -74,16 +75,24 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.AppCustomization
 import com.example.ui.components.getLogoDrawable
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.draw.shadow
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
 import com.example.ui.theme.PinkBlackHeaderGradient
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
 
 data class CaptchaChallenge(
@@ -165,7 +174,9 @@ fun AuthOnboardingScreen(
         modifier = modifier
             .fillMaxSize()
             .background(PinkBlackHeaderGradient)
-            .padding(16.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
@@ -174,194 +185,223 @@ fun AuthOnboardingScreen(
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // App Logo with glowing Yellow-White-Pink border
+            // App Logo with serene layered aura ring
             Box(
                 modifier = Modifier
-                    .size(88.dp)
+                    .size(96.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            listOf(FlameYellow.copy(alpha = 0.30f), NeonPink.copy(alpha = 0.22f), Color.Transparent)
+                            listOf(
+                                FlameYellow.copy(alpha = 0.28f),
+                                NeonPink.copy(alpha = 0.18f),
+                                Color.Transparent
+                            )
                         )
                     )
                     .border(
-                        2.5.dp,
-                        Brush.linearGradient(listOf(FlameYellow, Color.White, NeonPink)),
+                        2.dp,
+                        Brush.linearGradient(listOf(FlameYellow, Color.White.copy(alpha = 0.9f), NeonPink)),
                         CircleShape
                     )
-                    .padding(4.dp),
+                    .padding(6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(id = getLogoDrawable(appCustomization.selectedLogo)),
                     contentDescription = "TH Logo",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(76.dp)
+                        .size(82.dp)
                         .clip(CircleShape)
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // App Brand Name & Slogan
+            // App Brand Name & Arena Tag
             Text(
                 text = appCustomization.appName,
                 style = MaterialTheme.typography.headlineSmall.copy(
+                    fontFamily = DisplayFontFamily,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
+                    letterSpacing = 0.8.sp
                 ),
-                color = Color.White,
+                color = TextPrimary,
                 textAlign = TextAlign.Center
             )
 
+            Spacer(modifier = Modifier.height(6.dp))
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = NeonPink.copy(alpha = 0.22f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink)
+                    shape = RoundedCornerShape(8.dp),
+                    color = NeonPink.copy(alpha = 0.18f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.7f))
                 ) {
                     Text(
-                        text = "BY TH",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black,
+                        text = "BY TH • ESPORTS",
+                        fontFamily = MonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
                         color = FlameYellow,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = appCustomization.appTagline,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f)
+                    color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Highlight feature pills row (Black, Yellow, Pink & Crisp White)
+            // Clean Trust Pillars Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF1A170D),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = DarkCard,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.35f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("⚡ অটো রিফান্ড", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
-                        Text("ওনার ক্যান্সেলে সাথে সাথে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text("⚡ অটো রিফান্ড", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("ম্যাচ ক্যান্সেলে দ্রুত", fontSize = 9.sp, color = TextSecondary, textAlign = TextAlign.Center)
                     }
                 }
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF1A1018),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.55f)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = DarkCard,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.4f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🎡 ফ্রি স্পিন", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
-                        Text("৩-৩০৳ ক্যাশ প্রাইজ", fontSize = 8.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text("🎡 ফ্রি স্পিন", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FlameYellow)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("৩-৩০৳ ক্যাশ প্রাইজ", fontSize = 9.sp, color = TextSecondary, textAlign = TextAlign.Center)
                     }
                 }
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF12151C),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = DarkCard,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.4f)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🛡️ ১০০% সেফ", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("বিকাশ সুরক্ষিত গেটওয়ে", fontSize = 8.sp, color = Color.White.copy(alpha = 0.8f))
+                        Text("🛡️ ১০০% সেফ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = VictoryGreen)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("বিকাশ-নগদ ভেরিফাইড", fontSize = 9.sp, color = TextSecondary, textAlign = TextAlign.Center)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Main Auth Card (Black + Yellow + White + Pink Gaming Card)
+            // Main Auth Card (Calm Luxury Dark Surface)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("auth_onboarding_card"),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(26.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
                 border = androidx.compose.foundation.BorderStroke(
-                    1.5.dp,
+                    1.dp,
                     Brush.horizontalGradient(
                         listOf(
-                            FlameYellow.copy(alpha = 0.65f),
-                            Color.White.copy(alpha = 0.5f),
-                            NeonPink.copy(alpha = 0.65f)
+                            FlameYellow.copy(alpha = 0.45f),
+                            DarkBorder,
+                            NeonPink.copy(alpha = 0.45f)
                         )
                     )
-                )
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    // Discord-inspired Tabs
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = DarkCard,
-                        contentColor = FlameYellow,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                                color = FlameYellow,
-                                height = 3.dp
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                Column(modifier = Modifier.padding(20.dp)) {
+                    // Sleek Pill Switcher Tabs
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = DarkCard,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = {
-                                selectedTab = 0
-                                captchaInput = ""
-                                captchaError = null
-                                isCaptchaSolved = false
-                                currentCaptcha = generateNewCaptcha()
-                            },
-                            text = {
-                                Text(
-                                    text = "নতুন অ্যাকাউন্ট",
-                                    fontWeight = if (selectedTab == 0) FontWeight.Black else FontWeight.Normal,
-                                    fontSize = 13.sp,
-                                    color = if (selectedTab == 0) FlameYellow else Color.White.copy(alpha = 0.7f)
-                                )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selectedTab == 0) DarkElevated else Color.Transparent,
+                                border = if (selectedTab == 0) androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.65f)) else null,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        selectedTab = 0
+                                        captchaInput = ""
+                                        captchaError = null
+                                        isCaptchaSolved = false
+                                        currentCaptcha = generateNewCaptcha()
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 11.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "নতুন অ্যাকাউন্ট",
+                                        fontWeight = if (selectedTab == 0) FontWeight.Black else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = if (selectedTab == 0) FlameYellow else TextSecondary
+                                    )
+                                }
                             }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = {
-                                selectedTab = 1
-                                captchaInput = ""
-                                captchaError = null
-                                isCaptchaSolved = false
-                                currentCaptcha = generateNewCaptcha()
-                            },
-                            text = {
-                                Text(
-                                    text = "সাইন ইন",
-                                    fontWeight = if (selectedTab == 1) FontWeight.Black else FontWeight.Normal,
-                                    fontSize = 13.sp,
-                                    color = if (selectedTab == 1) FlameYellow else Color.White.copy(alpha = 0.7f)
-                                )
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (selectedTab == 1) DarkElevated else Color.Transparent,
+                                border = if (selectedTab == 1) androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.65f)) else null,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        selectedTab = 1
+                                        captchaInput = ""
+                                        captchaError = null
+                                        isCaptchaSolved = false
+                                        currentCaptcha = generateNewCaptcha()
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 11.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "সাইন ইন",
+                                        fontWeight = if (selectedTab == 1) FontWeight.Black else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = if (selectedTab == 1) VictoryGreen else TextSecondary
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

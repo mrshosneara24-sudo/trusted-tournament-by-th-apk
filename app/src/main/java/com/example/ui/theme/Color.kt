@@ -3,10 +3,10 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-// Core Black, White, Yellow & Pink Balanced Palette
-val ObsidianBlack = Color(0xFF09090D)
-val VelvetBlack = Color(0xFF121218)
-val SmokedPlum = Color(0xFF1C1A24)
+// Calm, High-Contrast Luxury Dark Esports Palette
+val ObsidianBlack = Color(0xFF07080D)
+val VelvetBlack = Color(0xFF10121B)
+val SmokedPlum = Color(0xFF1A1D2B)
 val NeonPink = Color(0xFFFF2E88)
 val BkashPink = Color(0xFFE2136E)
 val RosePink = Color(0xFFFF5CA4)
@@ -16,7 +16,7 @@ val GoldChampagne = Color(0xFFFFD60A)
 val WarmYellow = Color(0xFFFFE57F)
 val ErrorRed = Color(0xFFEF4444)
 
-// Mapped Semantic Tokens (Balanced Black + Crisp White + Esports Yellow + Pink Accent)
+// Mapped Semantic Tokens
 val FieryOrange = NeonPink
 val FlameOrange = Color(0xFFFFB703)
 val FlameYellow = GoldChampagne
@@ -26,19 +26,21 @@ val VictoryGreen = Color(0xFF10B981)
 
 val DarkBackground = ObsidianBlack
 val DarkSurface = VelvetBlack
-val DarkCard = Color(0xFF16151E)
+val DarkCard = Color(0xFF151824)
+val DarkElevated = Color(0xFF1D2132)
 val DarkSurfaceVariant = SmokedPlum
-val DarkBorder = Color(0xFF322E40)
+val DarkBorder = Color(0xFF282D42)
 
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFE8EAF0)
-val TextMuted = Color(0xFFB4B8C4)
+// Calm Visual Hierarchy for Text
+val TextPrimary = Color(0xFFF8FAFC)
+val TextSecondary = Color(0xFF9EA8BF)
+val TextMuted = Color(0xFF6B738C)
 
-val PinkBlackHeaderGradient = Brush.linearGradient(
+val PinkBlackHeaderGradient = Brush.verticalGradient(
     colors = listOf(
-        Color(0xFF1E0B18),
-        Color(0xFF111118),
-        Color(0xFF09090D)
+        Color(0xFF1A0D1C),
+        Color(0xFF0C0D15),
+        Color(0xFF07080D)
     )
 )
 
@@ -49,4 +51,17 @@ val PinkBlackButtonGradient = Brush.horizontalGradient(
     )
 )
 
+val GoldAccentGradient = Brush.horizontalGradient(
+    colors = listOf(
+        GoldChampagne,
+        FlameOrange
+    )
+)
 
+val WalletHeroBrush = Brush.linearGradient(
+    colors = listOf(
+        Color(0xFF231022),
+        Color(0xFF141724),
+        Color(0xFF0B0D14)
+    )
+)

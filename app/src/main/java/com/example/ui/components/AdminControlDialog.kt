@@ -41,9 +41,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
@@ -67,12 +67,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.model.AppUser
+import com.example.model.DepositRequest
 import com.example.model.GameCategory
 import com.example.model.MatchType
 import com.example.model.TournamentMatch
+import com.example.model.AppealStatus
+import com.example.model.BadgeAppeal
+import com.example.model.BadgeType
+import com.example.model.WithdrawRequest
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.VictoryGreen
@@ -81,6 +88,9 @@ import com.example.ui.theme.VictoryGreen
 fun AdminControlDialog(
     matches: List<TournamentMatch>,
     currentWhatsAppUrl: String,
+    allUsers: List<AppUser> = emptyList(),
+    depositRequests: List<DepositRequest> = emptyList(),
+    withdrawRequests: List<WithdrawRequest> = emptyList(),
     onDismiss: () -> Unit,
     onPublishRoom: (matchId: String, roomId: String, password: String) -> Unit,
     onUpdateWhatsAppUrl: (url: String) -> Unit,
@@ -95,11 +105,22 @@ fun AdminControlDialog(
         perKill: Int,
         booyahPrize: Int,
         totalSlots: Int
-    ) -> Unit
+    ) -> Unit,
+    onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean = { _, _, _, _ -> false },
+    onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean = { _, _ -> false },
+    onApproveDeposit: (requestId: String) -> Boolean = { false },
+    onRejectDeposit: (requestId: String) -> Boolean = { false },
+    onApproveWithdraw: (requestId: String) -> Boolean = { false },
+    onRejectWithdraw: (requestId: String) -> Boolean = { false },
+    badgeAppeals: List<BadgeAppeal> = emptyList(),
+    onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Room Publish, 1: WhatsApp Group, 2: Create Match
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Room Publish, 1: WhatsApp, 2: Create Match, 3: Balance, 4: Requests, 5: Badge Appeals
+    val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -164,8 +185,9 @@ fun AdminControlDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Tab Selector
-                TabRow(
+                ScrollableTabRow(
                     selectedTabIndex = selectedTab,
+                    edgePadding = 6.dp,
                     containerColor = DarkCard,
                     contentColor = FlameYellow,
                     indicator = { tabPositions ->
@@ -212,13 +234,54 @@ fun AdminControlDialog(
                             )
                         }
                     )
+                    Tab(
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        text = {
+                            Text(
+                                text = "💰 ব্যালেন্স",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 3) FlameYellow else Color.White
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
+                        text = {
+                            Text(
+                                text = "💳 রিকোয়েস্ট",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 4) FlameYellow else Color.White
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
+                        modifier = Modifier.testTag("admin_tab_badge_appeals"),
+                        text = {
+                            val tabTitle = if (pendingBadgeAppealsCount > 0) {
+                                "🏅 ব্যাজ আবেদন ($pendingBadgeAppealsCount)"
+                            } else {
+                                "🏅 ব্যাজ আবেদন"
+                            }
+                            Text(
+                                text = tabTitle,
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 5) FlameCyan else Color.White
+                            )
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 when (selectedTab) {
                     0 -> {
-                        // Section 1: 1-Tap Room Publish
                         PublishRoomSection(
                             matches = matches,
                             onPublish = { matchId, roomId, pass ->
@@ -227,16 +290,40 @@ fun AdminControlDialog(
                         )
                     }
                     1 -> {
-                        // Section 2: 1-Tap WhatsApp Group Link
                         WhatsAppGroupSection(
                             currentUrl = currentWhatsAppUrl,
                             onUpdateUrl = onUpdateWhatsAppUrl
                         )
                     }
                     2 -> {
-                        // Section 3: Create New Match
                         CreateMatchSection(
                             onCreateMatch = onCreateNewMatch
+                        )
+                    }
+                    3 -> {
+                        UserBalanceControlContent(
+                            allUsers = allUsers,
+                            onAdjustUserBalance = onAdjustUserBalance,
+                            onIncrementUserMatchesPlayed = onIncrementUserMatchesPlayed
+                        )
+                    }
+                    4 -> {
+                        DepositWithdrawQueueContent(
+                            depositRequests = depositRequests,
+                            withdrawRequests = withdrawRequests,
+                            onApproveDeposit = onApproveDeposit,
+                            onRejectDeposit = onRejectDeposit,
+                            onApproveWithdraw = onApproveWithdraw,
+                            onRejectWithdraw = onRejectWithdraw
+                        )
+                    }
+                    5 -> {
+                        BadgeAppealsReviewSection(
+                            appeals = badgeAppeals,
+                            allUsers = allUsers,
+                            onApproveAppeal = onApproveBadgeAppeal,
+                            onDenyAppeal = onDenyBadgeAppeal,
+                            onSendAppealChat = onSendAppealChat
                         )
                     }
                 }

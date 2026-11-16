@@ -49,11 +49,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.example.model.AppUser
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
+import com.example.model.UserProfile
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
+import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.VictoryGreen
@@ -66,10 +73,24 @@ fun RoomSlotGridDialog(
     onDismiss: () -> Unit,
     onSelectSlotToBook: (Int) -> Unit,
     onCancelSlotBookingAndRefund: ((bookingId: String) -> Unit)? = null,
-    onCancelLegacySlot: ((slotNumber: Int) -> Unit)? = null
+    onCancelLegacySlot: ((slotNumber: Int) -> Unit)? = null,
+    registeredUsers: List<AppUser> = emptyList(),
+    currentUser: UserProfile = UserProfile(),
+    onPlayerProfileClick: ((PlayerProfileCardData) -> Unit)? = null,
+    onGiveKudos: ((String) -> Int)? = null
 ) {
     var slotToRefundBooking by remember { mutableStateOf<SlotBooking?>(null) }
     var slotToRefundNum by remember { mutableStateOf<Int?>(null) }
+    var localPlayerProfileCard by remember { mutableStateOf<PlayerProfileCardData?>(null) }
+
+    val openBookingProfile: (SlotBooking) -> Unit = { booking ->
+        val profileData = booking.toPlayerProfileCard(registeredUsers, currentUser)
+        if (onPlayerProfileClick != null) {
+            onPlayerProfileClick(profileData)
+        } else {
+            localPlayerProfileCard = profileData
+        }
+    }
 
     val explicitBookingsMap = remember(bookings, match.id) {
         bookings.filter { it.matchId == match.id }.associateBy { it.slotNumber }
@@ -251,7 +272,44 @@ fun RoomSlotGridDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                if (explicitBookingsMap.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "👥 বুকড প্লেয়ার (ট্যাপে প্লেয়ার প্রোফাইল):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FlameCyan
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        explicitBookingsMap.values.sortedBy { it.slotNumber }.forEach { booking ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = DarkCard,
+                                border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { openBookingProfile(booking) }
+                                    .testTag("slot_booked_player_chip_${booking.slotNumber}")
+                            ) {
+                                Text(
+                                    text = "#${booking.slotNumber} ${booking.playerIgn}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 val firstAvailable = (1..match.totalSlots).firstOrNull { it !in bookedSlotSet }
                 Button(
@@ -342,6 +400,14 @@ fun RoomSlotGridDialog(
             },
             containerColor = DarkSurface,
             shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    localPlayerProfileCard?.let { profileData ->
+        PlayerProfileCardDialog(
+            profile = profileData,
+            onDismiss = { localPlayerProfileCard = null },
+            onGiveKudos = onGiveKudos
         )
     }
 }

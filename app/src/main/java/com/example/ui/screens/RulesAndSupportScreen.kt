@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,14 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.HeadsetMic
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -47,8 +46,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.unit.sp
 import com.example.model.AppCustomization
 import com.example.model.TournamentRuleItem
@@ -166,10 +163,83 @@ fun RulesAndSupportScreen(
             }
         }
 
+        // Strict Enforcement Security Matrix
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("strict_enforcement_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF1F120A), DarkCard, Color(0xFF0A1C16))
+                            )
+                        )
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Security,
+                            contentDescription = "Strict Enforcement",
+                            tint = FlameYellow,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "🛡️ জিরো-টলারেন্স অটো অ্যাকশন সিস্টেম",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                            color = FlameYellow
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StrictStatusChip(
+                            title = "এমুলেটর/হ্যাক",
+                            value = "স্থায়ী ব্যান 🚫",
+                            accent = Color(0xFFEF4444),
+                            modifier = Modifier.weight(1f)
+                        )
+                        StrictStatusChip(
+                            title = "৩+ ওয়ার্নিং",
+                            value = "৭ দিন অটো-ব্যান",
+                            accent = FlameOrange,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StrictStatusChip(
+                            title = "ভুয়া TrxID",
+                            value = "অ্যাকাউন্ট ব্লক 🔒",
+                            accent = BkashPink,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StrictStatusChip(
+                            title = "প্রথম ক্যাশআউট",
+                            value = "১+ ম্যাচ আবশ্যক ✅",
+                            accent = VictoryGreen,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+
         // Dedicated Strict Rules Cards
         item {
             Text(
-                text = "📜 টুর্নামেন্ট খেলার ৮টি কঠোর শর্ত ও নিয়ম:",
+                text = "📜 টুর্নামেন্ট খেলার ${rulesToDisplayCount(strictRules)}টি কঠোর শর্ত ও জিরো-টলারেন্স নিয়ম:",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = FlameYellow
             )
@@ -177,14 +247,14 @@ fun RulesAndSupportScreen(
 
         val rulesToDisplay = strictRules.ifEmpty {
             listOf(
-                TournamentRuleItem("r1", "১০০% মোবাইল অনলি (No Emulator)", "পিসি, ব্লুস্ট্যাক্স, এলডিপ্লেয়ার বা যেকোনো এমুলেটর সম্পূর্ণ নিষিদ্ধ।", "ধরা পড়লে সাথে সাথে স্থায়ী ব্যান এবং এন্ট্রি ফি বাজেয়াপ্ত।", "🚫"),
-                TournamentRuleItem("r2", "হেডশট কনফিগ ও থার্ড-পার্টি ফাইল নিষিদ্ধ", "অটো-হেডশট, কনফিগ ফাইল, গ্লিচ প্যাক, GFX টুল ব্যবহার সম্পূর্ণ নিষিদ্ধ।", "UID ও ডিভাইস আইডি আজীবনের জন্য ব্ল্যাকলিস্ট হবে।", "🛡️"),
-                TournamentRuleItem("r3", "সঠিক স্লট শৃঙ্খলার নিয়ম (Slot Discipline)", "অ্যাপে বুকিং করা নির্দিষ্ট স্লট নম্বরেই রুমে বসতে হবে। অন্যের স্লটে বসা যাবে না।", "অন্যের স্লটে বসলে কোনো ওয়ার্নিং ছাড়া কিক ও রিফান্ড বাতিল।", "🎯"),
-                TournamentRuleItem("r4", "টিমিং (Teaming) কঠোরভাবে নিষিদ্ধ", "সোলো বা ডুও ম্যাচে প্রতিপক্ষের সাথে ফ্রেন্ডশিপ বা টিমিং করা যাবে না।", "উভয় প্লেয়ারকে সরাসরি ডিসকোয়ালিফাই করা হবে।", "⚖️"),
-                TournamentRuleItem("r5", "রুম আইডি ও পাসওয়ার্ডের গোপনীয়তা", "অ্যাপের রুম কোড কোনো বাইরের বন্ধু বা গ্রুপে শেয়ার করা সম্পূর্ণ নিষিদ্ধ।", "শেয়ারকারীর অ্যাকাউন্ট অবিলম্বে ব্যান করা হবে।", "🔐"),
-                TournamentRuleItem("r6", "বিকাশ ও লেনদেন সংক্রান্ত জালিয়াতি প্রতিরোধ", "ভুয়া TrxID দিয়ে স্লট নেওয়ার চেষ্টা করলে কঠোর আইনি ব্যবস্থা নেওয়া হবে।", "প্রতারকের নম্বর ও UID স্থায়ীভাবে ব্যান হবে।", "💳"),
-                TournamentRuleItem("r7", "যথাসময়ে কাস্টম রুমে উপস্থিতি", "ম্যাচ শুরুর নির্ধারিত সময়ের পর কোনো প্লেয়ারের জন্য অপেক্ষা করা হবে না।", "দেরিতে আসলে এন্ট্রি ফি রিফান্ড যোগ্য নয়।", "⏱️"),
-                TournamentRuleItem("r8", "বুইয়া ও প্রাইজ ক্লেইম ভেরিফিকেশন", "ম্যাচ জয়ের পর স্পষ্ট কিল ও বুইয়ার স্ক্রিনশট ১৫ মিনিটের মধ্যে দিতে হবে।", "মিথ্যা দাবিতে প্রাইজ মানি বাতিল করা হবে।", "🏆")
+                TournamentRuleItem("r1", "১০০% মোবাইল অনলি (No Emulator / iPad)", "পিসি, ব্লুস্ট্যাক্স, এলডিপ্লেয়ার বা কোনো এমুলেটর সম্পূর্ণ নিষিদ্ধ।", "জিরো-টলারেন্স: সাথে সাথে স্থায়ী ব্যান এবং এন্ট্রি ফি ১০০% বাজেয়াপ্ত।", "🚫"),
+                TournamentRuleItem("r2", "হ্যাক, কনফিগ, প্যানেল ও থার্ড-পার্টি ফাইল নিষিদ্ধ", "অটো-হেডশট, প্যানেল, কনফিগ ফাইল, GFX টুল ব্যবহার সম্পূর্ণ নিষিদ্ধ।", "UID, নম্বর ও ডিভাইস আজীবনের জন্য ব্ল্যাকলিস্ট হবে।", "🛡️"),
+                TournamentRuleItem("r3", "সঠিক স্লট শৃঙ্খলা (Strict Slot Discipline)", "অ্যাপে বুকিং করা নির্দিষ্ট স্লট নম্বরেই রুমে বসতে হবে।", "অন্যের স্লটে বসলে কোনো ওয়ার্নিং ছাড়া কিক ও রিফান্ড বাতিল।", "🎯"),
+                TournamentRuleItem("r4", "টিমিং, স্পাইং ও গ্লোবাল চ্যাট শৃঙ্খলা", "টিমিং বা গ্লোবাল চ্যাটে গালিগালাজ/স্প্যাম সম্পূর্ণ নিষিদ্ধ।", "৩টির বেশি ওয়ার্নিংয়ে স্বয়ংক্রিয় ৭ দিনের অ্যাপ ব্যান।", "⚖️"),
+                TournamentRuleItem("r5", "রুম আইডি ও পাসওয়ার্ডের গোপনীয়তা", "অ্যাপের রুম কোড কোনো বাইরের বন্ধু বা গ্রুপে শেয়ার করা নিষিদ্ধ।", "শেয়ারকারীর অ্যাকাউন্ট অবিলম্বে স্থায়ী ব্যান করা হবে।", "🔐"),
+                TournamentRuleItem("r6", "বিকাশ/নগদ ও ভুয়া TrxID জালিয়াতি রোধ", "ভুয়া বা ডুপ্লিকেট TrxID দিলে সিস্টেম স্বয়ংক্রিয়ভাবে ব্লক করবে।", "প্রতারকের নম্বর ও UID স্থায়ীভাবে ব্যান হবে।", "💳"),
+                TournamentRuleItem("r7", "সময়মতো উপস্থিতি ও উইথড্র অ্যান্টি-ফ্রড নিয়ম", "সময়মতো রুমে প্রবেশ ও উইথড্রর আগে ১+ ম্যাচ খেলা আবশ্যক।", "দেরি করলে বা নিয়ম ভাঙলে কোনো রিফান্ড যোগ্য নয়।", "⏱️"),
+                TournamentRuleItem("r8", "বুইয়া ও প্রাইজ ক্লেইম ভেরিফিকেশন", "ম্যাচ জয়ের পর স্পষ্ট কিল ও বুইয়ার আন-এডিটেড স্ক্রিনশট ১৫ মিনিটে দিতে হবে।", "মিথ্যা দাবিতে প্রাইজ মানি বাতিল + ওয়ার্নিং স্ট্রাইক।", "🏆")
             )
         }
 
@@ -194,7 +264,7 @@ fun RulesAndSupportScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.28f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -202,8 +272,19 @@ fun RulesAndSupportScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(rule.iconEmoji, fontSize = 20.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFEF4444).copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(rule.iconEmoji, fontSize = 15.sp)
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "${index + 1}. ${rule.title}",
@@ -212,16 +293,19 @@ fun RulesAndSupportScreen(
                             )
                         }
 
+                        Spacer(modifier = Modifier.width(6.dp))
+
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.15f)
+                            color = Color(0xFFEF4444).copy(alpha = 0.18f),
+                            border = BorderStroke(0.8.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
                         ) {
                             Text(
-                                text = "STRICT",
-                                color = Color(0xFFEF4444),
-                                fontSize = 9.sp,
+                                text = "ZERO TOLERANCE",
+                                color = Color(0xFFFCA5A5),
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -231,23 +315,23 @@ fun RulesAndSupportScreen(
                     Text(
                         text = rule.description,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = Color.White.copy(alpha = 0.88f)
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF1E1418),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
+                        color = Color(0xFF220E14),
+                        border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.38f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text("⚠️ শাস্তি: ", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444), fontSize = 11.sp)
-                            Text(rule.penalty, color = Color(0xFFFCA5A5), fontSize = 11.sp)
+                            Text("⚠️ শাস্তি: ", fontWeight = FontWeight.Black, color = Color(0xFFEF4444), fontSize = 11.sp)
+                            Text(rule.penalty, color = Color(0xFFFCA5A5), fontSize = 11.sp, lineHeight = 15.sp)
                         }
                     }
                 }
@@ -434,6 +518,38 @@ fun RulesAndSupportScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+private fun rulesToDisplayCount(strictRules: List<TournamentRuleItem>): Int =
+    if (strictRules.isEmpty()) 8 else strictRules.size
+
+@Composable
+private fun StrictStatusChip(
+    title: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = DarkSurface,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.72f)
+            )
+            Text(
+                text = value,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = accent
+            )
         }
     }
 }

@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.TrackChanges
@@ -48,8 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -60,8 +61,15 @@ import com.example.model.MatchStatus
 import com.example.model.TournamentMatch
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
+import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -77,386 +85,384 @@ fun MatchCard(
     var isHyped by rememberSaveable(match.id) { mutableStateOf(false) }
     val baseHypeCount = remember(match.id) { 12 + (match.bookedSlots % 19) }
     val isLiveMatch = match.status == MatchStatus.ROOM_OPEN || match.status == MatchStatus.ONGOING
-    val liveTransition = rememberInfiniteTransition(label = "match_status_${match.id}")
-    val statusDotAlpha by liveTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(750), RepeatMode.Reverse),
-        label = "dot_alpha"
-    )
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("match_card_${match.id}"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        border = BorderStroke(
+            1.dp,
+            if (isAlreadyBooked) VictoryGreen.copy(alpha = 0.55f) else DarkBorder
         ),
-        border = BorderStroke(1.dp, DarkBorder),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // Top Row: Category Pill, Type & Match Status
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Subtle Top Category Accent Strip
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(match.category.accentColor, match.category.accentColor.copy(alpha = 0.18f))
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Category Badge
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = match.category.accentColor.copy(alpha = 0.2f)
+                // Top Row: Category Pill, Type & Status
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = match.category.accentColor.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, match.category.accentColor.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "${match.category.iconEmoji} ${match.category.banglaTitle}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = match.category.accentColor
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = DarkElevated
+                        ) {
+                            Text(
+                                text = match.matchType.banglaLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "${match.category.iconEmoji} ${match.category.banglaTitle}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = match.category.accentColor
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isHyped) FlameYellow.copy(alpha = 0.18f) else DarkCard,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isHyped) FlameYellow else DarkBorder
                             ),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isHyped = !isHyped
+                                }
+                                .testTag("hype_match_btn_${match.id}")
+                        ) {
+                            Text(
+                                text = "🔥 ${baseHypeCount + if (isHyped) 1 else 0}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isHyped) FlameYellow else TextSecondary
+                                ),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = match.status.color.copy(alpha = 0.16f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                if (isLiveMatch) {
+                                    LiveMatchStatusDot(color = match.status.color)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                }
+                                Text(
+                                    text = match.status.banglaLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = match.status.color
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Match Title
+                Text(
+                    text = match.title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = DisplayFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    ),
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Time & Countdown Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.AccessTime,
+                            contentDescription = "Time",
+                            tint = FlameYellow,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${match.matchDateTime} • ${match.mapName}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondary
+                            )
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Match Type
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                        color = FlameYellow.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f))
                     ) {
                         Text(
-                            text = match.matchType.banglaLabel,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            text = "⏱️ ${match.startsInMinutes} মিনিট বাকি",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = FlameYellow,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
                 }
 
-                // Match Hype + Status Badge
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Prize, Per Kill & Entry Fee Grid
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = DarkCard,
+                    border = BorderStroke(1.dp, DarkBorder),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isHyped) FlameYellow.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(
-                            1.dp,
-                            if (isHyped) FlameYellow else Color.White.copy(alpha = 0.16f)
-                        ),
+                    Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                isHyped = !isHyped
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.EmojiEvents, contentDescription = "Prize", tint = FlameYellow, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("মোট পুরস্কার", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             }
-                            .testTag("hype_match_btn_${match.id}")
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "৳${match.totalPrize}",
+                                fontFamily = MonoFontFamily,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = FlameYellow
+                            )
+                        }
+
+                        Box(modifier = Modifier.width(1.dp).height(28.dp).background(DarkBorder))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.TrackChanges, contentDescription = "Per kill", tint = NeonPink, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("প্রতি কিল", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (match.perKillPrize > 0) "৳${match.perKillPrize}" else "বুইয়া ৳${match.booyahPrize}",
+                                fontFamily = MonoFontFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+
+                        Box(modifier = Modifier.width(1.dp).height(28.dp).background(DarkBorder))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Payments, contentDescription = "Entry Fee", tint = BkashPink, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("এন্ট্রি ফি", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "৳${match.entryFee}",
+                                fontFamily = MonoFontFamily,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BkashPink
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Slots Progress Bar
+                val progress = match.bookedSlots.toFloat() / match.totalSlots.coerceAtLeast(1)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "🔥 ${baseHypeCount + if (isHyped) 1 else 0}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = if (isHyped) FlameYellow else Color.White
-                            ),
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                            text = "স্লট: ${match.bookedSlots}/${match.totalSlots} পূর্ণ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (match.isFull) Color(0xFFEF4444) else VictoryGreen
+                        )
+                        Text(
+                            text = if (match.isFull) "স্লট পূর্ণ!" else "${match.availableSlots} টি স্লট বাকি",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
                         )
                     }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (match.isFull) Color(0xFFEF4444) else VictoryGreen,
+                        trackColor = DarkElevated,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = match.status.color.copy(alpha = 0.2f)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Action Buttons
+                if (isAlreadyBooked) {
+                    Button(
+                        onClick = onViewRoomClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("view_room_btn_${match.id}"),
+                        colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen, contentColor = Color.Black),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        Icon(
+                            imageVector = Icons.Filled.Key,
+                            contentDescription = "Room ID",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (match.status == MatchStatus.ROOM_OPEN) "রুম আইডি ও পাসওয়ার্ড দেখুন" else "আপনার স্লট বুকড (রুম শীঘ্রই আসবে)",
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                } else if (match.isFull) {
+                    OutlinedButton(
+                        onClick = onViewSlotGridClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, DarkBorder)
+                    ) {
+                        Icon(imageVector = Icons.Filled.GridView, contentDescription = "Grid", modifier = Modifier.size(16.dp), tint = TextSecondary)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "সব স্লট পূর্ণ (স্লট গ্রিড দেখুন)", color = TextSecondary)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onViewSlotGridClick,
+                            modifier = Modifier
+                                .weight(0.42f)
+                                .height(48.dp)
+                                .testTag("slot_grid_btn_${match.id}"),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameYellow)
                         ) {
-                            if (isLiveMatch) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(match.status.color.copy(alpha = statusDotAlpha))
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                            }
+                            Icon(imageVector = Icons.Filled.GridView, contentDescription = "Slots", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "স্লট গ্রিড", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = onBookClick,
+                            modifier = Modifier
+                                .weight(0.58f)
+                                .height(48.dp)
+                                .testTag("book_slot_btn_${match.id}"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BkashPink,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.SportsEsports,
+                                contentDescription = "Buy Slot",
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = match.status.banglaLabel,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = match.status.color
-                                )
+                                text = "স্লট কিনুন (৳${match.entryFee})",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
                             )
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Match Title
-            Text(
-                text = match.title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                ),
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Time & Map Row with live countdown
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.AccessTime,
-                        contentDescription = "Time",
-                        tint = FlameYellow,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = match.matchDateTime,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Medium,
-                            color = FlameYellow
-                        )
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF221D08),
-                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f))
-                ) {
-                    Text(
-                        text = "⏱️ শুরু হতে বাকি: ${match.startsInMinutes} মিনিট",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = FlameYellow,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Prize & Fee Grid
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                // Total Prize
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.EmojiEvents,
-                            contentDescription = "Prize",
-                            tint = FlameYellow,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "পুরস্কার",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = "৳${match.totalPrize}",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            color = FlameYellow
-                        )
-                    )
-                }
-
-                // Per Kill
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.TrackChanges,
-                            contentDescription = "Per kill",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "প্রতি কিল",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = if (match.perKillPrize > 0) "৳${match.perKillPrize}" else "-",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-
-                // Entry Fee
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Payments,
-                            contentDescription = "Entry Fee",
-                            tint = BkashPink,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "এন্ট্রি ফি",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = "৳${match.entryFee}",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            color = BkashPink
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Slots Progress Bar
-            val progress = match.bookedSlots.toFloat() / match.totalSlots.coerceAtLeast(1)
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "স্লট: ${match.bookedSlots}/${match.totalSlots} পূর্ণ",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (match.isFull) Color(0xFFEF4444) else VictoryGreen
-                    )
-                    Text(
-                        text = if (match.isFull) "স্লট পূর্ণ!" else "${match.availableSlots} টি স্লট বাকি",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = if (match.isFull) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary,
-                    trackColor = DarkBorder,
-                    strokeCap = StrokeCap.Round
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Action Buttons
-            if (isAlreadyBooked) {
-                Button(
-                    onClick = onViewRoomClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("view_room_btn_${match.id}"),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = VictoryGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Key,
-                        contentDescription = "Room ID",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (match.status == MatchStatus.ROOM_OPEN) "রুম আইডি ও পাসওয়ার্ড দেখুন" else "আপনার স্লট বুকড (রুম শীঘ্রই আসবে)",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            } else if (match.isFull) {
-                OutlinedButton(
-                    onClick = onViewSlotGridClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(imageVector = Icons.Filled.GridView, contentDescription = "Grid", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "সব স্লট পূর্ণ (স্লট গ্রিড দেখুন)", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onViewSlotGridClick,
-                        modifier = Modifier
-                            .weight(0.42f)
-                            .height(48.dp)
-                            .testTag("slot_grid_btn_${match.id}"),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.7f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = FlameYellow
-                        )
-                    ) {
-                        Icon(imageVector = Icons.Filled.GridView, contentDescription = "Slots", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "স্লট গ্রিড", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onBookClick,
-                        modifier = Modifier
-                            .weight(0.58f)
-                            .height(48.dp)
-                            .testTag("book_slot_btn_${match.id}"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = BkashPink,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SportsEsports,
-                            contentDescription = "Buy Slot",
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "স্লট কিনুন (৳${match.entryFee})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
         }
     }
+}
+
+@Composable
+private fun LiveMatchStatusDot(color: Color) {
+    val liveTransition = rememberInfiniteTransition(label = "match_status_dot")
+    val statusDotAlpha by liveTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+        label = "dot_alpha"
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .graphicsLayer { alpha = statusDotAlpha }
+            .clip(CircleShape)
+            .background(color)
+    )
 }

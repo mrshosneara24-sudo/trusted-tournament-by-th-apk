@@ -223,23 +223,29 @@ fun WeeklyLuckySpinDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Live Community Activity Ticker
+                // Live Spin Summary Ticker (Real User Spin History)
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF141424),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF282845)),
+                    color = Color(0xFF141724),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF282D42)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("🔥", fontSize = 12.sp)
+                        Text("🎡", fontSize = 12.sp)
                         Spacer(modifier = Modifier.width(6.dp))
+                        val tickerText = if (spinHistory.isEmpty()) {
+                            "ফ্রি স্পিন করুন • প্রতি সপ্তাহে ৳৩ থেকে ৳৩০ ওয়ালেট বোনাস!"
+                        } else {
+                            val last = spinHistory.first()
+                            "সর্বশেষ স্পিন জয়: ৳${last.amount} (${last.date}) • মোট স্পিন: ${spinHistory.size} টি"
+                        }
                         Text(
-                            text = "লাইভ উইনার্স: Shakib (৳৪) • Tanvir (৳৩) • Miraz (৳৫) • ALVI (৳৩) • 👑 শেষ ৩০৳: DEVIL (২ মাস আগে)",
+                            text = tickerText,
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = Color.White.copy(alpha = 0.88f),
                             maxLines = 1
                         )
                     }

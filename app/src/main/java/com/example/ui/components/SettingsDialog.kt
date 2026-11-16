@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,19 +24,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -43,18 +47,22 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -67,15 +75,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.R
 import com.example.model.AppCustomization
+import com.example.model.DepositRequest
+import com.example.model.RequestStatus
+import com.example.model.WithdrawRequest
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -85,10 +99,22 @@ fun SettingsDialog(
     appCustomization: AppCustomization = AppCustomization(),
     isOwner: Boolean = false,
     isAdmin: Boolean = false,
+    currentBalance: Int = 0,
+    matchesPlayed: Int = 0,
+    currentUserPhone: String = "",
+    depositRequests: List<DepositRequest> = emptyList(),
+    withdrawRequests: List<WithdrawRequest> = emptyList(),
     onDismiss: () -> Unit,
     onOpenAdminPanel: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
-    onOpenMasterEditor: () -> Unit = onOpenOwnerPanel
+    onOpenMasterEditor: () -> Unit = onOpenOwnerPanel,
+    onOpenDepositDialog: () -> Unit = {},
+    onOpenWithdrawDialog: () -> Unit = {},
+    onApproveDeposit: (requestId: String) -> Boolean = { false },
+    onRejectDeposit: (requestId: String) -> Boolean = { false },
+    onApproveWithdraw: (requestId: String) -> Boolean = { false },
+    onRejectWithdraw: (requestId: String) -> Boolean = { false },
+    onResetAppForFreshDownload: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -96,7 +122,28 @@ fun SettingsDialog(
     var roomAlertNotification by remember { mutableStateOf(true) }
     var fiveMinReminder by remember { mutableStateOf(true) }
     var autoLaunchGame by remember { mutableStateOf(true) }
-    var expressFastMode by remember { mutableStateOf(true) }
+    var showFreshResetConfirm by remember { mutableStateOf(false) }
+
+    val userDeposits = remember(depositRequests, currentUserPhone) {
+        if (currentUserPhone.isBlank()) depositRequests
+        else depositRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+    }
+    val userWithdraws = remember(withdrawRequests, currentUserPhone) {
+        if (currentUserPhone.isBlank()) withdrawRequests
+        else withdrawRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+    }
+    val pendingGlobalCount = remember(depositRequests, withdrawRequests) {
+        depositRequests.count { it.status == RequestStatus.PENDING } +
+            withdrawRequests.count { it.status == RequestStatus.PENDING }
+    }
+    val pendingUserCount = remember(userDeposits, userWithdraws) {
+        userDeposits.count { it.status == RequestStatus.PENDING } +
+            userWithdraws.count { it.status == RequestStatus.PENDING }
+    }
+    // 0 = My Requests, 1 = Admin/Owner Approval Queue
+    var requestSectionTab by remember(isOwner, isAdmin, pendingGlobalCount) {
+        mutableIntStateOf(if ((isOwner || isAdmin) && pendingGlobalCount > 0) 1 else 0)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -105,11 +152,14 @@ fun SettingsDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .heightIn(max = 720.dp)
+                .heightIn(max = 760.dp)
                 .testTag("settings_dialog"),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(26.dp),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+            border = BorderStroke(
+                1.dp,
+                Brush.linearGradient(listOf(FlameYellow.copy(alpha = 0.45f), DarkBorder, NeonPink.copy(alpha = 0.4f)))
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -126,45 +176,322 @@ fun SettingsDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(NeonPink.copy(alpha = 0.25f), FlameYellow.copy(alpha = 0.2f))
+                                    )
+                                )
+                                .border(1.dp, FlameYellow.copy(alpha = 0.4f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Settings,
                                 contentDescription = "Settings",
                                 tint = FlameYellow,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = "সেটিংস ও প্রেফারেন্স",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                                color = Color.White
+                                color = TextPrimary
                             )
                             Text(
-                                text = "TRUSTED TOURNAMENT BY TH অ্যাপ নিয়ন্ত্রণ",
+                                text = "${appCustomization.appName} নিয়ন্ত্রণ",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = TextSecondary
                             )
                         }
                     }
 
                     IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = TextPrimary)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // ==================== SECTION 0: DEPOSIT / WITHDRAW REQUESTS ====================
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "ডিপোজিট ও উইথড্র রিকোয়েস্ট",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = FlameYellow
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = VictoryGreen.copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.45f))
+                    ) {
+                        Text(
+                            text = "ব্যালেন্স: ৳$currentBalance",
+                            fontFamily = MonoFontFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = VictoryGreen,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = DarkCard,
+                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_deposit_withdraw_section")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Top Quick Summary & Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(BkashPink.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AccountBalanceWallet,
+                                        contentDescription = null,
+                                        tint = BkashPink,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "পেমেন্ট রিকোয়েস্ট সেন্টার",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = if (isOwner || isAdmin) {
+                                            "অপেক্ষমাণ রিকোয়েস্ট: $pendingGlobalCount টি (মোট)"
+                                        } else {
+                                            "আপনার অপেক্ষমাণ রিকোয়েস্ট: $pendingUserCount টি"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (pendingGlobalCount > 0 || pendingUserCount > 0) FlameYellow else TextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        // Career 1-Match Rule Micro Note
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (matchesPlayed >= 1) VictoryGreen.copy(alpha = 0.12f) else DarkElevated,
+                            border = BorderStroke(
+                                1.dp,
+                                if (matchesPlayed >= 1) VictoryGreen.copy(alpha = 0.35f) else DarkBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (matchesPlayed >= 1) Icons.Filled.Bolt else Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = if (matchesPlayed >= 1) VictoryGreen else FlameOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (matchesPlayed >= 1) {
+                                        "উইথড্র আনলকড (ম্যাচ খেলেছেন: $matchesPlayed টি)"
+                                    } else {
+                                        "প্রথম উইথড্র করতে কমপক্ষে ১টি ম্যাচ খেলা প্রয়োজন"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (matchesPlayed >= 1) VictoryGreen else TextSecondary
+                                )
+                            }
+                        }
+
+                        // Quick Deposit & Withdraw Request Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenDepositDialog()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = BkashPink, contentColor = Color.White),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("settings_deposit_request_btn")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("ডিপোজিট রিকোয়েস্ট", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenWithdrawDialog()
+                                },
+                                border = BorderStroke(1.dp, FlameYellow),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameYellow),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("settings_withdraw_request_btn")
+                            ) {
+                                Icon(Icons.Filled.CallMade, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("উইথড্র রিকোয়েস্ট", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+                        }
+
+                        // Switcher for Owner/Admin (My Requests vs Approval Queue)
+                        if (isOwner || isAdmin) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(DarkSurface)
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (requestSectionTab == 0) DarkElevated else Color.Transparent,
+                                    border = if (requestSectionTab == 0) BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f)) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { requestSectionTab = 0 }
+                                        .testTag("settings_my_requests_tab")
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "আমার রিকোয়েস্ট",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (requestSectionTab == 0) FlameYellow else TextSecondary
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (requestSectionTab == 1) BkashPink.copy(alpha = 0.25f) else Color.Transparent,
+                                    border = if (requestSectionTab == 1) BorderStroke(1.dp, BkashPink) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { requestSectionTab = 1 }
+                                        .testTag("settings_admin_queue_tab")
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "অ্যাপ্রুভাল কিউ ($pendingGlobalCount)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (requestSectionTab == 1) Color.White else TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if ((isOwner || isAdmin) && requestSectionTab == 1) {
+                            // Admin/Owner inline approval queue inside Settings
+                            DepositWithdrawQueueContent(
+                                depositRequests = depositRequests,
+                                withdrawRequests = withdrawRequests,
+                                onApproveDeposit = onApproveDeposit,
+                                onRejectDeposit = onRejectDeposit,
+                                onApproveWithdraw = onApproveWithdraw,
+                                onRejectWithdraw = onRejectWithdraw,
+                                modifier = Modifier.testTag("settings_admin_requests_queue")
+                            )
+                        } else {
+                            // User's Deposit & Withdraw Request History inside Settings
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_my_requests_list"),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (userDeposits.isEmpty() && userWithdraws.isEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = DarkSurface,
+                                        border = BorderStroke(1.dp, DarkBorder),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "আপনার এখনো কোনো ডিপোজিট বা উইথড্র রিকোয়েস্ট নেই। উপরের বাটন থেকে নতুন রিকোয়েস্ট পাঠাতে পারেন।",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            modifier = Modifier.padding(12.dp)
+                                        )
+                                    }
+                                } else {
+                                    userDeposits.take(4).forEach { req ->
+                                        SettingsRequestRow(
+                                            title = "ডিপোজিট • ${req.paymentMethod.displayName} (+৳${req.amount})",
+                                            subtitle = "TrxID: ${req.trxId} • নম্বর: ${req.senderNumber}",
+                                            status = req.status,
+                                            note = req.adminNote
+                                        )
+                                    }
+                                    userWithdraws.take(4).forEach { req ->
+                                        SettingsRequestRow(
+                                            title = "উইথড্র • ${req.paymentMethod.displayName} (-৳${req.amount})",
+                                            subtitle = "প্রাপক নম্বর: ${req.targetNumber}",
+                                            status = req.status,
+                                            note = req.adminNote
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
                 // Express Fast Match Banner
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = FlameOrange.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.4f)),
+                    color = FlameOrange.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, FlameOrange.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -173,7 +500,7 @@ fun SettingsDialog(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(FlameOrange),
                             contentAlignment = Alignment.Center
@@ -181,8 +508,8 @@ fun SettingsDialog(
                             Icon(
                                 imageVector = Icons.Filled.Schedule,
                                 contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                tint = Color.Black,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -195,7 +522,7 @@ fun SettingsDialog(
                             Text(
                                 text = "প্লেয়ারদের সুবিধার জন্য সকল টুর্নামেন্ট বিকাল ৫:০০ থেকে রাত ৮:০০ এর মধ্যে দ্রুততম সময়ে শেষ হয়!",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = Color.White.copy(alpha = 0.85f)
+                                color = TextSecondary
                             )
                         }
                     }
@@ -214,7 +541,7 @@ fun SettingsDialog(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                    border = BorderStroke(1.dp, DarkBorder)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         SettingSwitchRow(
@@ -250,7 +577,6 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 if (isOwner || isAdmin) {
-                    // Section 2: Admin / Owner Control Quick Access (Authorized Roles Only)
                     Text(
                         text = "অ্যাডমিন ও ওনার কন্ট্রোল সেন্টার",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
@@ -261,7 +587,7 @@ fun SettingsDialog(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = DarkCard,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -292,12 +618,12 @@ fun SettingsDialog(
                                 Text(
                                     text = "🛡️ TH অ্যাডমিন কন্ট্রোল প্যানেল",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                                 Text(
-                                    text = "১-ট্যাপে রুম আইডি প্রকাশ ও WhatsApp লিঙ্ক আপডেট",
+                                    text = "১-ট্যাপে রুম আইডি প্রকাশ, ব্যালেন্স ও রিকোয়েস্ট",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = TextSecondary
                                 )
                             }
                             Icon(
@@ -312,11 +638,10 @@ fun SettingsDialog(
                     if (isOwner) {
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // A-to-Z Master App Editor Card
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF240B1B),
-                            border = androidx.compose.foundation.BorderStroke(2.dp, FlameYellow),
+                            color = Color(0xFF210C1B),
+                            border = BorderStroke(1.5.dp, FlameYellow),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -348,7 +673,7 @@ fun SettingsDialog(
                                     Text(
                                         text = "লোগো নির্বাচন, স্লট ক্রিয়েট/ডিলিট, ম্যাচ এডিট ও কঠোর রুলস",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White
+                                        color = TextPrimary
                                     )
                                 }
                                 Icon(
@@ -362,11 +687,10 @@ fun SettingsDialog(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Owner Only Supreme Panel Card
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = DarkCard,
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, FlameYellow.copy(alpha = 0.5f)),
+                            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -395,9 +719,9 @@ fun SettingsDialog(
                                         color = FlameYellow
                                     )
                                     Text(
-                                        text = "প্রতারক প্লেয়ার ব্যান ও নতুন অ্যাডমিন নিয়োগ (Owner Only)",
+                                        text = "ব্যালেন্স, প্রতারক প্লেয়ার ব্যান ও নতুন অ্যাডমিন নিয়োগ",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.85f)
+                                        color = TextSecondary
                                     )
                                 }
                                 Icon(
@@ -424,10 +748,9 @@ fun SettingsDialog(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                    border = BorderStroke(1.dp, DarkBorder)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        // bKash Number
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,10 +768,11 @@ fun SettingsDialog(
                                     Text(
                                         text = "অফিসিয়াল বিকাশ নম্বর",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = TextSecondary
                                     )
                                     Text(
                                         text = officialBkashNumber,
+                                        fontFamily = MonoFontFamily,
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = BkashPink
                                     )
@@ -472,7 +796,6 @@ fun SettingsDialog(
 
                         HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 10.dp))
 
-                        // WhatsApp Group
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -490,7 +813,7 @@ fun SettingsDialog(
                                     Text(
                                         text = "অফিসিয়াল WhatsApp টুর্নামেন্ট লিঙ্ক",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = TextSecondary
                                     )
                                     Text(
                                         text = "ক্লিক করে লিঙ্ক কপি করুন",
@@ -530,7 +853,7 @@ fun SettingsDialog(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, NeonPink.copy(alpha = 0.4f))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -552,12 +875,12 @@ fun SettingsDialog(
                                 Text(
                                     text = appCustomization.appName,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
-                                    color = Color.White
+                                    color = TextPrimary
                                 )
                                 Text(
                                     text = "ভার্সন: ২.৫.০ (অফিসিয়াল প্রো সংস্করণ)",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = TextSecondary
                                 )
                                 Text(
                                     text = appCustomization.appTagline,
@@ -569,18 +892,33 @@ fun SettingsDialog(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Clear Cache Button
                         Button(
                             onClick = {
                                 Toast.makeText(context, "অ্যাপ ক্যাশে ও মেমোরি রিফ্রেশ সম্পন্ন!", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.fillMaxWidth().height(42.dp),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkElevated)
                         ) {
-                            Icon(imageVector = Icons.Filled.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Icon(imageVector = Icons.Filled.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextPrimary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("অ্যাপ ক্যাশে রিফ্রেশ করুন", fontSize = 12.sp, color = Color.White)
+                            Text("অ্যাপ ক্যাশে রিফ্রেশ করুন", fontSize = 12.sp, color = TextPrimary)
+                        }
+
+                        if (isOwner) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { showFreshResetConfirm = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                                    .testTag("settings_owner_fresh_reset_btn"),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.65f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFCA5A5))
+                            ) {
+                                Text("🔄 অ্যাপ ফ্রেশ রিসেট (ডাউনলোড স্টেট)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -595,6 +933,102 @@ fun SettingsDialog(
                 ) {
                     Text("সেটিংস বন্ধ করুন", fontWeight = FontWeight.Bold, color = Color.White)
                 }
+            }
+        }
+    }
+
+    if (showFreshResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFreshResetConfirm = false },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "অ্যাপ ফ্রেশ রিসেট করবেন?",
+                    fontWeight = FontWeight.Black,
+                    color = FlameYellow
+                )
+            },
+            text = {
+                Text(
+                    text = "এটি করলে সকল টেস্ট অ্যাকাউন্ট, বুকিং, ডিপোজিট/উইথড্র রিকোয়েস্ট ও ব্যালেন্স মুছে অ্যাপ সম্পূর্ণ নতুন অবস্থায় ফিরে যাবে।",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFreshResetConfirm = false
+                        onDismiss()
+                        onResetAppForFreshDownload()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text("হ্যাঁ, রিসেট করুন", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFreshResetConfirm = false }) {
+                    Text("বাতিল", color = TextSecondary)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SettingsRequestRow(
+    title: String,
+    subtitle: String,
+    status: RequestStatus,
+    note: String
+) {
+    val statusColor = when (status) {
+        RequestStatus.PENDING -> FlameYellow
+        RequestStatus.APPROVED -> VictoryGreen
+        RequestStatus.REJECTED -> Color(0xFFEF4444)
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = DarkSurface,
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(11.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+                if (note.isNotBlank()) {
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColor
+                    )
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = statusColor.copy(alpha = 0.16f)
+            ) {
+                Text(
+                    text = status.banglaLabel,
+                    color = statusColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
             }
         }
     }
@@ -628,12 +1062,12 @@ private fun SettingSwitchRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    color = TextPrimary
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = TextSecondary
                 )
             }
         }
@@ -643,7 +1077,7 @@ private fun SettingSwitchRow(
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedThumbColor = TextSecondary,
                 uncheckedTrackColor = DarkSurface
             )
         )
