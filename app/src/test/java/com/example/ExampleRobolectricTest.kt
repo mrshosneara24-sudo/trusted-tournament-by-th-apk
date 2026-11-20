@@ -443,8 +443,8 @@ class ExampleRobolectricTest {
         viewModel.selectTab(TournamentTab.LEADERBOARD)
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("leaderboard_screen")
-            .performScrollToNode(hasTestTag("directory_player_card_2489103847"))
-        composeTestRule.onNodeWithTag("directory_player_card_2489103847").performClick()
+            .performScrollToNode(hasTestTag("directory_player_card_11410365896"))
+        composeTestRule.onNodeWithTag("directory_player_card_11410365896").performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
@@ -453,7 +453,7 @@ class ExampleRobolectricTest {
         ).assertIsDisplayed()
         composeTestRule.onNodeWithTag("player_profile_give_kudos_btn").performScrollTo().performClick()
         composeTestRule.waitForIdle()
-        assertEquals(13, repo.registeredUsers.value.first { it.uid == "2489103847" }.kudosCount)
+        assertEquals(13, repo.registeredUsers.value.first { it.uid == "11410365896" }.kudosCount)
     }
 
     @Test
@@ -739,6 +739,688 @@ class ExampleRobolectricTest {
         val restartedRepo = TournamentRepository(context)
         assertTrue(restartedRepo.globalChatMessages.value.any { it.text == "সবাই রেডি তো?" })
         assertTrue(restartedRepo.globalChatMessages.value.any { it.text == "ম্যাচ ১৫ মিনিটে শুরু হবে!" })
+    }
+
+    @Test
+    fun `global chat renders role beside IGN, icon-only PRO_PLAYER and V_BADGE, icon plus name for other badges, and opens profile via PFP click`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        val playerPhone = "01755667788"
+        assertTrue(viewModel.register("Rafi", "TH_Rafi", "55667788", playerPhone, playerPhone, "avatar_cyber", "pass123"))
+        assertTrue(repo.grantBadgeToUser(playerPhone, com.example.model.BadgeType.PRO_PLAYER).first)
+        assertTrue(repo.grantBadgeToUser(playerPhone, com.example.model.BadgeType.V_BADGE).first)
+        assertTrue(repo.grantBadgeToUser(playerPhone, com.example.model.BadgeType.PRIME_SPENDER).first)
+
+        val sendRes = repo.sendGlobalChatMessage("টিম রেডি, ম্যাচ জিতব!")
+        assertTrue(sendRes.first)
+        val memberMsg = repo.globalChatMessages.value.last()
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tab_global_chat").performClick()
+        composeTestRule.waitForIdle()
+
+        // Scroll to the sent message card so it's laid out cleanly
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_${memberMsg.id}"))
+        composeTestRule.waitForIdle()
+
+        // Role chip & IGN visible
+        composeTestRule.onNodeWithTag("global_chat_role_${memberMsg.id}", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNode(
+            hasAnyAncestor(hasTestTag("global_chat_role_${memberMsg.id}")) and hasText("মেম্বার", substring = true),
+            useUnmergedTree = true
+        ).assertIsDisplayed()
+
+        // PRO_PLAYER and V_BADGE render as icon-only badges (no text label inside those tags)
+        composeTestRule.onNodeWithTag("global_chat_badge_icon_${memberMsg.id}_PRO_PLAYER", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("global_chat_badge_icon_${memberMsg.id}_V_BADGE", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNode(
+            hasAnyAncestor(hasTestTag("global_chat_badge_icon_${memberMsg.id}_PRO_PLAYER")) and hasText("প্রো প্লেয়ার"),
+            useUnmergedTree = true
+        ).assertDoesNotExist()
+
+        // PRIME_SPENDER renders with icon + badge title
+        composeTestRule.onNodeWithTag("global_chat_badge_${memberMsg.id}_PRIME_SPENDER", useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.onNode(
+            hasAnyAncestor(hasTestTag("global_chat_badge_${memberMsg.id}_PRIME_SPENDER")) and hasText("প্রাইম বিগ স্পেন্ডার [8]", substring = true),
+            useUnmergedTree = true
+        ).assertIsDisplayed()
+
+        // Direct click on PFP opens PlayerProfileCardDialog
+        composeTestRule.onNodeWithTag("global_chat_pfp_${memberMsg.id}").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
+    }
+
+    @Test
+    fun `owner profile is clean without level 68, notun joddha, or gaming weapon clutter`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+        assertTrue(viewModel.login("01861583924", "7788"))
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Account screen shows clean Owner identity without Level 68 / নতুন যোদ্ধা / MP40 clutter
+        composeTestRule.onNodeWithTag("tab_account").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("owner_clean_rank_pill").assertIsDisplayed()
+        composeTestRule.onNodeWithText("লেভেল ৬৮", substring = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("LVL 68", substring = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("নতুন যোদ্ধা", substring = true).assertDoesNotExist()
+        composeTestRule.onNodeWithText("MP40", substring = true).assertDoesNotExist()
+
+        // 2. Global Chat Owner PFP opens clean Owner PlayerProfileCardDialog (no stats grid / LVL)
+        composeTestRule.onNodeWithTag("tab_global_chat").performClick()
+        composeTestRule.waitForIdle()
+        val ownerMsg = repo.globalChatMessages.value.first()
+        composeTestRule.onNodeWithTag("global_chat_pfp_${ownerMsg.id}").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("owner_profile_clean_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("player_profile_stats_card").assertDoesNotExist()
+        composeTestRule.onNodeWithText("LVL 0").assertDoesNotExist()
+    }
+
+    @Test
+    fun `strict validation blocks banned users, invalid phones, dummy trxIds and shows zero tolerance rules matrix`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+        val phone = "01712345678"
+        assertTrue(viewModel.register("Sakib", "TH_Sakib", "11223344", phone, phone, "th_logo", "pass123"))
+
+        // Dummy TrxIDs and non-BD phone numbers must fail
+        assertFalse(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, "99999999999", "BKS112233").first)
+        assertFalse(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, phone, "1234").first)
+        assertFalse(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, phone, "TEST1").first)
+        assertFalse(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, phone, "AAAAAA").first)
+
+        // Valid request works
+        assertTrue(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, phone, "BKS887766").first)
+
+        // Banned user cannot submit deposit or withdraw
+        assertTrue(repo.banUser(phone, "ফ্রড"))
+        assertFalse(repo.submitDepositRequest(100, com.example.model.WalletPaymentMethod.NAGAD, phone, "NGD998877").first)
+        assertFalse(repo.submitWithdrawRequest(50, com.example.model.WalletPaymentMethod.BKASH, phone).first)
+
+        // Rules screen shows Zero-Tolerance enforcement card & 8 strict rules
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        viewModel.openRules()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("rules_support_screen")
+            .performScrollToNode(hasTestTag("strict_enforcement_card"))
+        composeTestRule.onNodeWithTag("strict_enforcement_card").assertIsDisplayed()
+        assertEquals(8, repo.strictRules.value.size)
+    }
+
+    @Test
+    fun `owner command overview and prepare for download reset flow clear test data cleanly`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+        assertTrue(viewModel.register("TestUser", "TH_Test", "10203040", "01710203040", "01710203040", "th_logo", "pass123"))
+        viewModel.logout()
+        assertTrue(viewModel.login("01861583924", "7788"))
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        viewModel.openOwnerPanel()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("owner_command_overview").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("owner_tab_settings").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("owner_prepare_download_card").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("owner_fresh_reset_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("হ্যাঁ, রিসেট করুন").performClick()
+        composeTestRule.waitForIdle()
+
+        assertFalse(viewModel.isLoggedIn.value)
+        assertEquals(0, viewModel.walletBalance.value)
+        assertEquals(1, repo.registeredUsers.value.size)
+        val owner = repo.registeredUsers.value.first()
+        assertEquals(com.example.model.UserRole.OWNER, owner.role)
+        assertEquals("11410365896", owner.uid)
+        assertEquals(0, owner.level)
+        assertEquals("", owner.favoriteWeapon)
+        assertEquals("", owner.activeCharacter)
+    }
+
+    @Test
+    fun `owner and admin moderation panel manages badges, 7 warn ban, and custom timeout`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        val playerPhone = "01788776655"
+        val adminPhone = "01766554433"
+        assertTrue(viewModel.register("Sajid", "TH_Sajid", "88776655", playerPhone, playerPhone, "th_logo", "pass123"))
+        assertTrue(viewModel.register("AdminRafi", "TH_AdminRafi", "66554433", adminPhone, adminPhone, "th_logo", "pass123"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "TH-RAFI", "AdminRafi", "TH_AdminRafi", "66554433"))
+
+        // Log in as Admin and render MainTournamentApp
+        viewModel.logout()
+        assertTrue(viewModel.login(adminPhone, "pass123"))
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Admin opens Admin Panel -> Moderation tab
+        viewModel.openAdminPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("admin_tab_moderation").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("moderation_panel_section").assertIsDisplayed()
+
+        // Select target user by phone
+        composeTestRule.onNodeWithTag("mod_target_input").performScrollTo().performTextReplacement(playerPhone)
+        composeTestRule.waitForIdle()
+
+        // Grant PRO_PLAYER badge then revoke it
+        composeTestRule.onNodeWithTag("mod_grant_badge_PRO_PLAYER").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(repo.registeredUsers.value.first { it.phone == playerPhone }.effectiveBadges.contains(com.example.model.BadgeType.PRO_PLAYER))
+
+        composeTestRule.onNodeWithTag("mod_revoke_badge_PRO_PLAYER").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertFalse(repo.registeredUsers.value.first { it.phone == playerPhone }.effectiveBadges.contains(com.example.model.BadgeType.PRO_PLAYER))
+
+        // Issue a moderation warn
+        composeTestRule.onNodeWithTag("mod_warn_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(1, repo.registeredUsers.value.first { it.phone == playerPhone }.moderationWarningsCount)
+
+        // Apply 1 hour timeout via 60m preset
+        composeTestRule.onNodeWithTag("mod_timeout_preset_60").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("mod_apply_timeout_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertNotNull(repo.registeredUsers.value.first { it.phone == playerPhone }.timeoutUntilMillis)
+        assertTrue(repo.moderationLogs.value.isNotEmpty())
+
+        // 2. Owner opens Owner Panel -> Moderation tab and verifies Moderation Panel + Audit Log
+        viewModel.closeAdminPanel()
+        viewModel.logout()
+        assertTrue(viewModel.login("01861583924", "7788"))
+        composeTestRule.waitForIdle()
+
+        viewModel.openOwnerPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("owner_tab_moderation").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("moderation_panel_section").assertIsDisplayed()
+    }
+
+    @Test
+    fun `timed out user sees non-interactive live countdown overlay until timeout expires`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        val playerPhone = "01744558899"
+        assertTrue(viewModel.register("Rony", "TH_Rony", "44558899", playerPhone, playerPhone, "th_logo", "pass123"))
+
+        // Apply 60-minute (1 hour) timeout while user is logged in and verify persistence across restart
+        val timeoutRes = viewModel.timeoutUser(playerPhone, 60L, "টক্সিক আচরণ")
+        assertTrue(timeoutRes.first)
+        val persistedTimeoutUntil = TournamentRepository(context).userProfile.value.timeoutUntilMillis
+        assertNotNull(persistedTimeoutUntil)
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Lockout screen and live timer must be visible
+        composeTestRule.onNodeWithTag("user_timeout_lock_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("timeout_countdown_timer").assertIsDisplayed()
+
+        // Underlying Wallet tab tap must NOT work while lockout overlay consumes all taps
+        composeTestRule.onNodeWithTag("tab_wallet", useUnmergedTree = true).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(TournamentTab.MATCHES, viewModel.currentTab.value)
+        composeTestRule.onNodeWithTag("user_timeout_lock_screen").assertIsDisplayed()
+
+        // Removing timeout unlocks the app cleanly
+        assertTrue(viewModel.removeTimeout(playerPhone).first)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("user_timeout_lock_screen").assertDoesNotExist()
+
+        // Now Wallet tab click works again
+        composeTestRule.onNodeWithTag("tab_wallet").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(TournamentTab.WALLET, viewModel.currentTab.value)
+    }
+
+    @Test
+    fun `a to z owner editor is completely removed and appbar owner button opens owner panel`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Logged out screen shows Fire-and-Water Google Cloud Sync button
+        composeTestRule.onNodeWithTag("google_signin_btn").performScrollTo().assertIsDisplayed()
+
+        // Owner logs in
+        assertTrue(viewModel.login("01861583924", "7788"))
+        composeTestRule.waitForIdle()
+
+        // Cloud Sync pill is visible in quick action strip
+        composeTestRule.onNodeWithTag("appbar_cloud_sync_pill").assertIsDisplayed()
+
+        // Settings dialog must NOT have open_master_editor_from_settings anymore
+        composeTestRule.onNodeWithTag("appbar_settings_btn").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("settings_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("open_master_editor_from_settings").assertDoesNotExist()
+        composeTestRule.onNodeWithText("সেটিংস বন্ধ করুন").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        // Clicking appbar_owner_btn must directly open OwnerControlDialog
+        composeTestRule.onNodeWithTag("appbar_owner_btn").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("owner_control_dialog").assertIsDisplayed()
+    }
+
+    @Test
+    fun `owner slot panel adds slots updates capacity removes slots and refunds booked player wallet`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        // Player registers & gets balance, then books slot 3 with wallet
+        val playerPhone = "01755667788"
+        assertTrue(viewModel.register("Tamim", "TH_Tamim", "55667788", playerPhone, playerPhone, "th_logo", "pass123"))
+        assertTrue(viewModel.adjustUserBalance(playerPhone, 100, isAdd = true, reason = "Test balance"))
+        val match = viewModel.allMatches.value.first()
+        val initialCapacity = match.totalSlots
+        val expectedPlayerBalanceBeforeRefund = 105 - match.entryFee
+        assertTrue(repo.bookSlotWithWallet(match, 3, "TH_Tamim", "55667788").first)
+        val playerBookingId = repo.myBookings.value.first { it.slotNumber == 3 && it.matchId == match.id }.bookingId
+        assertEquals(expectedPlayerBalanceBeforeRefund, repo.registeredUsers.value.first { it.phone == playerPhone }.walletBalance)
+
+        // Owner logs in (wallet balance 0)
+        viewModel.logout()
+        assertTrue(viewModel.login("01861583924", "7788"))
+        viewModel.clearSnackbar()
+        val ownerBalanceBefore = repo.walletBalance.value
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Verify upgraded RoomSlotGridDialog opens cleanly from MatchCard slot grid button
+        composeTestRule.onNodeWithTag("matches_screen_list")
+            .performScrollToNode(hasTestTag("slot_grid_btn_${match.id}"))
+        composeTestRule.onNodeWithTag("slot_grid_btn_${match.id}").performScrollTo()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("slot_grid_btn_${match.id}").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("room_slot_grid_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("slot_grid_item_1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("slot_booked_player_chip_3").performScrollTo().assertIsDisplayed()
+        viewModel.closeSlotGrid()
+        composeTestRule.waitForIdle()
+
+        // Open Owner Panel -> Slot Control Tab
+        viewModel.openOwnerPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("owner_tab_slots").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        // 1. Increase slot capacity via UI button (+2)
+        composeTestRule.onNodeWithTag("owner_slot_control_list")
+            .performScrollToNode(hasTestTag("owner_slot_capacity_inc_btn"))
+        composeTestRule.onNodeWithTag("owner_slot_capacity_inc_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(initialCapacity + 2, repo.matches.value.first { it.id == match.id }.totalSlots)
+
+        // 2. Add a manual slot (#5) via Slot Add panel
+        composeTestRule.onNodeWithTag("owner_slot_control_list")
+            .performScrollToNode(hasTestTag("owner_add_slot_num_input"))
+        composeTestRule.onNodeWithTag("owner_add_slot_num_input").performTextReplacement("5")
+        composeTestRule.onNodeWithTag("owner_add_slot_ign_input").performTextReplacement("TH_ManualPro")
+        composeTestRule.onNodeWithTag("owner_add_slot_uid_input").performTextReplacement("99887766")
+        composeTestRule.onNodeWithTag("owner_slot_control_list")
+            .performScrollToNode(hasTestTag("owner_add_slot_btn"))
+        composeTestRule.onNodeWithTag("owner_add_slot_btn").performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(repo.myBookings.value.any { it.matchId == match.id && it.slotNumber == 5 && it.playerIgn == "TH_ManualPro" })
+
+        // 3. Remove player Tamim's slot (#3) via UI cancel & confirm refund button
+        composeTestRule.onNodeWithTag("owner_slot_control_list")
+            .performScrollToNode(hasTestTag("cancel_slot_btn_$playerBookingId"))
+        composeTestRule.onNodeWithTag("cancel_slot_btn_$playerBookingId").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("confirm_refund_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // Verify Tamim's wallet received the refund (+entryFee), NOT the Owner's wallet
+        assertFalse(repo.myBookings.value.any { it.bookingId == playerBookingId })
+        assertEquals(105, repo.registeredUsers.value.first { it.phone == playerPhone }.walletBalance)
+        assertEquals(ownerBalanceBefore, repo.walletBalance.value)
+    }
+
+    @Test
+    fun `owner and admin publish live announcement globally visible across tabs and match result updates live leaderboard`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        // Register a player and an admin
+        val playerPhone = "01722334455"
+        val adminPhone = "01733445566"
+        assertTrue(viewModel.register("Sakib", "TH_SakibPro", "22334455", playerPhone, playerPhone, "th_logo", "pass123"))
+        assertTrue(viewModel.register("AdminKai", "TH_KaiMod", "33445566", adminPhone, adminPhone, "th_logo", "pass123"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "TH-KAI", "AdminKai", "TH_KaiMod", "33445566"))
+
+        // Initially leaderboard is empty on fresh download
+        assertTrue(viewModel.leaderboard.value.isEmpty())
+
+        // Log in as Owner
+        viewModel.logout()
+        assertTrue(viewModel.login("01861583924", "7788"))
+        viewModel.clearSnackbar()
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Owner opens Owner Panel -> Live Announcement tab & publishes urgent live announcement
+        viewModel.openOwnerPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("owner_tab_announcement").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("announcement_title_input").performScrollTo()
+            .performTextReplacement("🚨 রুম কোড আপডেট")
+        composeTestRule.onNodeWithTag("announcement_message_input").performScrollTo()
+            .performTextReplacement("সবাই ৯টায় জয়েন করুন!")
+        composeTestRule.onNodeWithTag("announcement_urgent_switch").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("publish_announcement_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        viewModel.closeOwnerPanel()
+        composeTestRule.waitForIdle()
+
+        // Global banner is displayed across tabs for everyone
+        composeTestRule.onNodeWithTag("live_app_announcement_banner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("সবাই ৯টায় জয়েন করুন!", substring = true).assertIsDisplayed()
+
+        // Switch to Wallet and Leaderboard tabs -> banner remains prominently visible
+        composeTestRule.onNodeWithTag("tab_wallet").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("live_app_announcement_banner").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("tab_leaderboard").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("live_app_announcement_banner").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("leaderboard_live_badge").assertIsDisplayed()
+
+        // 2. Owner opens Owner Panel -> Match Results & Command Center -> publishes Booyah winner result & prize
+        viewModel.openOwnerPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("owner_tab_results").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("owner_match_result_command_section").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("result_winner_target_input").performScrollTo()
+            .performTextReplacement(playerPhone)
+        composeTestRule.onNodeWithTag("result_winner_kills_input").performScrollTo()
+            .performTextReplacement("6")
+        composeTestRule.onNodeWithTag("result_prize_input").performScrollTo()
+            .performTextReplacement("85")
+        composeTestRule.onNodeWithTag("publish_match_result_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        viewModel.closeOwnerPanel()
+        composeTestRule.waitForIdle()
+
+        // Winner wallet & stats updated AND Live Leaderboard is now populated immediately!
+        val updatedPlayer = repo.registeredUsers.value.first { it.phone == playerPhone }
+        assertEquals(90, updatedPlayer.walletBalance) // 5 bonus + 85 prize
+        assertEquals(6, updatedPlayer.totalKills)
+        assertEquals(1, updatedPlayer.totalWins)
+        assertEquals(85, updatedPlayer.totalEarnings)
+
+        composeTestRule.onNodeWithTag("leaderboard_top_player_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("leaderboard_recent_results_strip").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("leaderboard_screen")
+            .performScrollToNode(hasTestTag("leaderboard_player_row_${updatedPlayer.uid}"))
+        composeTestRule.onNodeWithTag("leaderboard_player_row_${updatedPlayer.uid}").assertIsDisplayed()
+
+        // 3. Admin can also update & clear live announcement from Admin Panel
+        viewModel.logout()
+        assertTrue(viewModel.login(adminPhone, "pass123"))
+        viewModel.openAdminPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("admin_tab_announcement").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("announcement_message_input").performScrollTo()
+            .performTextReplacement("অ্যাডমিন থেকে লাইভ আপডেট")
+        composeTestRule.onNodeWithTag("publish_announcement_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        viewModel.closeAdminPanel()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("live_app_announcement_banner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("অ্যাডমিন থেকে লাইভ আপডেট", substring = true).assertIsDisplayed()
+
+        // Admin clears announcement -> banner disappears
+        viewModel.openAdminPanel()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("admin_tab_announcement").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("clear_announcement_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        viewModel.closeAdminPanel()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("live_app_announcement_banner").assertDoesNotExist()
+    }
+
+    @Test
+    fun `owner and admin add and remove badges directly on clicked player profile while regular player cannot`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val repo = TournamentRepository(context)
+        val viewModel = TournamentViewModel(repo)
+
+        val playerPhone = "01711223344"
+        val adminPhone = "01799887766"
+        assertTrue(viewModel.register("Rafi", "TH_RafiPro", "11223344", playerPhone, playerPhone, "th_logo", "pass123"))
+        assertTrue(repo.sendGlobalChatMessage("আমি টুর্নামেন্ট খেলতে রেডি!").first)
+        val playerMsgId = repo.globalChatMessages.value.last().id
+
+        assertTrue(viewModel.register("AdminNabil", "TH_NabilMod", "99887766", adminPhone, adminPhone, "th_logo", "pass123"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "TH-NABIL", "AdminNabil", "TH_NabilMod", "99887766"))
+
+        // Register a second regular player to view Rafi's profile
+        viewModel.logout()
+        val viewerPhone = "01744556677"
+        assertTrue(viewModel.register("Viewer", "TH_Viewer", "44556677", viewerPhone, viewerPhone, "th_logo", "pass123"))
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tab_global_chat").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_$playerMsgId"))
+        composeTestRule.onNodeWithTag("global_chat_pfp_$playerMsgId").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("profile_toggle_badge_picker_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("profile_inline_add_badge_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("player_profile_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 1. Owner logs in -> clicks Rafi's profile in Global Chat -> grants & revokes badges live
+        viewModel.logout()
+        assertTrue(viewModel.login("01861583924", "7788"))
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_$playerMsgId"))
+        composeTestRule.onNodeWithTag("global_chat_pfp_$playerMsgId").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("profile_toggle_badge_picker_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("profile_badge_picker_panel").assertIsDisplayed()
+
+        // Grant V_BADGE and HEADSHOT_KING directly inside the profile card
+        composeTestRule.onNodeWithTag("profile_badge_option_V_BADGE").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("profile_badge_feedback_text").performScrollTo().assertIsDisplayed()
+        assertTrue(
+            repo.registeredUsers.value.first { it.phone == playerPhone }
+                .effectiveBadges.contains(com.example.model.BadgeType.V_BADGE)
+        )
+
+        composeTestRule.onNodeWithTag("profile_badge_option_HEADSHOT_KING").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(
+            repo.registeredUsers.value.first { it.phone == playerPhone }
+                .effectiveBadges.contains(com.example.model.BadgeType.HEADSHOT_KING)
+        )
+
+        // Tap V_BADGE again to revoke it live
+        composeTestRule.onNodeWithTag("profile_badge_option_V_BADGE").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertFalse(
+            repo.registeredUsers.value.first { it.phone == playerPhone }
+                .effectiveBadges.contains(com.example.model.BadgeType.V_BADGE)
+        )
+
+        composeTestRule.onNodeWithTag("player_profile_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 2. Admin logs in -> clicks Rafi's profile -> grants BOOYAH_MASTER; cannot edit Owner's profile badges
+        viewModel.logout()
+        assertTrue(viewModel.login(adminPhone, "pass123"))
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_$playerMsgId"))
+        composeTestRule.onNodeWithTag("global_chat_pfp_$playerMsgId").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("profile_inline_add_badge_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("profile_badge_picker_panel").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("profile_badge_option_BOOYAH_MASTER").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(
+            repo.registeredUsers.value.first { it.phone == playerPhone }
+                .effectiveBadges.contains(com.example.model.BadgeType.BOOYAH_MASTER)
+        )
+        composeTestRule.onNodeWithTag("player_profile_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // Admin clicking Owner's welcome message PFP must NOT see badge editing controls on Owner
+        val ownerMsgId = repo.globalChatMessages.value.first().id
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_$ownerMsgId"))
+        composeTestRule.onNodeWithTag("global_chat_pfp_$ownerMsgId").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("player_profile_dialog").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("profile_toggle_badge_picker_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("player_profile_close_btn").performClick()
+        composeTestRule.waitForIdle()
+
+        // 3. Reset app for fresh download restores clean initial state
+        viewModel.resetAppForFreshDownload()
+        composeTestRule.waitForIdle()
+        assertFalse(viewModel.isLoggedIn.value)
+        assertEquals(1, repo.registeredUsers.value.size)
+        assertEquals("11410365896", repo.registeredUsers.value.first().uid)
+        assertTrue(repo.leaderboard.value.isEmpty())
+        assertTrue(repo.myBookings.value.isEmpty())
     }
 }
 

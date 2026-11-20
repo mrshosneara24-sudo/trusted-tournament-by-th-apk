@@ -1,6 +1,8 @@
 package com.example.ui.components
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,25 +25,36 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -74,29 +87,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.ConfirmationNumber
-import androidx.compose.material.icons.filled.MilitaryTech
-import androidx.compose.material.icons.filled.RemoveCircleOutline
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.R
+import com.example.model.AppCustomization
 import com.example.model.AppUser
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.DepositRequest
+import com.example.model.MatchResult
+import com.example.model.ModerationLogEntry
+import com.example.model.RequestStatus
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
 import com.example.model.UserProfile
@@ -106,9 +121,19 @@ import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
+import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.FireOrange
+import com.example.ui.theme.FireRed
+import com.example.ui.theme.FireWaterBorderGradient
+import com.example.ui.theme.FireWaterHeaderGradient
+import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.VictoryGreen
+import com.example.ui.theme.WaterBlue
+import com.example.ui.theme.WaterCyan
 
 @Composable
 fun OwnerControlDialog(
@@ -126,6 +151,9 @@ fun OwnerControlDialog(
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
     onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit = {},
+    onCancelLegacySlot: (matchId: String, slotNumber: Int) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onAddManualSlot: (matchId: String, slotNumber: Int, ign: String, uid: String, phone: String, feePaid: Int) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    onUpdateMatchSlotCapacity: (matchId: String, newCapacity: Int) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onCancelMatchAndRefundAll: (matchId: String) -> Unit = {},
     onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean = { _, _, _, _ -> false },
     onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean = { _, _ -> false },
@@ -138,7 +166,30 @@ fun OwnerControlDialog(
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
-    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    moderationLogs: List<ModerationLogEntry> = emptyList(),
+    onWarnUser: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onClearWarnings: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onTimeoutUser: (targetKey: String, durationMinutes: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onRemoveTimeout: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onMuteChat: (targetKey: String, durationHours: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onUnmuteChat: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onSetMatchBan: (targetKey: String, banned: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onSetWalletFreeze: (targetKey: String, frozen: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onTempBanUser: (targetKey: String, days: Int, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onPermBanWithResult: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onUnbanUserWithResult: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onGrantBadgeResult: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onRevokeBadgeResult: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onStripAllBadges: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onPardonAll: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    appCustomization: AppCustomization = AppCustomization(),
+    results: List<MatchResult> = emptyList(),
+    onPublishAnnouncement: (title: String, message: String, isUrgent: Boolean) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" },
+    onPublishMatchResult: (matchId: String, winnerTargetKey: String, winnerKills: Int, customPrizeAmount: Int?, runnerUpIgn: String, markMatchFinished: Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    onAwardPlayerStats: (targetKey: String, killsToAdd: Int, winsToAdd: Int, matchesToAdd: Int, prizeAmount: Int, note: String) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    onResetAppForFreshDownload: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var isUnlocked by remember { mutableStateOf(userProfile.role == UserRole.OWNER) }
@@ -152,9 +203,9 @@ fun OwnerControlDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.96f)
-                .heightIn(max = 760.dp)
+                .heightIn(max = 820.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .border(2.dp, FlameYellow, RoundedCornerShape(24.dp))
+                .border(2.dp, FireWaterBorderGradient, RoundedCornerShape(24.dp))
                 .testTag("owner_control_dialog"),
             color = DarkSurface
         ) {
@@ -197,6 +248,9 @@ fun OwnerControlDialog(
                     onDemoteAdmin = onDemoteAdmin,
                     onUpdateMasterPin = onUpdateMasterPin,
                     onCancelSlotAndRefund = onCancelSlotAndRefund,
+                    onCancelLegacySlot = onCancelLegacySlot,
+                    onAddManualSlot = onAddManualSlot,
+                    onUpdateMatchSlotCapacity = onUpdateMatchSlotCapacity,
                     onCancelMatchAndRefundAll = onCancelMatchAndRefundAll,
                     onAdjustUserBalance = onAdjustUserBalance,
                     onIncrementUserMatchesPlayed = onIncrementUserMatchesPlayed,
@@ -209,7 +263,30 @@ fun OwnerControlDialog(
                     badgeAppeals = badgeAppeals,
                     onApproveBadgeAppeal = onApproveBadgeAppeal,
                     onDenyBadgeAppeal = onDenyBadgeAppeal,
-                    onSendAppealChat = onSendAppealChat
+                    onSendAppealChat = onSendAppealChat,
+                    moderationLogs = moderationLogs,
+                    onWarnUser = onWarnUser,
+                    onClearWarnings = onClearWarnings,
+                    onTimeoutUser = onTimeoutUser,
+                    onRemoveTimeout = onRemoveTimeout,
+                    onMuteChat = onMuteChat,
+                    onUnmuteChat = onUnmuteChat,
+                    onSetMatchBan = onSetMatchBan,
+                    onSetWalletFreeze = onSetWalletFreeze,
+                    onTempBanUser = onTempBanUser,
+                    onPermBanWithResult = onPermBanWithResult,
+                    onUnbanUserWithResult = onUnbanUserWithResult,
+                    onGrantBadgeResult = onGrantBadgeResult,
+                    onRevokeBadgeResult = onRevokeBadgeResult,
+                    onStripAllBadges = onStripAllBadges,
+                    onPardonAll = onPardonAll,
+                    appCustomization = appCustomization,
+                    results = results,
+                    onPublishAnnouncement = onPublishAnnouncement,
+                    onClearAnnouncement = onClearAnnouncement,
+                    onPublishMatchResult = onPublishMatchResult,
+                    onAwardPlayerStats = onAwardPlayerStats,
+                    onResetAppForFreshDownload = onResetAppForFreshDownload
                 )
             }
         }
@@ -373,6 +450,9 @@ private fun OwnerDashboardContent(
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
     onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit,
+    onCancelLegacySlot: (matchId: String, slotNumber: Int) -> Pair<Boolean, String>,
+    onAddManualSlot: (matchId: String, slotNumber: Int, ign: String, uid: String, phone: String, feePaid: Int) -> Pair<Boolean, String>,
+    onUpdateMatchSlotCapacity: (matchId: String, newCapacity: Int) -> Pair<Boolean, String>,
     onCancelMatchAndRefundAll: (matchId: String) -> Unit,
     onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean,
     onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean,
@@ -385,18 +465,50 @@ private fun OwnerDashboardContent(
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
-    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    moderationLogs: List<ModerationLogEntry> = emptyList(),
+    onWarnUser: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onClearWarnings: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onTimeoutUser: (targetKey: String, durationMinutes: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onRemoveTimeout: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onMuteChat: (targetKey: String, durationHours: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onUnmuteChat: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onSetMatchBan: (targetKey: String, banned: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onSetWalletFreeze: (targetKey: String, frozen: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onTempBanUser: (targetKey: String, days: Int, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onPermBanWithResult: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onUnbanUserWithResult: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onGrantBadgeResult: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onRevokeBadgeResult: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onStripAllBadges: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onPardonAll: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    appCustomization: AppCustomization = AppCustomization(),
+    results: List<MatchResult> = emptyList(),
+    onPublishAnnouncement: (title: String, message: String, isUrgent: Boolean) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" },
+    onPublishMatchResult: (matchId: String, winnerTargetKey: String, winnerKills: Int, customPrizeAmount: Int?, runnerUpIgn: String, markMatchFinished: Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    onAwardPlayerStats: (targetKey: String, killsToAdd: Int, winsToAdd: Int, matchesToAdd: Int, prizeAmount: Int, note: String) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    onResetAppForFreshDownload: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
+    val pendingDepWdrCount = remember(depositRequests, withdrawRequests) {
+        depositRequests.count { it.status == RequestStatus.PENDING } +
+            withdrawRequests.count { it.status == RequestStatus.PENDING }
+    }
+    val bannedUsersCount = remember(allUsers) { allUsers.count { it.isBanned } }
+    val requestsTabTitle = if (pendingDepWdrCount > 0) "💳 ডিপোজিট/উইথড্র ($pendingDepWdrCount)" else "💳 ডিপোজিট/উইথড্র"
     val badgeTabTitle = if (pendingBadgeAppealsCount > 0) "🏅 ব্যাজ কন্ট্রোল ($pendingBadgeAppealsCount)" else "🏅 ব্যাজ কন্ট্রোল"
     val tabs = listOf(
         "💰 ব্যালেন্স",
-        "💳 ডিপোজিট/উইথড্র",
+        requestsTabTitle,
         badgeTabTitle,
+        "🛡️ মডারেশন",
         "🚫 ফ্রড ব্যান",
         "🛡️ অ্যাডমিন নিয়োগ",
         "🎟️ স্লট ও রিফান্ড",
+        "🏆 রেজাল্ট ও প্রাইজ",
+        "📢 ঘোষণা",
         "📖 ওনার গাইড",
         "⚙️ সেটিংস"
     )
@@ -404,53 +516,127 @@ private fun OwnerDashboardContent(
         "owner_tab_balance",
         "owner_tab_requests",
         "owner_tab_badges",
+        "owner_tab_moderation",
         "owner_tab_ban",
         "owner_tab_admins",
         "owner_tab_slots",
+        "owner_tab_results",
+        "owner_tab_announcement",
         "owner_tab_guide",
         "owner_tab_settings"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Royal Top Header
-        Surface(
-            color = DarkCard,
-            modifier = Modifier.fillMaxWidth()
+        // Fire & Water Top Header + Live Command Overview Strip
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(FireWaterHeaderGradient)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(FlameYellow.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("👑", fontSize = 20.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(FlameYellow.copy(alpha = 0.16f))
+                                .border(1.2.dp, FlameYellow.copy(alpha = 0.7f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.badge_owner_logo),
+                                contentDescription = "Official Owner Crown",
+                                modifier = Modifier.size(24.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "TH ওনার কন্ট্রোল প্যানেল",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = DisplayFontFamily,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = FlameYellow
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = VictoryGreen.copy(alpha = 0.2f),
+                                    border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.55f))
+                                ) {
+                                    Text(
+                                        text = "LIVE",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = MonoFontFamily,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 9.sp
+                                        ),
+                                        color = VictoryGreen,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "ব্যালেন্স, ব্যাজ, ডিপোজিট/উইথড্র ও সম্পূর্ণ নিয়ন্ত্রণ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.75f)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "TH ওনার কন্ট্রোল প্যানেল",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                            color = FlameYellow
-                        )
-                        Text(
-                            text = "ব্যালেন্স, ব্যাজ, ডিপোজিট/উইথড্র ও সম্পূর্ণ নিয়ন্ত্রণ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
 
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 4-Tile Command Overview Strip
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("owner_command_overview"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OwnerOverviewTile(
+                        label = "মোট ইউজার",
+                        value = "${allUsers.size}",
+                        accent = FlameCyan,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OwnerOverviewTile(
+                        label = "পেন্ডিং রিকোয়েস্ট",
+                        value = "${pendingDepWdrCount + pendingBadgeAppealsCount}",
+                        accent = if (pendingDepWdrCount + pendingBadgeAppealsCount > 0) FlameYellow else VictoryGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OwnerOverviewTile(
+                        label = "মোট বুকিং",
+                        value = "${allBookings.size}",
+                        accent = VictoryGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OwnerOverviewTile(
+                        label = "ব্যানড ইউজার",
+                        value = "$bannedUsersCount",
+                        accent = if (bannedUsersCount > 0) FireRed else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -535,24 +721,91 @@ private fun OwnerDashboardContent(
                     onDenyBadgeAppeal = onDenyBadgeAppeal,
                     onSendAppealChat = onSendAppealChat
                 )
-                3 -> FraudBanTab(
+                3 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        ModerationPanelSection(
+                            actorRole = UserRole.OWNER,
+                            allUsers = allUsers,
+                            moderationLogs = moderationLogs,
+                            onWarnUser = onWarnUser,
+                            onClearWarnings = onClearWarnings,
+                            onTimeoutUser = onTimeoutUser,
+                            onRemoveTimeout = onRemoveTimeout,
+                            onMuteChat = onMuteChat,
+                            onUnmuteChat = onUnmuteChat,
+                            onSetMatchBan = onSetMatchBan,
+                            onSetWalletFreeze = onSetWalletFreeze,
+                            onTempBanUser = onTempBanUser,
+                            onPermBanUser = onPermBanWithResult,
+                            onUnbanUser = onUnbanUserWithResult,
+                            onGrantBadge = onGrantBadgeResult,
+                            onRevokeBadge = onRevokeBadgeResult,
+                            onStripAllBadges = onStripAllBadges,
+                            onPardonAll = onPardonAll
+                        )
+                    }
+                }
+                4 -> FraudBanTab(
                     users = allUsers,
                     onBanUser = onBanUser,
                     onUnbanUser = onUnbanUser
                 )
-                4 -> AdminManagementTab(
+                5 -> AdminManagementTab(
                     users = allUsers,
                     onPromoteToAdmin = onPromoteToAdmin,
                     onDemoteAdmin = onDemoteAdmin
                 )
-                5 -> SlotRefundControlTab(
+                6 -> SlotRefundControlTab(
                     bookings = allBookings,
                     matches = matches,
                     onCancelSlotAndRefund = onCancelSlotAndRefund,
+                    onCancelLegacySlot = onCancelLegacySlot,
+                    onAddManualSlot = onAddManualSlot,
+                    onUpdateMatchSlotCapacity = onUpdateMatchSlotCapacity,
                     onCancelMatchAndRefundAll = onCancelMatchAndRefundAll
                 )
-                6 -> OwnerInstructionsGuideTab()
-                7 -> OwnerSettingsTab(onUpdateMasterPin = onUpdateMasterPin)
+                7 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        OwnerMatchResultAndCommandSection(
+                            matches = matches,
+                            allBookings = allBookings,
+                            allUsers = allUsers,
+                            results = results,
+                            onPublishMatchResult = onPublishMatchResult,
+                            onAwardPlayerStats = onAwardPlayerStats
+                        )
+                    }
+                }
+                8 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        LiveAnnouncementControlSection(
+                            actorRole = UserRole.OWNER,
+                            appCustomization = appCustomization,
+                            onPublishAnnouncement = onPublishAnnouncement,
+                            onClearAnnouncement = onClearAnnouncement
+                        )
+                    }
+                }
+                9 -> OwnerInstructionsGuideTab()
+                10 -> OwnerSettingsTab(
+                    onUpdateMasterPin = onUpdateMasterPin,
+                    onResetAppForFreshDownload = {
+                        onResetAppForFreshDownload()
+                        onDismiss()
+                    }
+                )
             }
         }
     }
@@ -613,7 +866,7 @@ private fun FraudBanTab(
                 StatChip(
                     title = "ব্যানড ফ্রড",
                     value = "$bannedCount জন",
-                    color = BkashPink,
+                    color = FireRed,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -647,7 +900,7 @@ private fun FraudBanTab(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Block, contentDescription = null, tint = BkashPink, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Block, contentDescription = null, tint = FireRed, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "সরাসরি নম্বর/UID দিয়ে ফ্রড ব্যান করুন",
@@ -692,7 +945,7 @@ private fun FraudBanTab(
                                 manualReasonInput = ""
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
+                        colors = ButtonDefaults.buttonColors(containerColor = FireRed),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -740,7 +993,7 @@ private fun FraudBanTab(
             onDismissRequest = { userToBan = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Block, contentDescription = null, tint = BkashPink)
+                    Icon(Icons.Filled.Block, contentDescription = null, tint = FireRed)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "ইউজার ব্যান নিশ্চিতকরণ",
@@ -801,7 +1054,7 @@ private fun FraudBanTab(
                         onBanUser(target.phone, finalReason)
                         userToBan = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BkashPink)
+                    colors = ButtonDefaults.buttonColors(containerColor = FireRed)
                 ) {
                     Text("হ্যাঁ, চিরতরে ব্যান করুন", color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -829,11 +1082,11 @@ private fun UserBanCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (user.isBanned) BkashPink.copy(alpha = 0.12f) else DarkCard
+            containerColor = if (user.isBanned) FireRed.copy(alpha = 0.12f) else DarkCard
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (user.isBanned) BkashPink else DarkBorder
+            if (user.isBanned) FireRed else DarkBorder
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -872,7 +1125,7 @@ private fun UserBanCard(
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (user.isBanned) BkashPink else VictoryGreen
+                    color = if (user.isBanned) FireRed else VictoryGreen
                 ) {
                     Text(
                         text = if (user.isBanned) "🔴 ব্যানড" else "🟢 সক্রিয়",
@@ -912,7 +1165,7 @@ private fun UserBanCard(
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = BkashPink.copy(alpha = 0.2f),
+                    color = FireRed.copy(alpha = 0.2f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
@@ -959,7 +1212,7 @@ private fun UserBanCard(
                     } else {
                         Button(
                             onClick = onInitiateBan,
-                            colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
+                            colors = ButtonDefaults.buttonColors(containerColor = FireRed),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
@@ -1202,8 +1455,8 @@ private fun AdminManagementTab(
                     if (admin.role == UserRole.ADMIN) {
                         OutlinedButton(
                             onClick = { onDemoteAdmin(admin.phone) },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BkashPink),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = FireRed),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, FireRed),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -1330,19 +1583,58 @@ private fun GuideStepCard(
     }
 }
 
+@Composable
+private fun OwnerOverviewTile(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = Color.Black.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Black
+                ),
+                color = accent,
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = Color.White.copy(alpha = 0.75f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
 // ==========================================
 // TAB 4: OWNER MASTER SETTINGS
 // ==========================================
 @Composable
 private fun OwnerSettingsTab(
-    onUpdateMasterPin: (newPin: String) -> Boolean
+    onUpdateMasterPin: (newPin: String) -> Boolean,
+    onResetAppForFreshDownload: () -> Unit = {}
 ) {
     var newPinInput by remember { mutableStateOf("") }
+    var showFreshResetConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -1423,6 +1715,90 @@ private fun OwnerSettingsTab(
                 Text("• ম্যাচ সময়সূচী: বিকাল ৫:০০ - রাত ৮:০০ (সুপারফাস্ট এক্সপ্রেস)", style = MaterialTheme.typography.bodySmall, color = FlameYellow)
             }
         }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("owner_prepare_download_card"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkCard),
+            border = BorderStroke(1.2.dp, FireWaterBorderGradient)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null, tint = WaterCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "🔄 রিসেট ও ডাউনলোডের জন্য প্রস্তুত করুন",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                        color = FlameYellow
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "APK/AAB এক্সপোর্ট বা শেয়ার করার আগে সব টেস্ট ইউজার, পেন্ডিং রিকোয়েস্ট, বুকিং ও অস্থায়ী ডেটা মুছে একদম ফ্রেশ ডাউনলোড স্টেটে ফিরিয়ে নিন:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.82f),
+                    lineHeight = 17.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("✓ ওনার প্রোফাইল ক্লিন ও ভেরিফাইড থাকবে", style = MaterialTheme.typography.labelSmall, color = VictoryGreen)
+                Text("✓ ৮টি জিরো-টলারেন্স টুর্নামেন্ট রুলস সক্রিয় থাকবে", style = MaterialTheme.typography.labelSmall, color = VictoryGreen)
+                Text("✓ সব ম্যাচ ০ স্লট ও টেস্ট লেনদেন সম্পূর্ণ ক্লিয়ার হবে", style = MaterialTheme.typography.labelSmall, color = VictoryGreen)
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { showFreshResetConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("owner_fresh_reset_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = FireRed, contentColor = Color.White)
+                ) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("ফ্রেশ রিসেট ও ডাউনলোড রেডি করুন", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
+    if (showFreshResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFreshResetConfirm = false },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "ফ্রেশ রিসেট নিশ্চিত করবেন?",
+                    fontWeight = FontWeight.Black,
+                    color = FlameYellow
+                )
+            },
+            text = {
+                Text(
+                    text = "সব টেস্ট প্লেয়ার, স্লট বুকিং, ডিপোজিট/উইথড্র রিকোয়েস্ট এবং লিডারবোর্ড মুছে অ্যাপটি ডাউনলোড-রেডি অবস্থায় রিসেট হয়ে যাবে।",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.88f)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFreshResetConfirm = false
+                        onResetAppForFreshDownload()
+                        Toast.makeText(context, "🔄 অ্যাপ ডাউনলোড-রেডি ফ্রেশ অবস্থায় রিসেট হয়েছে!", Toast.LENGTH_LONG).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = FireRed, contentColor = Color.White)
+                ) {
+                    Text("হ্যাঁ, রিসেট করুন", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFreshResetConfirm = false }) {
+                    Text("বাতিল", color = Color.White.copy(alpha = 0.7f))
+                }
+            }
+        )
     }
 }
 
@@ -1450,18 +1826,58 @@ private fun StatChip(
 }
 
 // ==========================================
-// TAB 3: SLOT CANCELLATION & AUTOMATIC REFUND
+// TAB 3: SLOT ADD, CAPACITY, REMOVE & AUTOMATIC REFUND
 // ==========================================
 @Composable
 private fun SlotRefundControlTab(
     bookings: List<SlotBooking>,
     matches: List<TournamentMatch>,
     onCancelSlotAndRefund: (bookingId: String) -> Unit,
+    onCancelLegacySlot: (matchId: String, slotNumber: Int) -> Pair<Boolean, String>,
+    onAddManualSlot: (matchId: String, slotNumber: Int, ign: String, uid: String, phone: String, feePaid: Int) -> Pair<Boolean, String>,
+    onUpdateMatchSlotCapacity: (matchId: String, newCapacity: Int) -> Pair<Boolean, String>,
     onCancelMatchAndRefundAll: (matchId: String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var bookingToCancel by remember { mutableStateOf<SlotBooking?>(null) }
+    var legacySlotToCancel by remember { mutableStateOf<Pair<TournamentMatch, Int>?>(null) }
     var matchToCancel by remember { mutableStateOf<TournamentMatch?>(null) }
+    var feedbackBanner by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    var selectedMatchId by remember(matches) {
+        mutableStateOf(matches.firstOrNull()?.id ?: "")
+    }
+    val selectedMatch = remember(matches, selectedMatchId) {
+        matches.firstOrNull { it.id == selectedMatchId } ?: matches.firstOrNull()
+    }
+
+    val matchBookingsMap = remember(bookings, selectedMatch) {
+        if (selectedMatch == null) emptyMap()
+        else bookings.filter { it.matchId == selectedMatch.id }.associateBy { it.slotNumber }
+    }
+    val occupiedSlotSet = remember(selectedMatch, matchBookingsMap) {
+        if (selectedMatch == null) emptySet()
+        else {
+            val set = matchBookingsMap.keys.toMutableSet()
+            var candidate = 1
+            while (set.size < selectedMatch.bookedSlots && candidate <= selectedMatch.totalSlots) {
+                if (candidate !in set) set.add(candidate)
+                candidate++
+            }
+            set.toSet()
+        }
+    }
+    val firstFreeSlot = remember(selectedMatch, occupiedSlotSet) {
+        if (selectedMatch == null) 1
+        else (1..selectedMatch.totalSlots).firstOrNull { it !in occupiedSlotSet } ?: 1
+    }
+
+    var slotNumInput by remember(selectedMatch?.id, firstFreeSlot) {
+        mutableStateOf(firstFreeSlot.toString())
+    }
+    var playerIgnInput by remember { mutableStateOf("") }
+    var playerUidInput by remember { mutableStateOf("") }
+    var playerPhoneInput by remember { mutableStateOf("") }
 
     val filteredBookings = remember(bookings, searchQuery) {
         if (searchQuery.isBlank()) bookings
@@ -1478,50 +1894,463 @@ private fun SlotRefundControlTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(14.dp)
+            .testTag("owner_slot_control_list"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Explanation Banner
+        // Fire & Water Slot Control Banner
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkCard),
-                border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
+                border = BorderStroke(1.5.dp, FireWaterBorderGradient)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(FireWaterHeaderGradient)
+                        .padding(14.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
-                                .background(FlameOrange.copy(alpha = 0.2f)),
+                                .background(FlameOrange.copy(alpha = 0.22f))
+                                .border(1.dp, WaterCyan.copy(alpha = 0.6f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("🎟️", fontSize = 16.sp)
+                            Text("🎟️", fontSize = 18.sp)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ওনার স্লট বাতিল ও অটো-রিফান্ড সিস্টেম",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                text = "ফায়ার ও ওয়াটার স্লট অ্যাড, রিমুভ ও রিফান্ড কন্ট্রোল",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                                 color = FlameYellow
                             )
                             Text(
-                                text = "সরাসরি প্লেয়ারের ওয়ালেটে ১০০% টাকা ক্যাশব্যাক",
+                                text = "ম্যানুয়াল স্লট যোগ • ক্যাপাসিটি +/− • রিমুভ করলে প্লেয়ারের ওয়ালেটে ১০০% রিফান্ড • লাইভ ক্লাউড সিঙ্ক",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = VictoryGreen
+                                color = WaterCyan
                             )
                         }
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+        // Action Feedback Banner
+        feedbackBanner?.let { (isOk, msg) ->
+            item {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isOk) VictoryGreen.copy(alpha = 0.16f) else FireRed.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, if (isOk) VictoryGreen else FireRed),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("owner_slot_feedback_banner")
+                ) {
                     Text(
-                        text = "ওনার হিসেবে আপনি যেকোনো অসাধু, ফেক TrxID বা অপ্রয়োজনীয় স্লট বাতিল করতে পারেন। বাতিল বাটনে চাপ দেওয়ার সাথে সাথে প্লেয়ারের ওয়ালেটে স্বয়ংক্রিয়ভাবে বুকিং ফি রিফান্ড হয়ে যাবে এবং স্লটটি খালি হয়ে যাবে।",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f),
-                        lineHeight = 18.sp
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
                     )
+                }
+            }
+        }
+
+        // Match Selector + Slot Capacity Adjuster + Interactive Grid + Slot Add
+        if (matches.isNotEmpty() && selectedMatch != null) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "১) ম্যাচ নির্বাচন করুন (${matches.size}টি):",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = FlameYellow
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        matches.forEach { m ->
+                            val isSelected = m.id == selectedMatch.id
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) Color(0xFF1F1209) else DarkCard,
+                                border = BorderStroke(
+                                    1.2.dp,
+                                    if (isSelected) WaterCyan else DarkBorder
+                                ),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        selectedMatchId = m.id
+                                        feedbackBanner = null
+                                    }
+                                    .testTag("owner_slot_match_chip_${m.id}")
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Text(
+                                        text = m.title,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) FlameYellow else Color.White
+                                    )
+                                    Text(
+                                        text = "স্লট: ${m.bookedSlots}/${m.totalSlots} • ফি ৳${m.entryFee}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isSelected) WaterCyan else Color.White.copy(alpha = 0.65f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Capacity +/- Control Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = BorderStroke(1.dp, WaterCyan.copy(alpha = 0.45f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "🎟️ মোট স্লট ক্যাপাসিটি (+ / −)",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = WaterCyan
+                                )
+                                Text(
+                                    text = "বর্তমান বুকড: ${selectedMatch.bookedSlots} • মোট স্লট: ${selectedMatch.totalSlots}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val next = (selectedMatch.totalSlots - 2).coerceAtLeast(selectedMatch.bookedSlots.coerceAtLeast(2))
+                                        feedbackBanner = onUpdateMatchSlotCapacity(selectedMatch.id, next)
+                                    },
+                                    enabled = selectedMatch.totalSlots > selectedMatch.bookedSlots.coerceAtLeast(2),
+                                    colors = ButtonDefaults.buttonColors(containerColor = FireRed),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .height(48.dp)
+                                        .testTag("owner_slot_capacity_dec_btn")
+                                ) {
+                                    Icon(Icons.Filled.Remove, contentDescription = "Decrease slots", tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Text("-২", fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                                Text(
+                                    text = "${selectedMatch.totalSlots}",
+                                    fontFamily = MonoFontFamily,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = FlameYellow,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        val next = (selectedMatch.totalSlots + 2).coerceAtMost(100)
+                                        feedbackBanner = onUpdateMatchSlotCapacity(selectedMatch.id, next)
+                                    },
+                                    enabled = selectedMatch.totalSlots < 100,
+                                    colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .height(48.dp)
+                                        .testTag("owner_slot_capacity_inc_btn")
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = "Increase slots", tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Text("+২", fontWeight = FontWeight.Black, color = Color.Black)
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(2, 12, 24, 48, 52, 60).forEach { preset ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selectedMatch.totalSlots == preset) FlameYellow else DarkSurface,
+                                    border = BorderStroke(1.dp, if (selectedMatch.totalSlots == preset) FlameYellow else DarkBorder),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            feedbackBanner = onUpdateMatchSlotCapacity(selectedMatch.id, preset)
+                                        }
+                                ) {
+                                    Text(
+                                        text = "$preset স্লট",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (selectedMatch.totalSlots == preset) Color.Black else Color.White,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Interactive Visual Slot Grid (Tap green = pick for Add, Tap red = Remove & Refund)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = BorderStroke(1.dp, FlameOrange.copy(alpha = 0.45f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.GridView, contentDescription = null, tint = FlameYellow, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "লাইভ স্লট গ্রিড (সবুজ=যোগ, লাল=রিমুভ)",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+                            Text(
+                                text = "${occupiedSlotSet.size}/${selectedMatch.totalSlots}",
+                                fontFamily = MonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = WaterCyan,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        val slotRows = (1..selectedMatch.totalSlots).toList().chunked(6)
+                        slotRows.forEach { rowSlots ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                rowSlots.forEach { slotNum ->
+                                    val booking = matchBookingsMap[slotNum]
+                                    val isOccupied = slotNum in occupiedSlotSet
+                                    val isChosen = slotNumInput.toIntOrNull() == slotNum && !isOccupied
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .clip(RoundedCornerShape(9.dp))
+                                            .background(
+                                                when {
+                                                    isOccupied -> Color(0xFF3A1019)
+                                                    isChosen -> Color(0xFF0A3242)
+                                                    else -> Color(0xFF0D2820)
+                                                }
+                                            )
+                                            .border(
+                                                width = if (isChosen) 1.5.dp else 1.dp,
+                                                color = when {
+                                                    isOccupied -> FireRed
+                                                    isChosen -> WaterCyan
+                                                    else -> VictoryGreen.copy(alpha = 0.65f)
+                                                },
+                                                shape = RoundedCornerShape(9.dp)
+                                            )
+                                            .clickable {
+                                                if (isOccupied) {
+                                                    if (booking != null) {
+                                                        bookingToCancel = booking
+                                                    } else {
+                                                        legacySlotToCancel = selectedMatch to slotNum
+                                                    }
+                                                } else {
+                                                    slotNumInput = slotNum.toString()
+                                                    feedbackBanner = null
+                                                }
+                                            }
+                                            .testTag("owner_slot_tile_$slotNum"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = "#$slotNum",
+                                                fontFamily = MonoFontFamily,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (isOccupied) Color(0xFFFCA5A5) else if (isChosen) WaterCyan else VictoryGreen
+                                            )
+                                            Text(
+                                                text = if (isOccupied) (booking?.playerIgn?.take(4) ?: "রিমুভ") else "ফাঁকা",
+                                                fontSize = 8.sp,
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                repeat(6 - rowSlots.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Manual Slot Add Form Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.55f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.AddCircle, contentDescription = null, tint = VictoryGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "➕ স্লট অ্যাড প্যানেল (${selectedMatch.title})",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
+                                color = VictoryGreen
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = slotNumInput,
+                                onValueChange = { slotNumInput = it.filter { c -> c.isDigit() } },
+                                label = { Text("স্লট #") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(0.32f)
+                                    .testTag("owner_add_slot_num_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = WaterCyan,
+                                    unfocusedBorderColor = DarkBorder,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                            OutlinedTextField(
+                                value = playerIgnInput,
+                                onValueChange = { playerIgnInput = it },
+                                label = { Text("প্লেয়ার IGN") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(0.68f)
+                                    .testTag("owner_add_slot_ign_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = WaterCyan,
+                                    unfocusedBorderColor = DarkBorder,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = playerUidInput,
+                                onValueChange = { playerUidInput = it },
+                                label = { Text("গেম UID") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(0.5f)
+                                    .testTag("owner_add_slot_uid_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = WaterCyan,
+                                    unfocusedBorderColor = DarkBorder,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                            OutlinedTextField(
+                                value = playerPhoneInput,
+                                onValueChange = { playerPhoneInput = it },
+                                label = { Text("ফোন / বিকাশ") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(0.5f)
+                                    .testTag("owner_add_slot_phone_input"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = WaterCyan,
+                                    unfocusedBorderColor = DarkBorder,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val parsedSlot = slotNumInput.toIntOrNull() ?: firstFreeSlot
+                                val res = onAddManualSlot(
+                                    selectedMatch.id,
+                                    parsedSlot,
+                                    playerIgnInput.ifBlank { "VIP_PLAYER" },
+                                    playerUidInput.ifBlank { "0000000000" },
+                                    playerPhoneInput,
+                                    selectedMatch.entryFee
+                                )
+                                feedbackBanner = res
+                                if (res.first) {
+                                    playerIgnInput = ""
+                                    playerUidInput = ""
+                                    playerPhoneInput = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("owner_add_slot_btn")
+                        ) {
+                            Icon(Icons.Filled.AddCircle, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "✅ স্লট #${slotNumInput.ifBlank { firstFreeSlot.toString() }} যোগ ও ক্লাউড সিঙ্ক করুন",
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1598,7 +2427,7 @@ private fun SlotRefundControlTab(
                 )
                 if (filteredBookings.isNotEmpty()) {
                     Text(
-                        text = "১-ক্লিকে রিফান্ড",
+                        text = "১-ক্লিকে রিমুভ ও রিফান্ড",
                         style = MaterialTheme.typography.labelSmall,
                         color = FlameOrange
                     )
@@ -1905,6 +2734,7 @@ private fun SlotRefundControlTab(
                 Button(
                     onClick = {
                         onCancelSlotAndRefund(booking.bookingId)
+                        feedbackBanner = true to "✅ ${booking.playerIgn}-এর স্লট #${booking.slotNumber} বাতিল ও রিফান্ড হয়েছে!"
                         bookingToCancel = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
@@ -1916,6 +2746,46 @@ private fun SlotRefundControlTab(
             },
             dismissButton = {
                 TextButton(onClick = { bookingToCancel = null }) {
+                    Text("ফিরে যান", color = Color.White.copy(alpha = 0.7f))
+                }
+            },
+            containerColor = DarkSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Confirmation Dialog for Legacy / Occupied Slot Removal
+    legacySlotToCancel?.let { (match, slotNum) ->
+        AlertDialog(
+            onDismissRequest = { legacySlotToCancel = null },
+            title = {
+                Text(
+                    text = "স্লট #$slotNum রিমুভ করবেন?",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = FireRed
+                )
+            },
+            text = {
+                Text(
+                    text = "ম্যাচ: ${match.title}\nস্লট #$slotNum খালি ও রিসেট করা হবে।",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        feedbackBanner = onCancelLegacySlot(match.id, slotNum)
+                        legacySlotToCancel = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("হ্যাঁ, স্লট রিমুভ করুন", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { legacySlotToCancel = null }) {
                     Text("ফিরে যান", color = Color.White.copy(alpha = 0.7f))
                 }
             },
@@ -2206,10 +3076,10 @@ private fun BadgeManagementTab(
             item {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isSuccess) VictoryGreen.copy(alpha = 0.16f) else BkashPink.copy(alpha = 0.18f),
+                    color = if (isSuccess) VictoryGreen.copy(alpha = 0.16f) else FireRed.copy(alpha = 0.18f),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (isSuccess) VictoryGreen else BkashPink
+                        if (isSuccess) VictoryGreen else FireRed
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2375,12 +3245,12 @@ private fun BadgeManagementTab(
                             },
                             enabled = cleanTarget.isNotBlank() && (matchedUser == null || userHasBadge),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = BkashPink,
+                                contentColor = FireRed,
                                 disabledContentColor = Color.White.copy(alpha = 0.3f)
                             ),
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
-                                if (cleanTarget.isNotBlank() && (matchedUser == null || userHasBadge)) BkashPink else DarkBorder
+                                if (cleanTarget.isNotBlank() && (matchedUser == null || userHasBadge)) FireRed else DarkBorder
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier

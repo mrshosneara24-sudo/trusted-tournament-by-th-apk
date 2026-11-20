@@ -1,6 +1,11 @@
 package com.example.ui.components
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -12,6 +17,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,12 +30,16 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
@@ -46,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -82,6 +94,7 @@ import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkElevated
+import com.example.ui.theme.FireRed
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
@@ -328,6 +341,7 @@ fun GlobalChatMessage.toPlayerProfileCard(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerProfileCardDialog(
     profile: PlayerProfileCardData,
@@ -338,14 +352,31 @@ fun PlayerProfileCardDialog(
     userProfileForAppeal: UserProfile? = null,
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
-    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null
+    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
+    viewerRole: UserRole = UserRole.PLAYER,
+    onGrantBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
+    onRevokeBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var showBadgeShowcase by remember { mutableStateOf(false) }
+    var showBadgePicker by remember(profile.userId, profile.uid) { mutableStateOf(false) }
+    var badgeFeedback by remember(profile.userId, profile.uid) { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var currentBadges by remember(profile.userId, profile.uid, profile.badges) { mutableStateOf(profile.badges) }
     var highlightedBadge by remember { mutableStateOf<BadgeType?>(null) }
     var localKudos by remember(profile.userId, profile.kudosCount) { mutableIntStateOf(profile.kudosCount) }
     var hasHypePop by remember { mutableStateOf(false) }
+
+    val canManageTargetBadges = (viewerRole == UserRole.OWNER || viewerRole == UserRole.ADMIN) &&
+        onGrantBadge != null &&
+        onRevokeBadge != null &&
+        !(profile.role == UserRole.OWNER && viewerRole == UserRole.ADMIN) &&
+        profile.uid != "STAFF-TH" &&
+        (profile.userId.isNotBlank() || (profile.uid.isNotBlank() && profile.uid != "N/A"))
+
+    val targetLookupKey = profile.userId.takeIf { it.isNotBlank() && it != "N/A" }
+        ?: profile.uid.takeIf { it.isNotBlank() && it != "N/A" }
+        ?: profile.ign
 
     val hypeScale by animateFloatAsState(
         targetValue = if (hasHypePop) 1.08f else 1f,
@@ -395,89 +426,49 @@ fun PlayerProfileCardDialog(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF111319)),
             border = BorderStroke(1.5.dp, accentBorderColor.copy(alpha = 0.75f))
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // 1. Esports Banner + Overlapping Circular Avatar
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    // Banner (Role & Prime-8 gated animated GIF / picture / app banner color)
-                    ProfileBannerBackground(
-                        role = profile.role,
-                        badges = profile.badges,
-                        customBannerUri = profile.customBannerUri,
-                        bannerColorId = profile.bannerColorId,
-                        isBanned = profile.isBanned,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(114.dp)
-                            .testTag("player_profile_banner")
-                    ) {
-                        // Top bar controls over banner
-                        Row(
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // 1. Esports Banner + Overlapping Circular Avatar
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // Banner (Role & Prime-8 gated animated GIF / picture / app banner color)
+                        ProfileBannerBackground(
+                            role = profile.role,
+                            badges = currentBadges,
+                            customBannerUri = profile.customBannerUri,
+                            bannerColorId = profile.bannerColorId,
+                            isBanned = profile.isBanned,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .height(114.dp)
+                                .testTag("player_profile_banner")
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = Color.Black.copy(alpha = 0.45f),
-                                border = BorderStroke(1.dp, accentBorderColor.copy(alpha = 0.6f))
+                            // Top-left tier badge over banner (close/edit pinned cleanly at TopEnd)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 10.dp, end = 92.dp, bottom = 10.dp),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = tierTitle,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = accentBorderColor,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (profile.isSelf && onEditOwnProfile != null) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.Black.copy(alpha = 0.5f),
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .clickable { onEditOwnProfile() }
-                                            .testTag("player_profile_edit_btn")
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Edit,
-                                                contentDescription = "Edit Profile",
-                                                tint = FlameYellow,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
                                 Surface(
-                                    shape = CircleShape,
-                                    color = Color.Black.copy(alpha = 0.5f),
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .clickable { onDismiss() }
-                                        .testTag("player_profile_close_btn")
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color.Black.copy(alpha = 0.45f),
+                                    border = BorderStroke(1.dp, accentBorderColor.copy(alpha = 0.6f))
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Close,
-                                            contentDescription = "Close",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Text(
+                                        text = tierTitle,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = accentBorderColor,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
                                 }
                             }
                         }
-                    }
 
                     // Bottom Banner Cutout & Overlapping Avatar Row
                     Row(
@@ -596,7 +587,7 @@ fun PlayerProfileCardDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (profile.badges.isNotEmpty() || profile.role != UserRole.PLAYER) {
+                            if (currentBadges.isNotEmpty() || profile.role != UserRole.PLAYER) {
                                 Icon(
                                     imageVector = Icons.Filled.Verified,
                                     contentDescription = "Verified",
@@ -752,11 +743,14 @@ fun PlayerProfileCardDialog(
                         }
                     }
 
-                    // 4. Interactive Animated Badges Card
+                    // 4. Interactive Animated Badges Card + Direct Staff Badge Role Picker
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = DarkCard,
-                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.35f)),
+                        border = BorderStroke(
+                            1.dp,
+                            if (showBadgePicker) FlameYellow.copy(alpha = 0.75f) else FlameYellow.copy(alpha = 0.35f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("player_profile_badges_card")
@@ -767,7 +761,10 @@ fun PlayerProfileCardDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Filled.MilitaryTech,
                                         contentDescription = null,
@@ -776,53 +773,182 @@ fun PlayerProfileCardDialog(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "অর্জিত ব্যাজসমূহ (${profile.badges.size})",
+                                        text = "অর্জিত ব্যাজসমূহ (${currentBadges.size})",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                                        color = FlameYellow
+                                        color = FlameYellow,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Text(
-                                    text = "গাইড দেখুন ›",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = FlameCyan,
-                                    modifier = Modifier.clickable {
-                                        if (onViewAllBadges != null) onViewAllBadges() else showBadgeShowcase = true
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (canManageTargetBadges) {
+                                        Surface(
+                                            onClick = { showBadgePicker = !showBadgePicker },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (showBadgePicker) {
+                                                VictoryGreen.copy(alpha = 0.18f)
+                                            } else {
+                                                FlameYellow.copy(alpha = 0.18f)
+                                            },
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (showBadgePicker) VictoryGreen else FlameYellow
+                                            ),
+                                            modifier = Modifier
+                                                .widthIn(min = 48.dp)
+                                                .heightIn(min = 36.dp)
+                                                .testTag("profile_toggle_badge_picker_btn")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (showBadgePicker) Icons.Filled.Check else Icons.Filled.Add,
+                                                    contentDescription = if (showBadgePicker) "ব্যাজ সিলেকশন সম্পন্ন" else "ব্যাজ যোগ করুন",
+                                                    tint = if (showBadgePicker) VictoryGreen else FlameYellow,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = if (showBadgePicker) "সম্পন্ন" else "ব্যাজ দিন",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    color = if (showBadgePicker) VictoryGreen else FlameYellow
+                                                )
+                                            }
+                                        }
                                     }
-                                )
+
+                                    Text(
+                                        text = "গাইড ›",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameCyan,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable {
+                                                if (onViewAllBadges != null) onViewAllBadges() else showBadgeShowcase = true
+                                            }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            if (profile.badges.isEmpty()) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = DarkElevated,
-                                    border = BorderStroke(1.dp, DarkBorder)
+                            if (currentBadges.isEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "🌱 নবাগত প্লেয়ার — ম্যাচ খেলে বা স্লট বুক করে প্রো ও ভি-ব্যাজ আনলক করুন!",
-                                        fontSize = 11.sp,
-                                        color = TextSecondary,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                                    )
+                                    if (canManageTargetBadges) {
+                                        Surface(
+                                            onClick = { showBadgePicker = !showBadgePicker },
+                                            shape = CircleShape,
+                                            color = FlameYellow.copy(alpha = 0.16f),
+                                            border = BorderStroke(1.2.dp, FlameYellow),
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .size(40.dp)
+                                                .testTag("profile_inline_add_badge_btn")
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Add,
+                                                    contentDescription = "ব্যাজ যোগ করুন",
+                                                    tint = FlameYellow,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = DarkElevated,
+                                        border = BorderStroke(1.dp, DarkBorder),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = if (canManageTargetBadges) {
+                                                "🌱 কোনো ব্যাজ নেই — '+' বাটনে ট্যাপ করে এই প্রোফাইলে ব্যাজ দিন!"
+                                            } else {
+                                                "🌱 নবাগত প্লেয়ার — ম্যাচ খেলে বা স্লট বুক করে প্রো ও ভি-ব্যাজ আনলক করুন!"
+                                            },
+                                            fontSize = 11.sp,
+                                            color = TextSecondary,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                        )
+                                    }
                                 }
                             } else {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    profile.badges.forEachIndexed { idx, badge ->
-                                        InteractiveProfileBadgeTile(
-                                            badge = badge,
-                                            staggerIndex = idx,
-                                            isHighlighted = highlightedBadge == badge,
-                                            onClick = {
-                                                highlightedBadge = if (highlightedBadge == badge) null else badge
+                                    if (canManageTargetBadges) {
+                                        Surface(
+                                            onClick = { showBadgePicker = !showBadgePicker },
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = if (showBadgePicker) {
+                                                VictoryGreen.copy(alpha = 0.16f)
+                                            } else {
+                                                FlameYellow.copy(alpha = 0.14f)
+                                            },
+                                            border = BorderStroke(
+                                                1.2.dp,
+                                                if (showBadgePicker) VictoryGreen else FlameYellow.copy(alpha = 0.85f)
+                                            ),
+                                            modifier = Modifier
+                                                .widthIn(min = 48.dp)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("profile_inline_add_badge_btn")
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (showBadgePicker) Icons.Filled.Check else Icons.Filled.Add,
+                                                    contentDescription = "ব্যাজ যোগ বা পরিবর্তন",
+                                                    tint = if (showBadgePicker) VictoryGreen else FlameYellow,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = if (showBadgePicker) "বন্ধ" else "+ যোগ",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    color = if (showBadgePicker) VictoryGreen else FlameYellow
+                                                )
                                             }
-                                        )
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        currentBadges.forEachIndexed { idx, badge ->
+                                            InteractiveProfileBadgeTile(
+                                                badge = badge,
+                                                staggerIndex = idx,
+                                                isHighlighted = highlightedBadge == badge,
+                                                onClick = {
+                                                    highlightedBadge = if (highlightedBadge == badge) null else badge
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                                 highlightedBadge?.let { selected ->
@@ -839,6 +965,122 @@ fun PlayerProfileCardDialog(
                                             color = Color.White,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                         )
+                                    }
+                                }
+                            }
+
+                            AnimatedVisibility(
+                                visible = canManageTargetBadges && showBadgePicker,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp)
+                                        .testTag("profile_badge_picker_panel")
+                                ) {
+                                    HorizontalDivider(color = DarkBorder)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "✨ রোল ও ব্যাজ সিলেক্টর — ট্যাপ করে যোগ বা রিমুভ করুন",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = FlameCyan
+                                    )
+                                    badgeFeedback?.let { (ok, msg) ->
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = (if (ok) VictoryGreen else FireRed).copy(alpha = 0.14f),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                (if (ok) VictoryGreen else FireRed).copy(alpha = 0.55f)
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("profile_badge_feedback_text")
+                                        ) {
+                                            Text(
+                                                text = msg,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (ok) VictoryGreen else FireRed,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        BadgeType.entries.forEach { badge ->
+                                            val isAssigned = badge in currentBadges
+                                            val badgeColor = Color(badge.hexColor)
+                                            Surface(
+                                                onClick = {
+                                                    if (isAssigned) {
+                                                        val res = onRevokeBadge?.invoke(targetLookupKey, badge)
+                                                            ?: Pair(false, "ব্যাজ আপডেট সম্ভব হয়নি!")
+                                                        badgeFeedback = res
+                                                        if (res.first) {
+                                                            currentBadges = currentBadges.filter { it != badge }
+                                                        }
+                                                    } else {
+                                                        val res = onGrantBadge?.invoke(targetLookupKey, badge)
+                                                            ?: Pair(false, "ব্যাজ আপডেট সম্ভব হয়নি!")
+                                                        badgeFeedback = res
+                                                        if (res.first && badge !in currentBadges) {
+                                                            currentBadges = currentBadges + badge
+                                                        }
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = if (isAssigned) {
+                                                    badgeColor.copy(alpha = 0.18f)
+                                                } else {
+                                                    DarkElevated
+                                                },
+                                                border = BorderStroke(
+                                                    width = if (isAssigned) 1.4.dp else 1.dp,
+                                                    color = if (isAssigned) badgeColor else DarkBorder
+                                                ),
+                                                modifier = Modifier.testTag("profile_badge_option_${badge.name}")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(8.dp)
+                                                            .clip(CircleShape)
+                                                            .background(badgeColor)
+                                                    )
+                                                    BadgeEmblemArt(
+                                                        badge = badge,
+                                                        size = 18.dp
+                                                    )
+                                                    Text(
+                                                        text = badge.title,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isAssigned) FontWeight.Black else FontWeight.SemiBold,
+                                                        color = if (isAssigned) Color.White else TextSecondary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Icon(
+                                                        imageVector = if (isAssigned) Icons.Filled.CheckCircle else Icons.Filled.Add,
+                                                        contentDescription = if (isAssigned) "সক্রিয়" else "যুক্ত করুন",
+                                                        tint = if (isAssigned) VictoryGreen else FlameYellow,
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1107,12 +1349,63 @@ fun PlayerProfileCardDialog(
                     }
                 }
             }
+
+            // Pinned top-right floating Edit & Close controls (always accessible even when scrolled)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (profile.isSelf && onEditOwnProfile != null) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.65f),
+                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onEditOwnProfile() }
+                            .testTag("player_profile_edit_btn")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Edit Profile",
+                                tint = FlameYellow,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.65f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable { onDismiss() }
+                        .testTag("player_profile_close_btn")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
         }
     }
 
     if (showBadgeShowcase) {
         BadgeShowcaseDialog(
-            currentBadges = profile.badges,
+            currentBadges = currentBadges,
             onDismiss = { showBadgeShowcase = false },
             userProfile = if (profile.isSelf) userProfileForAppeal else null,
             badgeAppeals = badgeAppeals,

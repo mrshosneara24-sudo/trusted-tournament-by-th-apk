@@ -226,7 +226,7 @@ fun ForgotPasswordDialog(
                                     errorMessage = null
                                 },
                                 label = { Text("মোবাইল নম্বর / Free Fire UID") },
-                                placeholder = { Text("যেমন: 01861583924 অথবা 2489103847") },
+                                placeholder = { Text("যেমন: 01861583924 অথবা 11410365896") },
                                 leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null, tint = BkashPink) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),

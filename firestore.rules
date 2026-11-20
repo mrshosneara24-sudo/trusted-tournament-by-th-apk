@@ -1,0 +1,505 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isBootstrappedOwner() {
+      return isSignedIn() &&
+        request.auth.token.email == "mrshosneara24@gmail.com" &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isBootstrappedOwner() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || data[key] == null || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptionalInt(data, key) {
+      return !(key in data) || data[key] == null || data[key] is int;
+    }
+
+    function isOptionalBool(data, key) {
+      return !(key in data) || data[key] == null || data[key] is bool;
+    }
+
+    function isValidAppConfig(data) {
+      return data.keys().hasAll(['appName', 'officialBkashNumber', 'officialNagadNumber', 'minWithdraw', 'maxWithdraw', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'appName', 'appTagline', 'selectedLogo', 'noticeTickerText', 'activeAnnouncement',
+          'announcementTitle', 'announcementAuthor', 'announcementUpdatedAtMillis',
+          'isAnnouncementUrgent', 'isAnnouncementEnabled',
+          'officialBkashNumber', 'officialNagadNumber', 'officialWhatsAppUrl',
+          'minWithdraw', 'maxWithdraw', 'isMaintenanceMode', 'maintenanceMessage',
+          'strictRules', 'updatedAt'
+        ]) &&
+        data.appName is string && data.appName.size() >= 2 && data.appName.size() <= 80 &&
+        isOptionalString(data, 'appTagline', 180) &&
+        (!('selectedLogo' in data) || data.selectedLogo in ['TH_LOGO', 'TH_ESPORTS', 'CYBER_WOLF', 'PRO_GAMER']) &&
+        isOptionalString(data, 'noticeTickerText', 300) &&
+        isOptionalString(data, 'activeAnnouncement', 300) &&
+        isOptionalString(data, 'announcementTitle', 100) &&
+        isOptionalString(data, 'announcementAuthor', 60) &&
+        (!('announcementUpdatedAtMillis' in data) || data.announcementUpdatedAtMillis == null || (data.announcementUpdatedAtMillis is int && data.announcementUpdatedAtMillis >= 0)) &&
+        isOptionalBool(data, 'isAnnouncementUrgent') &&
+        isOptionalBool(data, 'isAnnouncementEnabled') &&
+        data.officialBkashNumber is string && data.officialBkashNumber.size() >= 5 && data.officialBkashNumber.size() <= 20 &&
+        data.officialNagadNumber is string && data.officialNagadNumber.size() >= 5 && data.officialNagadNumber.size() <= 20 &&
+        isOptionalString(data, 'officialWhatsAppUrl', 300) &&
+        data.minWithdraw is int && data.minWithdraw >= 10 && data.minWithdraw <= 10000 &&
+        data.maxWithdraw is int && data.maxWithdraw >= data.minWithdraw && data.maxWithdraw <= 50000 &&
+        isOptionalBool(data, 'isMaintenanceMode') &&
+        isOptionalString(data, 'maintenanceMessage', 300) &&
+        (!('strictRules' in data) || (data.strictRules is list && data.strictRules.size() <= 30)) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll([
+          'title', 'category', 'matchType', 'mapName', 'matchDateTime',
+          'startsInMinutes', 'entryFee', 'totalPrize', 'perKillPrize', 'booyahPrize',
+          'totalSlots', 'bookedSlots', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'category', 'matchType', 'mapName', 'matchDateTime',
+          'startsInMinutes', 'entryFee', 'totalPrize', 'perKillPrize', 'booyahPrize',
+          'totalSlots', 'bookedSlots', 'status', 'roomId', 'roomPassword', 'version',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.category in ['ALL', 'LONE_WOLF', 'BR_RANK', 'CS_RANK'] &&
+        data.matchType in ['SOLO', 'DUO', 'SQUAD'] &&
+        data.mapName is string && data.mapName.size() >= 1 && data.mapName.size() <= 60 &&
+        data.matchDateTime is string && data.matchDateTime.size() >= 1 && data.matchDateTime.size() <= 80 &&
+        data.startsInMinutes is int && data.startsInMinutes >= 0 && data.startsInMinutes <= 100000 &&
+        data.entryFee is int && data.entryFee >= 0 && data.entryFee <= 50000 &&
+        data.totalPrize is int && data.totalPrize >= 0 && data.totalPrize <= 500000 &&
+        data.perKillPrize is int && data.perKillPrize >= 0 && data.perKillPrize <= 50000 &&
+        data.booyahPrize is int && data.booyahPrize >= 0 && data.booyahPrize <= 500000 &&
+        data.totalSlots is int && data.totalSlots >= 2 && data.totalSlots <= 100 &&
+        data.bookedSlots is int && data.bookedSlots >= 0 && data.bookedSlots <= data.totalSlots &&
+        data.status in ['UPCOMING', 'ROOM_OPEN', 'ONGOING', 'FINISHED', 'CANCELLED'] &&
+        isOptionalString(data, 'roomId', 60) &&
+        isOptionalString(data, 'roomPassword', 60) &&
+        isOptionalString(data, 'version', 80) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll([
+          'bookingId', 'matchId', 'matchTitle', 'category', 'matchDateTime',
+          'slotNumber', 'playerIgn', 'playerUid', 'trxId', 'feePaid', 'verified',
+          'ownerUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'bookingId', 'matchId', 'matchTitle', 'category', 'matchDateTime',
+          'slotNumber', 'playerIgn', 'playerUid', 'trxId', 'feePaid', 'verified',
+          'ownerUid', 'roomId', 'roomPassword', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.bookingId) &&
+        isValidId(data.matchId) &&
+        data.matchTitle is string && data.matchTitle.size() >= 1 && data.matchTitle.size() <= 120 &&
+        data.category in ['ALL', 'LONE_WOLF', 'BR_RANK', 'CS_RANK'] &&
+        data.matchDateTime is string && data.matchDateTime.size() <= 80 &&
+        data.slotNumber is int && data.slotNumber >= 1 && data.slotNumber <= 100 &&
+        data.playerIgn is string && data.playerIgn.size() >= 1 && data.playerIgn.size() <= 50 &&
+        data.playerUid is string && data.playerUid.size() >= 1 && data.playerUid.size() <= 40 &&
+        data.trxId is string && data.trxId.size() <= 60 &&
+        data.feePaid is int && data.feePaid >= 0 && data.feePaid <= 50000 &&
+        data.verified is bool &&
+        data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+        isOptionalString(data, 'roomId', 60) &&
+        isOptionalString(data, 'roomPassword', 60) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPlayerDirectory(data) {
+      return data.keys().hasAll([
+          'firebaseUid', 'name', 'ign', 'uid', 'role', 'level',
+          'banned', 'warningsCount', 'moderationWarningsCount', 'kudosCount',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'firebaseUid', 'name', 'ign', 'uid', 'role', 'avatarId', 'customPfpUri',
+          'customBannerUri', 'bannerColorId', 'battleTagline', 'favoriteWeapon',
+          'activeCharacter', 'guildName', 'playerRole', 'level', 'walletBalance',
+          'matchesPlayed', 'totalWins', 'totalKills', 'totalEarnings', 'totalSpent',
+          'kudosCount', 'customBadges', 'revokedBadges', 'banned', 'banReason', 'bannedAt',
+          'warningsCount', 'banExpiresAtMillis', 'moderationWarningsCount', 'timeoutUntilMillis',
+          'timeoutReason', 'timeoutBy', 'chatMuted', 'chatMuteUntilMillis', 'chatMuteReason',
+          'matchBanned', 'matchBanReason', 'walletFrozen', 'walletFreezeReason',
+          'rewardBlocked', 'rewardBlockReason', 'appealBanned', 'appealBanReason',
+          'profileLocked', 'profileLockReason', 'createdAt', 'updatedAt'
+        ]) &&
+        data.firebaseUid is string && data.firebaseUid.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        data.ign is string && data.ign.size() >= 1 && data.ign.size() <= 50 &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 40 &&
+        data.role in ['PLAYER', 'ADMIN', 'OWNER'] &&
+        data.level is int && data.level >= 0 && data.level <= 500 &&
+        data.banned is bool &&
+        data.warningsCount is int && data.warningsCount >= 0 && data.warningsCount <= 100 &&
+        data.moderationWarningsCount is int && data.moderationWarningsCount >= 0 && data.moderationWarningsCount <= 100 &&
+        data.kudosCount is int && data.kudosCount >= 0 && data.kudosCount <= 1000000 &&
+        (!('battleTagline' in data) || data.battleTagline == null || (data.battleTagline is string && data.battleTagline.size() <= 180)) &&
+        (!('customPfpUri' in data) || data.customPfpUri == null || (data.customPfpUri is string && data.customPfpUri.size() <= 500)) &&
+        (!('customBannerUri' in data) || data.customBannerUri == null || (data.customBannerUri is string && data.customBannerUri.size() <= 500)) &&
+        (!('banReason' in data) || data.banReason == null || (data.banReason is string && data.banReason.size() <= 250)) &&
+        (!('timeoutReason' in data) || data.timeoutReason == null || (data.timeoutReason is string && data.timeoutReason.size() <= 250)) &&
+        (!('walletBalance' in data) || data.walletBalance is int) &&
+        (!('matchesPlayed' in data) || data.matchesPlayed is int) &&
+        (!('customBadges' in data) || (data.customBadges is list && data.customBadges.size() <= 12)) &&
+        (!('revokedBadges' in data) || (data.revokedBadges is list && data.revokedBadges.size() <= 12)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['ownerUid', 'profileId', 'phone', 'bkashNumber', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerUid', 'profileId', 'phone', 'bkashNumber', 'role', 'joinedDate', 'createdAt', 'updatedAt']) &&
+        data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+        isValidId(data.profileId) &&
+        data.phone is string && data.phone.size() >= 3 && data.phone.size() <= 30 &&
+        data.bkashNumber is string && data.bkashNumber.size() >= 3 && data.bkashNumber.size() <= 30 &&
+        data.role in ['PLAYER', 'ADMIN', 'OWNER'] &&
+        isOptionalString(data, 'joinedDate', 40) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidDepositRequest(data) {
+      return data.keys().hasAll(['ownerUid', 'userPhone', 'userName', 'userIgn', 'amount', 'paymentMethod', 'senderNumber', 'trxId', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerUid', 'userPhone', 'userName', 'userIgn', 'amount', 'paymentMethod', 'senderNumber', 'trxId', 'status', 'createdAtLabel', 'adminNote', 'createdAt', 'updatedAt']) &&
+        data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+        data.userPhone is string && data.userPhone.size() <= 30 &&
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 60 &&
+        data.userIgn is string && data.userIgn.size() >= 1 && data.userIgn.size() <= 50 &&
+        data.amount is int && data.amount >= 5 && data.amount <= 50000 &&
+        data.paymentMethod in ['BKASH', 'NAGAD'] &&
+        data.senderNumber is string && data.senderNumber.size() >= 4 && data.senderNumber.size() <= 30 &&
+        data.trxId is string && data.trxId.size() >= 3 && data.trxId.size() <= 60 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        isOptionalString(data, 'createdAtLabel', 40) &&
+        isOptionalString(data, 'adminNote', 200) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidWithdrawRequest(data) {
+      return data.keys().hasAll(['ownerUid', 'userPhone', 'userName', 'userIgn', 'amount', 'paymentMethod', 'targetNumber', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerUid', 'userPhone', 'userName', 'userIgn', 'amount', 'paymentMethod', 'targetNumber', 'status', 'createdAtLabel', 'adminNote', 'createdAt', 'updatedAt']) &&
+        data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+        data.userPhone is string && data.userPhone.size() <= 30 &&
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 60 &&
+        data.userIgn is string && data.userIgn.size() >= 1 && data.userIgn.size() <= 50 &&
+        data.amount is int && data.amount >= 10 && data.amount <= 50000 &&
+        data.paymentMethod in ['BKASH', 'NAGAD'] &&
+        data.targetNumber is string && data.targetNumber.size() >= 4 && data.targetNumber.size() <= 30 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        isOptionalString(data, 'createdAtLabel', 40) &&
+        isOptionalString(data, 'adminNote', 200) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBadgeAppeal(data) {
+      return data.keys().hasAll(['ownerUid', 'userId', 'userName', 'userIgn', 'userUid', 'requestedBadge', 'reasonNote', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'userId', 'userName', 'userIgn', 'userUid', 'requestedBadge', 'reasonNote',
+          'status', 'grantedBadge', 'adminNote', 'reviewedBy', 'createdAtLabel',
+          'matchesPlayedSnapshot', 'totalSpentSnapshot', 'totalWinsSnapshot',
+          'totalKillsSnapshot', 'totalEarningsSnapshot', 'chatMessages', 'createdAt', 'updatedAt'
+        ]) &&
+        data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.userName is string && data.userName.size() <= 60 &&
+        data.userIgn is string && data.userIgn.size() <= 50 &&
+        data.userUid is string && data.userUid.size() <= 40 &&
+        data.requestedBadge is string && data.requestedBadge.size() <= 40 &&
+        data.reasonNote is string && data.reasonNote.size() >= 1 && data.reasonNote.size() <= 400 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        isOptionalString(data, 'grantedBadge', 40) &&
+        isOptionalString(data, 'adminNote', 250) &&
+        isOptionalString(data, 'reviewedBy', 60) &&
+        isOptionalString(data, 'createdAtLabel', 40) &&
+        isOptionalInt(data, 'matchesPlayedSnapshot') &&
+        isOptionalInt(data, 'totalSpentSnapshot') &&
+        isOptionalInt(data, 'totalWinsSnapshot') &&
+        isOptionalInt(data, 'totalKillsSnapshot') &&
+        isOptionalInt(data, 'totalEarningsSnapshot') &&
+        (!('chatMessages' in data) || (data.chatMessages is list && data.chatMessages.size() <= 100)) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidGlobalChat(data) {
+      return data.keys().hasAll(['senderAuthUid', 'senderUserId', 'senderName', 'senderIgn', 'senderRole', 'text', 'timestampMillis', 'pinnedAnnouncement', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'senderAuthUid', 'senderUserId', 'senderName', 'senderIgn', 'senderUid',
+          'senderRole', 'senderAvatarId', 'senderCustomPfpUri', 'senderPrimaryBadge',
+          'senderBadges', 'text', 'timestampMillis', 'timeLabel', 'pinnedAnnouncement',
+          'replyToId', 'replyToIgn', 'replyToText', 'reactions', 'createdAt', 'updatedAt'
+        ]) &&
+        data.senderAuthUid is string && data.senderAuthUid.size() >= 1 && data.senderAuthUid.size() <= 128 &&
+        data.senderUserId is string && data.senderUserId.size() <= 128 &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+        data.senderIgn is string && data.senderIgn.size() >= 1 && data.senderIgn.size() <= 50 &&
+        isOptionalString(data, 'senderUid', 40) &&
+        data.senderRole in ['PLAYER', 'ADMIN', 'OWNER'] &&
+        isOptionalString(data, 'senderAvatarId', 40) &&
+        isOptionalString(data, 'senderCustomPfpUri', 500) &&
+        isOptionalString(data, 'senderPrimaryBadge', 40) &&
+        (!('senderBadges' in data) || (data.senderBadges is list && data.senderBadges.size() <= 12)) &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
+        data.timestampMillis is int && data.timestampMillis >= 0 &&
+        isOptionalString(data, 'timeLabel', 40) &&
+        data.pinnedAnnouncement is bool &&
+        isOptionalString(data, 'replyToId', 128) &&
+        isOptionalString(data, 'replyToIgn', 50) &&
+        isOptionalString(data, 'replyToText', 200) &&
+        (!('reactions' in data) || data.reactions is map) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidModerationLog(data) {
+      return data.keys().hasAll(['targetAuthUid', 'targetUserId', 'targetIgn', 'actionType', 'reason', 'moderatorRole', 'moderatorName', 'timestampMillis', 'createdAt']) &&
+        data.keys().hasOnly(['targetAuthUid', 'targetUserId', 'targetIgn', 'actionType', 'durationLabel', 'reason', 'moderatorRole', 'moderatorName', 'timestampMillis', 'timeLabel', 'createdAt']) &&
+        data.targetAuthUid is string && data.targetAuthUid.size() <= 128 &&
+        data.targetUserId is string && data.targetUserId.size() <= 128 &&
+        data.targetIgn is string && data.targetIgn.size() <= 50 &&
+        data.actionType is string && data.actionType.size() <= 40 &&
+        isOptionalString(data, 'durationLabel', 60) &&
+        data.reason is string && data.reason.size() <= 250 &&
+        data.moderatorRole in ['ADMIN', 'OWNER'] &&
+        data.moderatorName is string && data.moderatorName.size() <= 60 &&
+        data.timestampMillis is int && data.timestampMillis >= 0 &&
+        isOptionalString(data, 'timeLabel', 40) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAdminGrant(data) {
+      return data.keys().hasAll(['role', 'createdAt']) &&
+        data.keys().hasOnly(['role', 'email', 'ign', 'createdAt']) &&
+        data.role in ['ADMIN', 'OWNER'] &&
+        isOptionalString(data, 'email', 120) &&
+        isOptionalString(data, 'ign', 50) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    // 1. Admins registry
+    match /admins/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isBootstrappedOwner();
+      allow create, update: if isBootstrappedOwner() && isValidId(uid) && isValidAdminGrant(incoming());
+      allow delete: if isBootstrappedOwner() && isValidId(uid);
+    }
+
+    // 2. App configuration (single shared doc 'main')
+    match /app_config/{configId} {
+      allow get: if isSignedIn() && isValidId(configId);
+      allow list: if false;
+      allow create, update: if isAdmin() && isValidId(configId) && isValidAppConfig(incoming());
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // 3. Tournament Matches
+    match /matches/{matchId} {
+      allow get: if isSignedIn() && isValidId(matchId);
+      allow list: if isSignedIn() && existing().status in ['UPCOMING', 'ROOM_OPEN', 'ONGOING', 'FINISHED', 'CANCELLED'];
+      allow create: if isAdmin() && isValidId(matchId) && isValidMatch(incoming());
+      allow update: if isSignedIn() && isValidId(matchId) && isValidMatch(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().status in ['UPCOMING', 'ROOM_OPEN'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['bookedSlots', 'updatedAt']) &&
+            incoming().bookedSlots >= 0 &&
+            incoming().bookedSlots <= existing().totalSlots
+          )
+        );
+      allow delete: if isAdmin() && isValidId(matchId);
+    }
+
+    // 4. Slot Bookings (Non-PII so all phones show real-time slot occupancy)
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId);
+      allow list: if isSignedIn() && existing().slotNumber >= 1;
+      allow create: if isSignedIn() && isValidId(bookingId) && isValidBooking(incoming()) &&
+        exists(/databases/$(database)/documents/matches/$(incoming().matchId)) &&
+        (
+          isAdmin() ||
+          (
+            incoming().ownerUid == request.auth.uid &&
+            incoming().trxId.size() >= 1
+          )
+        );
+      allow update: if isAdmin() && isValidId(bookingId) && isValidBooking(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isValidId(bookingId) && (isAdmin() || existing().ownerUid == request.auth.uid);
+    }
+
+    // 5. Player Directory (Non-PII public profile, badges, kudos & moderation flags)
+    match /player_directory/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && existing().level >= 0;
+      allow create: if isSignedIn() && isValidId(userId) && isValidPlayerDirectory(incoming()) &&
+        (
+          isAdmin() ||
+          (
+            incoming().firebaseUid == request.auth.uid &&
+            incoming().role == 'PLAYER' &&
+            incoming().banned == false &&
+            incoming().warningsCount == 0 &&
+            incoming().moderationWarningsCount == 0
+          )
+        );
+      allow update: if isSignedIn() && isValidId(userId) && isValidPlayerDirectory(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().firebaseUid == request.auth.uid &&
+            incoming().firebaseUid == existing().firebaseUid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'ign', 'uid', 'avatarId', 'customPfpUri', 'customBannerUri',
+              'bannerColorId', 'battleTagline', 'favoriteWeapon', 'activeCharacter',
+              'guildName', 'playerRole', 'walletBalance', 'matchesPlayed',
+              'totalWins', 'totalKills', 'totalEarnings', 'totalSpent', 'kudosCount', 'updatedAt'
+            ])
+          ) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['kudosCount', 'updatedAt'])
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // 6. Private User Accounts (PII-isolated: phone & bKash strictly per-user or admin)
+    match /user_accounts/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow create: if isSignedIn() && isValidId(userId) && isValidUserAccount(incoming()) &&
+        (
+          isAdmin() ||
+          (incoming().ownerUid == request.auth.uid && incoming().role == 'PLAYER')
+        );
+      allow update: if isSignedIn() && isValidId(userId) && isValidUserAccount(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().ownerUid == existing().ownerUid &&
+        (
+          isAdmin() ||
+          (
+            existing().ownerUid == request.auth.uid &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'bkashNumber', 'joinedDate', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // 7. Deposit Requests
+    match /deposit_requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow create: if isSignedIn() && isValidId(requestId) && isValidDepositRequest(incoming()) &&
+        (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
+      allow update: if isAdmin() && isValidId(requestId) && isValidDepositRequest(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        existing().status == 'PENDING';
+      allow delete: if isAdmin() && isValidId(requestId);
+    }
+
+    // 8. Withdraw Requests
+    match /withdraw_requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow create: if isSignedIn() && isValidId(requestId) && isValidWithdrawRequest(incoming()) &&
+        (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
+      allow update: if isAdmin() && isValidId(requestId) && isValidWithdrawRequest(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        existing().status == 'PENDING';
+      allow delete: if isAdmin() && isValidId(requestId);
+    }
+
+    // 9. Badge Appeals
+    match /badge_appeals/{appealId} {
+      allow get: if isSignedIn() && isValidId(appealId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow create: if isSignedIn() && isValidId(appealId) && isValidBadgeAppeal(incoming()) &&
+        (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
+      allow update: if isSignedIn() && isValidId(appealId) && isValidBadgeAppeal(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().ownerUid == request.auth.uid &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['chatMessages', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(appealId);
+    }
+
+    // 10. Global Chat Messages
+    match /global_chat/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId);
+      allow list: if isSignedIn() && existing().timestampMillis >= 0;
+      allow create: if isSignedIn() && isValidId(messageId) && isValidGlobalChat(incoming()) &&
+        (
+          isAdmin() ||
+          (incoming().senderAuthUid == request.auth.uid && incoming().senderRole == 'PLAYER' && incoming().pinnedAnnouncement == false)
+        );
+      allow update: if isSignedIn() && isValidId(messageId) && isValidGlobalChat(incoming()) &&
+        incoming().senderAuthUid == existing().senderAuthUid &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'updatedAt'])
+        );
+      allow delete: if isSignedIn() && isValidId(messageId) && (isAdmin() || existing().senderAuthUid == request.auth.uid);
+    }
+
+    // 11. Moderation Logs
+    match /moderation_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (existing().targetAuthUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().targetAuthUid == request.auth.uid || isBootstrappedOwner());
+      allow create: if isAdmin() && isValidId(logId) && isValidModerationLog(incoming());
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(logId);
+    }
+  }
+}

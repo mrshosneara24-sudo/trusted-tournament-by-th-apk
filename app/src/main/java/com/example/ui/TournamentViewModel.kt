@@ -19,6 +19,7 @@ import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.MatchResult
 import com.example.model.MatchType
+import com.example.model.ModerationLogEntry
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
 import com.example.model.TournamentMatch
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 enum class TournamentTab(val banglaLabel: String) {
     MATCHES("ম্যাচ"),
@@ -102,20 +104,32 @@ class TournamentViewModel(
     val appCustomization: StateFlow<AppCustomization> = repository.appCustomization
     val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
     val badgeAppeals: StateFlow<List<BadgeAppeal>> = repository.badgeAppeals
+    val moderationLogs: StateFlow<List<ModerationLogEntry>> = repository.moderationLogs
 
-    // Dialog States (derived reactively from repository.matches so live edits/refunds reflect immediately)
+    // Dialog States (updated synchronously on open/close and kept reactively synced with repository.matches)
     private val _bookingMatchId = MutableStateFlow<String?>(null)
-    val bookingMatch: StateFlow<TournamentMatch?> = combine(_bookingMatchId, repository.matches) { id, list ->
-        if (id == null) null else list.find { it.id == id }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val _bookingMatch = MutableStateFlow<TournamentMatch?>(null)
+    val bookingMatch: StateFlow<TournamentMatch?> = _bookingMatch.asStateFlow()
 
     private val _preselectedSlotNumber = MutableStateFlow<Int?>(null)
     val preselectedSlotNumber: StateFlow<Int?> = _preselectedSlotNumber.asStateFlow()
 
     private val _roomSlotGridMatchId = MutableStateFlow<String?>(null)
-    val roomSlotGridMatch: StateFlow<TournamentMatch?> = combine(_roomSlotGridMatchId, repository.matches) { id, list ->
-        if (id == null) null else list.find { it.id == id }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val _roomSlotGridMatch = MutableStateFlow<TournamentMatch?>(null)
+    val roomSlotGridMatch: StateFlow<TournamentMatch?> = _roomSlotGridMatch.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.matches.collect { list ->
+                _bookingMatchId.value?.let { id ->
+                    _bookingMatch.value = list.find { it.id == id }
+                }
+                _roomSlotGridMatchId.value?.let { id ->
+                    _roomSlotGridMatch.value = list.find { it.id == id }
+                }
+            }
+        }
+    }
 
     private val _roomDetails = MutableStateFlow<RoomDetailsData?>(null)
     val roomDetails: StateFlow<RoomDetailsData?> = _roomDetails.asStateFlow()
@@ -143,9 +157,25 @@ class TournamentViewModel(
     val supportDialogTab: StateFlow<SupportTabType> = _supportDialogTab.asStateFlow()
 
     val isLoggedIn: StateFlow<Boolean> = repository.isLoggedIn
+    val isCloudConnected: StateFlow<Boolean> = repository.isCloudConnected
+    val cloudUserEmail: StateFlow<String> = repository.cloudUserEmail
+    val cloudStatusMessage: StateFlow<String> = repository.cloudStatusMessage
     val officialWhatsAppGroupUrl: StateFlow<String> = repository.officialWhatsAppGroupUrl
     val allMatches: StateFlow<List<TournamentMatch>> = repository.matches
     val registeredUsers: StateFlow<List<AppUser>> = repository.registeredUsers
+
+    fun onGoogleSignInSuccess(firebaseUid: String, email: String, displayName: String): Pair<Boolean, String> {
+        val result = repository.onGoogleSignInCompleted(firebaseUid, email, displayName)
+        _snackbarMessage.value = result.second
+        return result
+    }
+
+    fun signOutCloud() {
+        viewModelScope.launch {
+            repository.signOutCloud()
+            _snackbarMessage.value = "☁️ ক্লাউড সিঙ্ক থেকে সাইন-আউট করা হয়েছে।"
+        }
+    }
 
     private val _showEditProfileDialog = MutableStateFlow(false)
     val showEditProfileDialog: StateFlow<Boolean> = _showEditProfileDialog.asStateFlow()
@@ -195,25 +225,36 @@ class TournamentViewModel(
 
     fun openSlotBooking(match: TournamentMatch, slot: Int? = null) {
         _bookingMatchId.value = match.id
+        _bookingMatch.value = repository.matches.value.find { it.id == match.id } ?: match
         _preselectedSlotNumber.value = slot
     }
 
     fun closeSlotBooking() {
         _bookingMatchId.value = null
+        _bookingMatch.value = null
         _preselectedSlotNumber.value = null
     }
 
     fun openSlotGrid(match: TournamentMatch) {
         _roomSlotGridMatchId.value = match.id
+        _roomSlotGridMatch.value = repository.matches.value.find { it.id == match.id } ?: match
         repository.markMissionCompleted("MATCH")
     }
 
     fun closeSlotGrid() {
         _roomSlotGridMatchId.value = null
+        _roomSlotGridMatch.value = null
     }
 
     fun openRoomDetails(match: TournamentMatch) {
-        val booking = myBookings.value.firstOrNull { it.matchId == match.id }
+        val current = userProfile.value
+        val booking = myBookings.value.firstOrNull { b ->
+            b.matchId == match.id && (
+                (current.phone.isNotBlank() && b.bkashSenderNumber == current.phone) ||
+                    (current.uid.isNotBlank() && b.playerUid == current.uid) ||
+                    (current.ign.isNotBlank() && b.playerIgn.equals(current.ign, ignoreCase = true))
+                )
+        } ?: myBookings.value.firstOrNull { it.matchId == match.id }
         _roomDetails.value = RoomDetailsData(
             title = match.title,
             slotNumber = booking?.slotNumber ?: 1,
@@ -631,11 +672,15 @@ class TournamentViewModel(
     }
 
     fun cancelLegacySlotByNumber(matchId: String, slotNumber: Int): Boolean {
-        val success = repository.cancelLegacySlotByNumber(matchId, slotNumber)
-        if (success) {
-            _snackbarMessage.value = "✅ স্লট #$slotNumber সফলভাবে বাতিল এবং ওয়ালেটে রিফান্ড করা হয়েছে!"
-        }
+        val (success, msg) = repository.cancelLegacySlotByNumberResult(matchId, slotNumber)
+        _snackbarMessage.value = msg
         return success
+    }
+
+    fun cancelLegacySlotByNumberResult(matchId: String, slotNumber: Int): Pair<Boolean, String> {
+        val res = repository.cancelLegacySlotByNumberResult(matchId, slotNumber)
+        _snackbarMessage.value = res.second
+        return res
     }
 
     fun cancelMatchAndRefundAll(matchId: String): Pair<Int, Int> {
@@ -816,10 +861,108 @@ class TournamentViewModel(
         return success
     }
 
+    fun grantBadgeToUserResult(targetPhoneOrUidOrId: String, badge: BadgeType): Pair<Boolean, String> {
+        val res = repository.grantBadgeToUser(targetPhoneOrUidOrId, badge)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
     fun revokeBadgeFromUser(targetPhoneOrUidOrId: String, badge: BadgeType): Boolean {
         val (success, msg) = repository.revokeBadgeFromUser(targetPhoneOrUidOrId, badge)
         _snackbarMessage.value = msg
         return success
+    }
+
+    fun revokeBadgeFromUserResult(targetPhoneOrUidOrId: String, badge: BadgeType): Pair<Boolean, String> {
+        val res = repository.revokeBadgeFromUser(targetPhoneOrUidOrId, badge)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    // ==================== UNIFIED MODERATION PANEL (OWNER & ADMIN) ====================
+
+    fun warnUser(targetKey: String, reason: String): Pair<Boolean, String> {
+        val res = repository.warnUser(targetKey, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun clearUserModerationWarnings(targetKey: String): Pair<Boolean, String> {
+        val res = repository.clearUserModerationWarnings(targetKey)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun timeoutUser(targetKey: String, durationMinutes: Long, reason: String): Pair<Boolean, String> {
+        val res = repository.timeoutUser(targetKey, durationMinutes, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun removeTimeout(targetKey: String): Pair<Boolean, String> {
+        val res = repository.removeTimeout(targetKey)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun muteUserChat(targetKey: String, durationHours: Long, reason: String): Pair<Boolean, String> {
+        val res = repository.muteUserChat(targetKey, durationHours, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun unmuteUserChat(targetKey: String): Pair<Boolean, String> {
+        val res = repository.unmuteUserChat(targetKey)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun setUserMatchBan(targetKey: String, banned: Boolean, reason: String): Pair<Boolean, String> {
+        val res = repository.setUserMatchBan(targetKey, banned, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun setUserWalletFreeze(targetKey: String, frozen: Boolean, reason: String): Pair<Boolean, String> {
+        val res = repository.setUserWalletFreeze(targetKey, frozen, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun tempBanUser(targetKey: String, days: Int, reason: String): Pair<Boolean, String> {
+        val res = repository.tempBanUser(targetKey, days, reason)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun banUserWithResult(targetKey: String, reason: String): Pair<Boolean, String> {
+        val ok = repository.banUser(targetKey, reason)
+        val msg = if (ok) "🚫 ইউজারকে স্থায়ী অ্যাপ ব্যান দেওয়া হয়েছে!" else "⛔ এই ইউজারকে ব্যান করা সম্ভব নয়!"
+        _snackbarMessage.value = msg
+        return ok to msg
+    }
+
+    fun unbanUserWithResult(targetKey: String): Pair<Boolean, String> {
+        val ok = repository.unbanUser(targetKey)
+        val msg = if (ok) "✅ ইউজারের অ্যাপ ব্যান প্রত্যাহার করা হয়েছে!" else "ইউজার পাওয়া যায়নি!"
+        _snackbarMessage.value = msg
+        return ok to msg
+    }
+
+    fun removeAllBadgesFromUser(targetKey: String): Pair<Boolean, String> {
+        val res = repository.removeAllBadgesFromUser(targetKey)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun pardonAllPunishments(targetKey: String): Pair<Boolean, String> {
+        val res = repository.pardonAllPunishments(targetKey)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun refreshExpiredModeration(nowMillis: Long = System.currentTimeMillis()): Int {
+        return repository.checkAndClearExpiredModeration(nowMillis)
     }
 
     fun submitBadgeAppeal(requestedBadge: BadgeType, reasonNote: String): Pair<Boolean, String> {
@@ -855,6 +998,64 @@ class TournamentViewModel(
             _snackbarMessage.value = result.second
         }
         return result
+    }
+
+    // ==================== LIVE ANNOUNCEMENTS & MATCH RESULTS ====================
+
+    fun publishAppAnnouncement(
+        title: String,
+        message: String,
+        isUrgent: Boolean = false
+    ): Pair<Boolean, String> {
+        val res = repository.publishAppAnnouncement(title, message, isUrgent)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun clearAppAnnouncement(): Pair<Boolean, String> {
+        val res = repository.clearAppAnnouncement()
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun publishMatchResultAndPayout(
+        matchId: String,
+        winnerTargetKey: String,
+        winnerKills: Int,
+        customPrizeAmount: Int? = null,
+        runnerUpIgn: String = "",
+        markMatchFinished: Boolean = true
+    ): Pair<Boolean, String> {
+        val res = repository.publishMatchResultAndPayout(
+            matchId = matchId,
+            winnerTargetKey = winnerTargetKey,
+            winnerKills = winnerKills,
+            customPrizeAmount = customPrizeAmount,
+            runnerUpIgn = runnerUpIgn,
+            markMatchFinished = markMatchFinished
+        )
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun awardKillPrizeAndStats(
+        targetKey: String,
+        killsToAdd: Int,
+        winsToAdd: Int = 0,
+        matchesToAdd: Int = 1,
+        prizeAmount: Int = 0,
+        note: String = "কিল ও পারফরম্যান্স প্রাইজ"
+    ): Pair<Boolean, String> {
+        val res = repository.awardKillPrizeAndStats(
+            targetKey = targetKey,
+            killsToAdd = killsToAdd,
+            winsToAdd = winsToAdd,
+            matchesToAdd = matchesToAdd,
+            prizeAmount = prizeAmount,
+            note = note
+        )
+        _snackbarMessage.value = res.second
+        return res
     }
 
     // ==================== A TO Z OWNER APP MANAGEMENT ====================
@@ -904,12 +1105,26 @@ class TournamentViewModel(
         return success
     }
 
-    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean {
-        val success = repository.updateMatchSlotCapacity(matchId, newCapacity)
-        if (success) {
-            _snackbarMessage.value = "🎟️ ম্যাচের মোট স্লট সংখ্যা $newCapacity এ পরিবর্তন করা হয়েছে!"
-        }
-        return success
+    fun updateMatchSlotCapacityResult(matchId: String, newCapacity: Int): Pair<Boolean, String> {
+        val res = repository.updateMatchSlotCapacityResult(matchId, newCapacity)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean =
+        updateMatchSlotCapacityResult(matchId, newCapacity).first
+
+    fun createManualSlotBookingResult(
+        matchId: String,
+        slotNumber: Int,
+        playerIgn: String,
+        playerUid: String,
+        phoneOrBkash: String,
+        feePaid: Int
+    ): Pair<Boolean, String> {
+        val res = repository.createManualSlotBookingResult(matchId, slotNumber, playerIgn, playerUid, phoneOrBkash, feePaid)
+        _snackbarMessage.value = res.second
+        return res
     }
 
     fun createManualSlotBooking(
@@ -919,15 +1134,7 @@ class TournamentViewModel(
         playerUid: String,
         phoneOrBkash: String,
         feePaid: Int
-    ): Boolean {
-        val success = repository.createManualSlotBooking(matchId, slotNumber, playerIgn, playerUid, phoneOrBkash, feePaid)
-        if (success) {
-            _snackbarMessage.value = "✅ স্লট #$slotNumber এ $playerIgn এর জন্য সফলভাবে স্লট ক্রিয়েট করা হয়েছে!"
-        } else {
-            _snackbarMessage.value = "স্লট #$slotNumber ইতিমধ্যেই পূর্ণ অথবা অবৈধ!"
-        }
-        return success
-    }
+    ): Boolean = createManualSlotBookingResult(matchId, slotNumber, playerIgn, playerUid, phoneOrBkash, feePaid).first
 
     fun addStrictRule(title: String, description: String, penalty: String, emoji: String): Boolean {
         val success = repository.addStrictRule(title, description, penalty, emoji)

@@ -45,11 +45,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +63,7 @@ import com.example.model.AppUser
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.LeaderboardPlayer
+import com.example.model.MatchResult
 import com.example.model.UserProfile
 import com.example.model.UserRole
 import com.example.ui.components.BadgeEmblemArt
@@ -92,10 +99,24 @@ fun LeaderboardScreen(
     onOpenGlobalChat: (() -> Unit)? = null,
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
-    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null
+    onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
+    results: List<MatchResult> = emptyList(),
+    isCloudConnected: Boolean = false,
+    onGrantBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
+    onRevokeBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null
 ) {
     var showBadgeDialog by remember { mutableStateOf(false) }
     var localPlayerProfileCard by remember { mutableStateOf<PlayerProfileCardData?>(null) }
+    val pulseTransition = rememberInfiniteTransition(label = "leaderboard_live_pulse")
+    val livePulseAlpha by pulseTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "live_dot_alpha"
+    )
 
     val openProfile: (PlayerProfileCardData) -> Unit = { data ->
         if (onPlayerProfileClick != null) {
@@ -138,10 +159,42 @@ fun LeaderboardScreen(
                             ),
                             color = TextPrimary,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = VictoryGreen.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.65f)),
+                            modifier = Modifier.testTag("leaderboard_live_badge")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .alpha(livePulseAlpha)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF3D00))
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isCloudConnected) "LIVE CLOUD" else "LIVE",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = MonoFontFamily,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 9.sp
+                                    ),
+                                    color = VictoryGreen
+                                )
+                            }
+                        }
                     }
                     if (onOpenGlobalChat != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = FlameCyan.copy(alpha = 0.16f),
@@ -174,7 +227,7 @@ fun LeaderboardScreen(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "বাংলাদেশের শীর্ষ ফ্রি ফায়ার টুর্নামেন্ট প্লেয়ার ও উইনিং তালিকা",
+                    text = "রিয়েল-টাইম র‍্যাঙ্কিং • কিল, বুইয়া ও মোট প্রাইজ অনুযায়ী তাৎক্ষণিক আপডেট",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -227,6 +280,73 @@ fun LeaderboardScreen(
                             }
                         }
                         Icon(Icons.Filled.MilitaryTech, contentDescription = null, tint = FlameYellow, modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
+        }
+
+        if (results.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("leaderboard_recent_results_strip"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "🏆 সাম্প্রতিক ম্যাচ বিজয়ী (LIVE)",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = FlameYellow
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        lazyItems(results.take(10), key = { it.id }) { res ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = DarkCard,
+                                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .width(195.dp)
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = "👑 ${res.winnerIgn}",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                                        color = FlameYellow,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = res.matchTitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "🎯 ${res.winnerKills} কিল",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = FlameCyan
+                                        )
+                                        Text(
+                                            text = "৳${res.prizeMoney}",
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                fontFamily = MonoFontFamily,
+                                                fontWeight = FontWeight.Black
+                                            ),
+                                            color = VictoryGreen
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -627,7 +747,10 @@ fun LeaderboardScreen(
             onViewAllBadges = {
                 localPlayerProfileCard = null
                 showBadgeDialog = true
-            }
+            },
+            viewerRole = currentUser.role,
+            onGrantBadge = onGrantBadge,
+            onRevokeBadge = onRevokeBadge
         )
     }
 }

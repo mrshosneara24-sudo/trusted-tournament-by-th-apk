@@ -1,0 +1,327 @@
+{
+  "entities": {
+    "AppConfig": {
+      "title": "AppConfig",
+      "description": "Global tournament branding, payment numbers, rules list, and maintenance status synced across all devices.",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string", "description": "Display title of the tournament app" },
+        "appTagline": { "type": "string", "description": "Tagline shown under the app title" },
+        "selectedLogo": { "type": "string", "enum": ["TH_LOGO", "TH_ESPORTS", "CYBER_WOLF", "PRO_GAMER"] },
+        "noticeTickerText": { "type": "string" },
+        "activeAnnouncement": { "type": "string" },
+        "announcementTitle": { "type": "string" },
+        "announcementAuthor": { "type": "string" },
+        "announcementUpdatedAtMillis": { "type": "integer" },
+        "isAnnouncementUrgent": { "type": "boolean" },
+        "isAnnouncementEnabled": { "type": "boolean" },
+        "officialBkashNumber": { "type": "string" },
+        "officialNagadNumber": { "type": "string" },
+        "officialWhatsAppUrl": { "type": "string" },
+        "minWithdraw": { "type": "integer" },
+        "maxWithdraw": { "type": "integer" },
+        "isMaintenanceMode": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string" },
+        "strictRules": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" }
+      },
+      "required": ["appName", "officialBkashNumber", "officialNagadNumber", "minWithdraw", "maxWithdraw", "updatedAt"]
+    },
+    "TournamentMatch": {
+      "title": "TournamentMatch",
+      "description": "Live Free Fire tournament match with slot counts and room credentials.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["ALL", "LONE_WOLF", "BR_RANK", "CS_RANK"] },
+        "matchType": { "type": "string", "enum": ["SOLO", "DUO", "SQUAD"] },
+        "mapName": { "type": "string" },
+        "matchDateTime": { "type": "string" },
+        "startsInMinutes": { "type": "integer" },
+        "entryFee": { "type": "integer" },
+        "totalPrize": { "type": "integer" },
+        "perKillPrize": { "type": "integer" },
+        "booyahPrize": { "type": "integer" },
+        "totalSlots": { "type": "integer" },
+        "bookedSlots": { "type": "integer" },
+        "status": { "type": "string", "enum": ["UPCOMING", "ROOM_OPEN", "ONGOING", "FINISHED", "CANCELLED"] },
+        "roomId": { "type": "string" },
+        "roomPassword": { "type": "string" },
+        "version": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" }
+      },
+      "required": ["title", "category", "matchType", "mapName", "matchDateTime", "entryFee", "totalPrize", "totalSlots", "bookedSlots", "status", "createdAt", "updatedAt"]
+    },
+    "SlotBooking": {
+      "title": "SlotBooking",
+      "description": "Non-PII match slot reservation visible across devices so slot grids stay synchronized.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "matchId": { "type": "string" },
+        "matchTitle": { "type": "string" },
+        "category": { "type": "string", "enum": ["ALL", "LONE_WOLF", "BR_RANK", "CS_RANK"] },
+        "matchDateTime": { "type": "string" },
+        "slotNumber": { "type": "integer" },
+        "playerIgn": { "type": "string" },
+        "playerUid": { "type": "string" },
+        "trxId": { "type": "string" },
+        "feePaid": { "type": "integer" },
+        "verified": { "type": "boolean" },
+        "ownerUid": { "type": "string" },
+        "roomId": { "type": "string" },
+        "roomPassword": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" }
+      },
+      "required": ["bookingId", "matchId", "matchTitle", "category", "slotNumber", "playerIgn", "playerUid", "feePaid", "verified", "ownerUid", "createdAt", "updatedAt"]
+    },
+    "PlayerDirectoryEntry": {
+      "title": "PlayerDirectoryEntry",
+      "description": "Non-PII public esports profile, stats, badges, kudos, and moderation status.",
+      "type": "object",
+      "properties": {
+        "firebaseUid": { "type": "string" },
+        "name": { "type": "string" },
+        "ign": { "type": "string" },
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["PLAYER", "ADMIN", "OWNER"] },
+        "avatarId": { "type": "string" },
+        "customPfpUri": { "type": "string" },
+        "customBannerUri": { "type": "string" },
+        "bannerColorId": { "type": "string" },
+        "battleTagline": { "type": "string" },
+        "favoriteWeapon": { "type": "string" },
+        "activeCharacter": { "type": "string" },
+        "guildName": { "type": "string" },
+        "playerRole": { "type": "string" },
+        "level": { "type": "integer" },
+        "walletBalance": { "type": "integer" },
+        "matchesPlayed": { "type": "integer" },
+        "totalWins": { "type": "integer" },
+        "totalKills": { "type": "integer" },
+        "totalEarnings": { "type": "integer" },
+        "totalSpent": { "type": "integer" },
+        "kudosCount": { "type": "integer" },
+        "customBadges": { "type": "array" },
+        "revokedBadges": { "type": "array" },
+        "banned": { "type": "boolean" },
+        "banReason": { "type": "string" },
+        "bannedAt": { "type": "string" },
+        "warningsCount": { "type": "integer" },
+        "banExpiresAtMillis": { "type": "integer" },
+        "moderationWarningsCount": { "type": "integer" },
+        "timeoutUntilMillis": { "type": "integer" },
+        "timeoutReason": { "type": "string" },
+        "timeoutBy": { "type": "string" },
+        "chatMuted": { "type": "boolean" },
+        "chatMuteUntilMillis": { "type": "integer" },
+        "chatMuteReason": { "type": "string" },
+        "matchBanned": { "type": "boolean" },
+        "matchBanReason": { "type": "string" },
+        "walletFrozen": { "type": "boolean" },
+        "walletFreezeReason": { "type": "string" },
+        "rewardBlocked": { "type": "boolean" },
+        "rewardBlockReason": { "type": "string" },
+        "appealBanned": { "type": "boolean" },
+        "appealBanReason": { "type": "string" },
+        "profileLocked": { "type": "boolean" },
+        "profileLockReason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Must be FieldValue.serverTimestamp()" }
+      },
+      "required": ["firebaseUid", "name", "ign", "uid", "role", "level", "banned", "warningsCount", "moderationWarningsCount", "kudosCount", "createdAt", "updatedAt"]
+    },
+    "UserAccountPrivate": {
+      "title": "UserAccountPrivate",
+      "description": "PII-isolated private user contact and payment details.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "profileId": { "type": "string" },
+        "phone": { "type": "string" },
+        "bkashNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["PLAYER", "ADMIN", "OWNER"] },
+        "joinedDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "profileId", "phone", "bkashNumber", "role", "createdAt", "updatedAt"]
+    },
+    "DepositRequest": {
+      "title": "DepositRequest",
+      "description": "User deposit request awaiting staff approval.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "userName": { "type": "string" },
+        "userIgn": { "type": "string" },
+        "amount": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["BKASH", "NAGAD"] },
+        "senderNumber": { "type": "string" },
+        "trxId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAtLabel": { "type": "string" },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "userPhone", "userName", "userIgn", "amount", "paymentMethod", "senderNumber", "trxId", "status", "createdAt", "updatedAt"]
+    },
+    "WithdrawRequest": {
+      "title": "WithdrawRequest",
+      "description": "User withdrawal request awaiting staff settlement.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "userName": { "type": "string" },
+        "userIgn": { "type": "string" },
+        "amount": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["BKASH", "NAGAD"] },
+        "targetNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAtLabel": { "type": "string" },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "userPhone", "userName", "userIgn", "amount", "paymentMethod", "targetNumber", "status", "createdAt", "updatedAt"]
+    },
+    "BadgeAppeal": {
+      "title": "BadgeAppeal",
+      "description": "Badge review appeal submitted by a player.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userIgn": { "type": "string" },
+        "userUid": { "type": "string" },
+        "requestedBadge": { "type": "string" },
+        "reasonNote": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "grantedBadge": { "type": "string" },
+        "adminNote": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "createdAtLabel": { "type": "string" },
+        "matchesPlayedSnapshot": { "type": "integer" },
+        "totalSpentSnapshot": { "type": "integer" },
+        "totalWinsSnapshot": { "type": "integer" },
+        "totalKillsSnapshot": { "type": "integer" },
+        "totalEarningsSnapshot": { "type": "integer" },
+        "chatMessages": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "userId", "userName", "userIgn", "userUid", "requestedBadge", "reasonNote", "status", "createdAt", "updatedAt"]
+    },
+    "GlobalChatMessage": {
+      "title": "GlobalChatMessage",
+      "description": "Public tournament lobby chat message.",
+      "type": "object",
+      "properties": {
+        "senderAuthUid": { "type": "string" },
+        "senderUserId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderIgn": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["PLAYER", "ADMIN", "OWNER"] },
+        "senderAvatarId": { "type": "string" },
+        "senderCustomPfpUri": { "type": "string" },
+        "senderPrimaryBadge": { "type": "string" },
+        "senderBadges": { "type": "array" },
+        "text": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "timeLabel": { "type": "string" },
+        "pinnedAnnouncement": { "type": "boolean" },
+        "replyToId": { "type": "string" },
+        "replyToIgn": { "type": "string" },
+        "replyToText": { "type": "string" },
+        "reactions": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderAuthUid", "senderUserId", "senderName", "senderIgn", "senderRole", "text", "timestampMillis", "pinnedAnnouncement", "createdAt", "updatedAt"]
+    },
+    "ModerationLogEntry": {
+      "title": "ModerationLogEntry",
+      "description": "Audit log for moderation actions performed by Owner or Admin.",
+      "type": "object",
+      "properties": {
+        "targetAuthUid": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "targetIgn": { "type": "string" },
+        "actionType": { "type": "string" },
+        "durationLabel": { "type": "string" },
+        "reason": { "type": "string" },
+        "moderatorRole": { "type": "string", "enum": ["ADMIN", "OWNER"] },
+        "moderatorName": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "timeLabel": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["targetAuthUid", "targetUserId", "targetIgn", "actionType", "reason", "moderatorRole", "moderatorName", "timestampMillis", "createdAt"]
+    },
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Trusted staff directory keyed by Firebase Auth UID for role verification.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["ADMIN", "OWNER"] },
+        "email": { "type": "string" },
+        "ign": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppConfig" },
+      "description": "Global tournament settings and strict rules document."
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/TournamentMatch" },
+      "description": "Tournament matches and slot counts."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/SlotBooking" },
+      "description": "Non-PII match slot bookings synchronized across devices."
+    },
+    "/player_directory/{userId}": {
+      "schema": { "$ref": "#/entities/PlayerDirectoryEntry" },
+      "description": "Public player roster, stats, badges, kudos, and moderation statuses."
+    },
+    "/user_accounts/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccountPrivate" },
+      "description": "Private PII contact & wallet settings isolated per user."
+    },
+    "/deposit_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/DepositRequest" },
+      "description": "Player wallet deposit requests."
+    },
+    "/withdraw_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/WithdrawRequest" },
+      "description": "Player wallet withdrawal requests."
+    },
+    "/badge_appeals/{appealId}": {
+      "schema": { "$ref": "#/entities/BadgeAppeal" },
+      "description": "Player badge verification appeals."
+    },
+    "/global_chat/{messageId}": {
+      "schema": { "$ref": "#/entities/GlobalChatMessage" },
+      "description": "Global tournament lobby chat."
+    },
+    "/moderation_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ModerationLogEntry" },
+      "description": "Moderation punishment audit trail."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminGrant" },
+      "description": "Verified Owner/Admin role grants keyed by Firebase UID."
+    }
+  }
+}

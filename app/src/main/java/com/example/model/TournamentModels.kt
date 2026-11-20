@@ -332,7 +332,7 @@ enum class ProfileBannerColor(
     val endColorHex: Long,
     val accentHex: Long
 ) {
-    DEFAULT_CRIMSON("crimson_flame", "ক্রিমসন ফ্লেম", 0xFF240B29, 0xFF6B0F47, 0xFF0F172A, 0xFFE2136E),
+    DEFAULT_CRIMSON("crimson_flame", "অগ্নি ও জল (ফায়ার-ওয়াটার)", 0xFF280D07, 0xFF0B1120, 0xFF062135, 0xFFFF6D00),
     CYBER_CYAN("cyber_cyan", "সাইবার সায়ান", 0xFF042F2E, 0xFF0E7490, 0xFF0F172A, 0xFF00E5FF),
     ROYAL_GOLD("royal_gold", "রয়্যাল গোল্ড", 0xFF3F2305, 0xFF9A6700, 0xFF1F2937, 0xFFFFB300),
     EMERALD_VIPER("emerald_viper", "এমেরাল্ড গ্রিন", 0xFF022C22, 0xFF047857, 0xFF0F172A, 0xFF10B981),
@@ -346,6 +346,52 @@ enum class ProfileBannerColor(
             entries.firstOrNull { it.id == id } ?: DEFAULT_CRIMSON
     }
 }
+
+enum class ModerationActionType(
+    val banglaLabel: String,
+    val emoji: String,
+    val accentHex: Long
+) {
+    WARN("সতর্কবার্তা (+১ ওয়ার্ন)", "⚠️", 0xFFFFB703),
+    CLEAR_WARNINGS("ওয়ার্নিং রিসেট", "🧹", 0xFF10B981),
+    TIMEOUT("অ্যাপ টাইমআউট", "⏳", 0xFF00E5FF),
+    REMOVE_TIMEOUT("টাইমআউট প্রত্যাহার", "🔓", 0xFF10B981),
+    CHAT_MUTE("গ্লোবাল চ্যাট মিউট", "🔇", 0xFFFF6D00),
+    UNMUTE_CHAT("চ্যাট আনমিউট", "🔊", 0xFF10B981),
+    MATCH_BAN("ম্যাচ এন্ট্রি ব্যান", "🎯", 0xFFFF3D00),
+    UNBAN_MATCH("ম্যাচ ব্যান প্রত্যাহার", "✅", 0xFF10B981),
+    WALLET_FREEZE("ওয়ালেট ফ্রিজ", "❄️", 0xFF38BDF8),
+    UNFREEZE_WALLET("ওয়ালেট আনফ্রিজ", "🔥", 0xFFFF6D00),
+    TEMP_BAN("অস্থায়ী অ্যাপ ব্যান", "🚫", 0xFFEF4444),
+    PERMANENT_BAN("স্থায়ী ব্ল্যাকলিস্ট ব্যান", "⛔", 0xFFDC2626),
+    UNBAN("অ্যাপ আনব্যান", "🕊️", 0xFF10B981),
+    GIVE_BADGE("ব্যাজ প্রদান", "🏅", 0xFFFFD700),
+    TAKE_BADGE("ব্যাজ প্রত্যাহার", "🗑️", 0xFFFF6D00),
+    REMOVE_ALL_BADGES("সব ব্যাজ বাতিল", "💥", 0xFFEF4444),
+    REWARD_BLOCK("স্পিন ও বোনাস ব্লক", "🎰", 0xFFFF6D00),
+    UNBLOCK_REWARD("রিওয়ার্ড আনব্লক", "🎁", 0xFF10B981),
+    APPEAL_BAN("ব্যাজ আপিল ব্লক", "📵", 0xFFFF3D00),
+    UNBAN_APPEAL("আপিল আনলক", "📩", 0xFF10B981),
+    PROFILE_LOCK("প্রোফাইল এডিট লক", "🪪", 0xFF0EA5E9),
+    UNLOCK_PROFILE("প্রোফাইল আনলক", "🔓", 0xFF10B981),
+    WALLET_FINE("ব্যালেন্স জরিমানা", "💸", 0xFFEF4444),
+    STATS_RESET("র‍্যাঙ্ক ও স্ট্যাটস রিসেট", "📉", 0xFFDC2626),
+    PARDON_ALL("সকল শাস্তি মওকুফ", "🌟", 0xFF10B981)
+}
+
+data class ModerationLogEntry(
+    val id: String,
+    val targetUserId: String,
+    val targetIgn: String,
+    val targetPhone: String,
+    val actionType: ModerationActionType,
+    val durationLabel: String = "",
+    val reason: String = "",
+    val moderatorRole: UserRole = UserRole.OWNER,
+    val moderatorName: String = "ওনার",
+    val timestampMillis: Long = System.currentTimeMillis(),
+    val timeLabel: String = "এইমাত্র"
+)
 
 fun isAnimatedGifPathOrUri(uri: String?): Boolean {
     if (uri.isNullOrBlank()) return false
@@ -393,7 +439,24 @@ data class AppUser(
     val level: Int = 1,
     val kudosCount: Int = 0,
     val warningsCount: Int = 0,
-    val banExpiresAtMillis: Long? = null
+    val banExpiresAtMillis: Long? = null,
+    val moderationWarningsCount: Int = 0,
+    val timeoutUntilMillis: Long? = null,
+    val timeoutReason: String? = null,
+    val timeoutBy: String? = null,
+    val isChatMuted: Boolean = false,
+    val chatMuteUntilMillis: Long? = null,
+    val chatMuteReason: String? = null,
+    val isMatchBanned: Boolean = false,
+    val matchBanReason: String? = null,
+    val isWalletFrozen: Boolean = false,
+    val walletFreezeReason: String? = null,
+    val isRewardBlocked: Boolean = false,
+    val rewardBlockReason: String? = null,
+    val isAppealBanned: Boolean = false,
+    val appealBanReason: String? = null,
+    val isProfileLocked: Boolean = false,
+    val profileLockReason: String? = null
 ) {
     val effectiveBadges: List<BadgeType> get() {
         val auto = mutableListOf<BadgeType>()
@@ -463,7 +526,24 @@ data class UserProfile(
     val customBadges: Set<BadgeType> = emptySet(),
     val revokedBadges: Set<BadgeType> = emptySet(),
     val warningsCount: Int = 0,
-    val banExpiresAtMillis: Long? = null
+    val banExpiresAtMillis: Long? = null,
+    val moderationWarningsCount: Int = 0,
+    val timeoutUntilMillis: Long? = null,
+    val timeoutReason: String? = null,
+    val timeoutBy: String? = null,
+    val isChatMuted: Boolean = false,
+    val chatMuteUntilMillis: Long? = null,
+    val chatMuteReason: String? = null,
+    val isMatchBanned: Boolean = false,
+    val matchBanReason: String? = null,
+    val isWalletFrozen: Boolean = false,
+    val walletFreezeReason: String? = null,
+    val isRewardBlocked: Boolean = false,
+    val rewardBlockReason: String? = null,
+    val isAppealBanned: Boolean = false,
+    val appealBanReason: String? = null,
+    val isProfileLocked: Boolean = false,
+    val profileLockReason: String? = null
 ) {
     val earnedBadges: List<BadgeType> get() {
         val list = mutableListOf<BadgeType>()
@@ -574,6 +654,11 @@ data class AppCustomization(
     val selectedLogo: AppLogoOption = AppLogoOption.TH_LOGO,
     val noticeTickerText: String = "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!",
     val activeAnnouncement: String = "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!",
+    val announcementTitle: String = "অফিসিয়াল ঘোষণা",
+    val announcementAuthor: String = "👑 TH ওনার",
+    val announcementUpdatedAtMillis: Long = 0L,
+    val isAnnouncementUrgent: Boolean = false,
+    val isAnnouncementEnabled: Boolean = true,
     val officialBkashNumber: String = "01861583924",
     val officialNagadNumber: String = "01861583924",
     val officialWhatsAppUrl: String = "https://chat.whatsapp.com/G8TrustedTHTournament",

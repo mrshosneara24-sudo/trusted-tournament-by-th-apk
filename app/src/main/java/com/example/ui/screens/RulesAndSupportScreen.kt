@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Security
@@ -64,8 +63,6 @@ fun RulesAndSupportScreen(
     onOpenSupportChat: () -> Unit,
     strictRules: List<TournamentRuleItem> = emptyList(),
     appCustomization: AppCustomization = AppCustomization(),
-    isOwner: Boolean = false,
-    onOpenOwnerRulesEditor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -96,19 +93,6 @@ fun RulesAndSupportScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-
-                    if (isOwner) {
-                        Button(
-                            onClick = onOpenOwnerRulesEditor,
-                            colors = ButtonDefaults.buttonColors(containerColor = FlameYellow, contentColor = Color.Black),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(Icons.Filled.Edit, contentDescription = "এডিট রুলস", modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("এডিট রুলস", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
                     }
                 }
             }

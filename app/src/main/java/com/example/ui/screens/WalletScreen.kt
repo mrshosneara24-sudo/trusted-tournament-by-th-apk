@@ -214,7 +214,7 @@ fun WalletScreen(
                         // Career Withdraw Status Pill
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isWithdrawUnlocked) VictoryGreen.copy(alpha = 0.16f) else Color(0xFF340C17),
+                            color = if (isWithdrawUnlocked) VictoryGreen.copy(alpha = 0.16f) else Color(0xFF2B0E0A),
                             border = BorderStroke(1.dp, if (isWithdrawUnlocked) VictoryGreen.copy(alpha = 0.6f) else NeonPink.copy(alpha = 0.6f)),
                             modifier = Modifier
                                 .fillMaxWidth()

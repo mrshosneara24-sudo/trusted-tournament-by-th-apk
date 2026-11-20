@@ -67,18 +67,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.model.AppCustomization
 import com.example.model.AppUser
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
 import com.example.model.MatchType
+import com.example.model.ModerationLogEntry
 import com.example.model.TournamentMatch
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.UserRole
 import com.example.model.WithdrawRequest
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.FireWaterBorderGradient
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
@@ -115,11 +119,30 @@ fun AdminControlDialog(
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onApproveBadgeAppeal: (appealId: String, selectedBadge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onDenyBadgeAppeal: (appealId: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
-    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" }
+    onSendAppealChat: (appealId: String, text: String, proofImageUri: String?) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    moderationLogs: List<ModerationLogEntry> = emptyList(),
+    onWarnUser: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onClearWarnings: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onTimeoutUser: (targetKey: String, durationMinutes: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onRemoveTimeout: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onMuteChat: (targetKey: String, durationHours: Long, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onUnmuteChat: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onSetMatchBan: (targetKey: String, banned: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onSetWalletFreeze: (targetKey: String, frozen: Boolean, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onTempBanUser: (targetKey: String, days: Int, reason: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onPermBanUser: (targetKey: String, reason: String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onUnbanUser: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onGrantBadge: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onRevokeBadge: (targetKey: String, badge: BadgeType) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onStripAllBadges: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    onPardonAll: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
+    appCustomization: AppCustomization = AppCustomization(),
+    onPublishAnnouncement: (title: String, message: String, isUrgent: Boolean) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
+    onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Room Publish, 1: WhatsApp, 2: Create Match, 3: Balance, 4: Requests, 5: Badge Appeals
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Room, 1: WhatsApp, 2: Create Match, 3: Balance, 4: Requests, 5: Badge Appeals, 6: Moderation, 7: Live Announcement
     val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
 
     Dialog(
@@ -133,7 +156,7 @@ fun AdminControlDialog(
                 .testTag("admin_control_dialog"),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f))
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, FireWaterBorderGradient)
         ) {
             Column(
                 modifier = Modifier
@@ -276,6 +299,32 @@ fun AdminControlDialog(
                             )
                         }
                     )
+                    Tab(
+                        selected = selectedTab == 6,
+                        onClick = { selectedTab = 6 },
+                        modifier = Modifier.testTag("admin_tab_moderation"),
+                        text = {
+                            Text(
+                                text = "🛡️ মডারেশন",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 6) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 6) FlameCyan else Color.White
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 7,
+                        onClick = { selectedTab = 7 },
+                        modifier = Modifier.testTag("admin_tab_announcement"),
+                        text = {
+                            Text(
+                                text = "📢 ঘোষণা",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 7) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 7) FlameYellow else Color.White
+                            )
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -324,6 +373,36 @@ fun AdminControlDialog(
                             onApproveAppeal = onApproveBadgeAppeal,
                             onDenyAppeal = onDenyBadgeAppeal,
                             onSendAppealChat = onSendAppealChat
+                        )
+                    }
+                    6 -> {
+                        ModerationPanelSection(
+                            actorRole = UserRole.ADMIN,
+                            allUsers = allUsers,
+                            moderationLogs = moderationLogs,
+                            onWarnUser = onWarnUser,
+                            onClearWarnings = onClearWarnings,
+                            onTimeoutUser = onTimeoutUser,
+                            onRemoveTimeout = onRemoveTimeout,
+                            onMuteChat = onMuteChat,
+                            onUnmuteChat = onUnmuteChat,
+                            onSetMatchBan = onSetMatchBan,
+                            onSetWalletFreeze = onSetWalletFreeze,
+                            onTempBanUser = onTempBanUser,
+                            onPermBanUser = onPermBanUser,
+                            onUnbanUser = onUnbanUser,
+                            onGrantBadge = onGrantBadge,
+                            onRevokeBadge = onRevokeBadge,
+                            onStripAllBadges = onStripAllBadges,
+                            onPardonAll = onPardonAll
+                        )
+                    }
+                    7 -> {
+                        LiveAnnouncementControlSection(
+                            actorRole = UserRole.ADMIN,
+                            appCustomization = appCustomization,
+                            onPublishAnnouncement = onPublishAnnouncement,
+                            onClearAnnouncement = onClearAnnouncement
                         )
                     }
                 }
@@ -617,9 +696,9 @@ private fun CreateMatchSection(
     var mapName by remember { mutableStateOf("বারমুডা (Bermuda)") }
     var matchDateTime by remember { mutableStateOf("আজ রাত ৯:৪৫ PM") }
     var entryFee by remember { mutableStateOf("10") }
-    var totalPrize by remember { mutableStateOf("300") }
-    var perKill by remember { mutableStateOf("3") }
-    var booyahPrize by remember { mutableStateOf("80") }
+    var totalPrize by remember { mutableStateOf("80") }
+    var perKill by remember { mutableStateOf("1") }
+    var booyahPrize by remember { mutableStateOf("30") }
     var totalSlots by remember { mutableStateOf("48") }
 
     Column {
@@ -666,23 +745,23 @@ private fun CreateMatchSection(
                                 totalSlots = "2"
                                 title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #১০"
                                 mapName = "আয়রন কেজ (Iron Cage)"
-                                totalPrize = "25"
+                                totalPrize = "15"
                                 perKill = "0"
-                                booyahPrize = "25"
+                                booyahPrize = "15"
                             } else if (cat == GameCategory.CS_RANK) {
                                 totalSlots = "8"
                                 title = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ ক্ল্যাশ স্কোয়াড #১৩"
                                 mapName = "ক্লক টাওয়ার"
-                                totalPrize = "70"
+                                totalPrize = "40"
                                 perKill = "0"
-                                booyahPrize = "70"
+                                booyahPrize = "40"
                             } else {
                                 totalSlots = "48"
                                 title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০২"
                                 mapName = "বারমুডা (Bermuda)"
-                                totalPrize = "300"
-                                perKill = "3"
-                                booyahPrize = "80"
+                                totalPrize = "80"
+                                perKill = "1"
+                                booyahPrize = "30"
                             }
                         }
                 ) {

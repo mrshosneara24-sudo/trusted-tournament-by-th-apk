@@ -107,7 +107,6 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
     onOpenAdminPanel: () -> Unit,
     onOpenOwnerPanel: () -> Unit = {},
-    onOpenMasterEditor: () -> Unit = onOpenOwnerPanel,
     onOpenDepositDialog: () -> Unit = {},
     onOpenWithdrawDialog: () -> Unit = {},
     onApproveDeposit: (requestId: String) -> Boolean = { false },
@@ -636,55 +635,6 @@ fun SettingsDialog(
                     }
 
                     if (isOwner) {
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF210C1B),
-                            border = BorderStroke(1.5.dp, FlameYellow),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onDismiss()
-                                    onOpenMasterEditor()
-                                }
-                                .testTag("open_master_editor_from_settings")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(FlameYellow),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("🛠️", fontSize = 20.sp)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "👑 A-to-Z ওনার অ্যাপ এডিটর",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Black),
-                                        color = FlameYellow
-                                    )
-                                    Text(
-                                        text = "লোগো নির্বাচন, স্লট ক্রিয়েট/ডিলিট, ম্যাচ এডিট ও কঠোর রুলস",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextPrimary
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                                    contentDescription = null,
-                                    tint = FlameYellow,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Surface(

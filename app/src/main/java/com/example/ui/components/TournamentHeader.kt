@@ -80,7 +80,7 @@ fun TournamentHeader(
             border = BorderStroke(
                 1.dp,
                 Brush.horizontalGradient(
-                    listOf(FlameYellow.copy(alpha = 0.65f), NeonPink.copy(alpha = 0.55f), Color.White.copy(alpha = 0.25f))
+                    listOf(FlameYellow.copy(alpha = 0.7f), NeonPink.copy(alpha = 0.6f), com.example.ui.theme.WaterCyan.copy(alpha = 0.65f))
                 )
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)

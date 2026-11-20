@@ -70,6 +70,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.example.data.TournamentAiAssistant
 import com.example.model.AppUser
+import com.example.model.BadgeType
 import com.example.model.ChatMessage
 import com.example.model.UserProfile
 import com.example.ui.SupportTabType
@@ -97,7 +98,9 @@ fun SupportChatDialog(
     registeredUsers: List<AppUser> = emptyList(),
     currentUser: UserProfile = UserProfile(),
     onPlayerProfileClick: ((PlayerProfileCardData) -> Unit)? = null,
-    onGiveKudos: ((String) -> Int)? = null
+    onGiveKudos: ((String) -> Int)? = null,
+    onGrantBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
+    onRevokeBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null
 ) {
     var inputText by remember { mutableStateOf("") }
     var isAiTyping by remember { mutableStateOf(false) }
@@ -534,7 +537,10 @@ fun SupportChatDialog(
         PlayerProfileCardDialog(
             profile = profileData,
             onDismiss = { localPlayerProfileCard = null },
-            onGiveKudos = onGiveKudos
+            onGiveKudos = onGiveKudos,
+            viewerRole = currentUser.role,
+            onGrantBadge = onGrantBadge,
+            onRevokeBadge = onRevokeBadge
         )
     }
 }

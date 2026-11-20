@@ -35,11 +35,18 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,29 +75,39 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.GoogleAuthHelper
+import com.example.data.GoogleSignInOutcome
 import com.example.model.RequestStatus
 import com.example.model.UserRole
 import com.example.ui.components.AddMoneyDialog
 import com.example.ui.components.AdminControlDialog
 import com.example.ui.components.DailyLuckySpinDialog
 import com.example.ui.components.DailyStreakDialog
+import com.example.ui.components.EditAccountDialog
+import com.example.ui.components.OwnerControlDialog
+import kotlinx.coroutines.launch
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.PlayerProfileCardDialog
-import com.example.ui.components.EditAccountDialog
-import com.example.ui.components.MasterAppEditorDialog
-import com.example.ui.components.OwnerControlDialog
+import com.example.ui.components.toPlayerProfileCard
 import com.example.ui.components.RoomDetailsDialog
 import com.example.ui.components.RoomSlotGridDialog
 import com.example.ui.components.SettingsDialog
@@ -105,22 +123,31 @@ import com.example.ui.screens.MatchesScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.RulesAndSupportScreen
 import com.example.ui.screens.WalletScreen
-import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DisplayFontFamily
+import com.example.ui.theme.EmberGold
+import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.FireOrange
+import com.example.ui.theme.FireRed
+import com.example.ui.theme.FireWaterBorderGradient
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
+import com.example.ui.theme.ObsidianBlack
 import com.example.ui.theme.PinkBlackButtonGradient
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.VelvetBlack
 import com.example.ui.theme.VictoryGreen
+import com.example.ui.theme.WaterBlue
+import com.example.ui.theme.WaterCyan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,6 +166,7 @@ fun MainTournamentApp(
     val depositRequests by viewModel.depositRequests.collectAsStateWithLifecycle()
     val withdrawRequests by viewModel.withdrawRequests.collectAsStateWithLifecycle()
     val leaderboard by viewModel.leaderboard.collectAsStateWithLifecycle()
+    val results by viewModel.results.collectAsStateWithLifecycle()
     val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
     val globalChatMessages by viewModel.globalChatMessages.collectAsStateWithLifecycle()
     val hasSpunToday by viewModel.hasSpunToday.collectAsStateWithLifecycle()
@@ -150,8 +178,11 @@ fun MainTournamentApp(
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
     val appCustomization by viewModel.appCustomization.collectAsStateWithLifecycle()
     val strictRules by viewModel.strictRules.collectAsStateWithLifecycle()
-    var showMasterAppEditor by remember { mutableStateOf(false) }
+    val isCloudConnected by viewModel.isCloudConnected.collectAsStateWithLifecycle()
+    val cloudUserEmail by viewModel.cloudUserEmail.collectAsStateWithLifecycle()
     var selectedPlayerProfileCard by remember { mutableStateOf<PlayerProfileCardData?>(null) }
+    val appContext = LocalContext.current
+    val appCoroutineScope = rememberCoroutineScope()
 
     val bookingMatch by viewModel.bookingMatch.collectAsStateWithLifecycle()
     val roomSlotGridMatch by viewModel.roomSlotGridMatch.collectAsStateWithLifecycle()
@@ -174,6 +205,7 @@ fun MainTournamentApp(
     val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
     val badgeAppeals by viewModel.badgeAppeals.collectAsStateWithLifecycle()
+    val moderationLogs by viewModel.moderationLogs.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -182,6 +214,30 @@ fun MainTournamentApp(
         snackbarMsg?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearSnackbar()
+        }
+    }
+
+    // Live ticking clock for App Timeout countdown lockout overlay
+    var liveNowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(isLoggedIn, userProfile.role, userProfile.timeoutUntilMillis) {
+        liveNowMillis = System.currentTimeMillis()
+        while (isLoggedIn && userProfile.role != UserRole.OWNER && userProfile.timeoutUntilMillis != null) {
+            liveNowMillis = System.currentTimeMillis()
+            val until = userProfile.timeoutUntilMillis ?: break
+            if (liveNowMillis >= until) {
+                viewModel.refreshExpiredModeration(liveNowMillis)
+                break
+            }
+            kotlinx.coroutines.delay(500L)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        when (val restored = GoogleAuthHelper.trySilentRestore(appContext)) {
+            is GoogleSignInOutcome.Success -> {
+                viewModel.onGoogleSignInSuccess(restored.firebaseUid, restored.email, restored.displayName)
+            }
+            else -> Unit
         }
     }
 
@@ -203,13 +259,21 @@ fun MainTournamentApp(
             onResetPassword = { phoneOrUid, newPass ->
                 viewModel.resetPassword(phoneOrUid, newPass)
             },
+            onGoogleSignInSuccess = { firebaseUid, email, displayName ->
+                viewModel.onGoogleSignInSuccess(firebaseUid, email, displayName)
+            },
             appCustomization = appCustomization
         )
         return
     }
 
-    // Handle back button on sub-tabs to go back to Matches
-    BackHandler(enabled = currentTab != TournamentTab.MATCHES) {
+    val activeTimeoutUntil = userProfile.timeoutUntilMillis
+    val isTimedOutLocked = userProfile.role != UserRole.OWNER &&
+        activeTimeoutUntil != null &&
+        activeTimeoutUntil > liveNowMillis
+
+    // Handle back button on sub-tabs to go back to Matches (disabled while timed out)
+    BackHandler(enabled = currentTab != TournamentTab.MATCHES && !isTimedOutLocked) {
         viewModel.selectTab(TournamentTab.MATCHES)
     }
 
@@ -220,6 +284,7 @@ fun MainTournamentApp(
         d.count { it.status == RequestStatus.PENDING } + w.count { it.status == RequestStatus.PENDING }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkBackground,
@@ -239,7 +304,7 @@ fun MainTournamentApp(
                         .fillMaxWidth()
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color(0xFF170D1D), DarkSurface)
+                                listOf(Color(0xFF280D07), DarkSurface)
                             )
                         )
                         .statusBarsPadding()
@@ -264,7 +329,7 @@ fun MainTournamentApp(
                                     .clip(CircleShape)
                                     .border(
                                         1.5.dp,
-                                        Brush.linearGradient(listOf(FlameYellow, NeonPink)),
+                                        Brush.linearGradient(listOf(FireOrange, EmberGold, WaterCyan)),
                                         CircleShape
                                     )
                                     .padding(2.dp)
@@ -466,15 +531,74 @@ fun MainTournamentApp(
                             }
                         }
 
-                        // Owner A-to-Z Editor Pill (Owner Only)
+                        // Live Cloud Sync Pill (Multi-device sync via Google)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isCloudConnected) Color(0xFF0A2721) else Color(0xFF0B1F34),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isCloudConnected) VictoryGreen.copy(alpha = 0.7f) else WaterCyan.copy(alpha = 0.6f)
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    if (!isCloudConnected) {
+                                        appCoroutineScope.launch {
+                                            when (val outcome = GoogleAuthHelper.signInInteractive(appContext)) {
+                                                is GoogleSignInOutcome.Success -> {
+                                                    viewModel.onGoogleSignInSuccess(
+                                                        outcome.firebaseUid,
+                                                        outcome.email,
+                                                        outcome.displayName
+                                                    )
+                                                }
+                                                is GoogleSignInOutcome.Cancelled -> {
+                                                    snackbarHostState.showSnackbar(outcome.message)
+                                                }
+                                                is GoogleSignInOutcome.Error -> {
+                                                    snackbarHostState.showSnackbar(outcome.message)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        appCoroutineScope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                "☁️ লাইভ ক্লাউড সিঙ্ক সক্রিয় (${cloudUserEmail.ifBlank { "Connected" }})"
+                                            )
+                                        }
+                                    }
+                                }
+                                .testTag("appbar_cloud_sync_pill")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isCloudConnected) Icons.Filled.CloudDone else Icons.Filled.CloudSync,
+                                    contentDescription = "Cloud Sync",
+                                    tint = if (isCloudConnected) VictoryGreen else WaterCyan,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isCloudConnected) "লাইভ সিঙ্ক" else "সিঙ্ক অন",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCloudConnected) VictoryGreen else WaterCyan
+                                )
+                            }
+                        }
+
+                        // Owner Supreme Panel Pill (Owner Only)
                         if (userProfile.role == UserRole.OWNER) {
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF2B1124),
+                                color = Color(0xFF1F1209),
                                 border = BorderStroke(1.dp, FlameYellow),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .clickable { showMasterAppEditor = true }
+                                    .clickable { viewModel.openOwnerPanel() }
                                     .testTag("appbar_owner_btn")
                             ) {
                                 Row(
@@ -560,7 +684,7 @@ fun MainTournamentApp(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
-                        indicatorColor = BkashPink,
+                        indicatorColor = WaterBlue,
                         unselectedIconColor = TextMuted,
                         unselectedTextColor = TextMuted
                     ),
@@ -614,7 +738,7 @@ fun MainTournamentApp(
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
-                        indicatorColor = BkashPink,
+                        indicatorColor = WaterBlue,
                         unselectedIconColor = TextMuted,
                         unselectedTextColor = TextMuted
                     ),
@@ -652,8 +776,8 @@ fun MainTournamentApp(
         ) {
             if (appCustomization.isMaintenanceMode) {
                 Surface(
-                    color = Color(0xFF3A0919),
-                    border = BorderStroke(1.dp, NeonPink),
+                    color = Color(0xFF2B0E09),
+                    border = BorderStroke(1.dp, FireRed),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -667,7 +791,7 @@ fun MainTournamentApp(
                         Icon(
                             imageVector = Icons.Filled.Warning,
                             contentDescription = "Maintenance Notice",
-                            tint = NeonPink,
+                            tint = FireRed,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -676,6 +800,136 @@ fun MainTournamentApp(
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
+                    }
+                }
+            }
+
+            // Global Real-Time App Announcement Banner (Visible across every tab when active)
+            val isAnnouncementActive = appCustomization.isAnnouncementEnabled && appCustomization.activeAnnouncement.isNotBlank()
+            var isAnnouncementMinimized by remember { mutableStateOf(false) }
+            var lastSeenAnnouncementStamp by remember { mutableLongStateOf(appCustomization.announcementUpdatedAtMillis) }
+            LaunchedEffect(appCustomization.announcementUpdatedAtMillis, appCustomization.activeAnnouncement) {
+                val stamp = appCustomization.announcementUpdatedAtMillis
+                if (stamp > 0L && stamp != lastSeenAnnouncementStamp) {
+                    lastSeenAnnouncementStamp = stamp
+                    isAnnouncementMinimized = false
+                }
+            }
+
+            if (isAnnouncementActive) {
+                val urgent = appCustomization.isAnnouncementUrgent
+                Surface(
+                    color = DarkCard,
+                    border = BorderStroke(
+                        1.2.dp,
+                        if (urgent) FireRed else FlameCyan.copy(alpha = 0.75f)
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("live_app_announcement_banner")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        if (urgent) FireRed.copy(alpha = 0.22f) else FireOrange.copy(alpha = 0.14f),
+                                        DarkCard,
+                                        WaterBlue.copy(alpha = 0.16f)
+                                    )
+                                )
+                            )
+                            .clickable { isAnnouncementMinimized = !isAnnouncementMinimized }
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(if (urgent) FireRed.copy(alpha = 0.24f) else FlameCyan.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (urgent) Icons.Filled.NotificationsActive else Icons.Filled.Campaign,
+                                        contentDescription = "Official Live Announcement",
+                                        tint = if (urgent) FireRed else FlameCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = appCustomization.announcementTitle.ifBlank { "📢 অফিসিয়াল ঘোষণা" },
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = if (urgent) FireRed else FlameYellow,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (urgent) FireRed else VictoryGreen.copy(alpha = 0.22f),
+                                    border = BorderStroke(
+                                        0.8.dp,
+                                        if (urgent) FlameYellow else VictoryGreen.copy(alpha = 0.7f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (urgent) "URGENT LIVE" else "LIVE",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontFamily = MonoFontFamily,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 8.sp
+                                        ),
+                                        color = if (urgent) Color.White else VictoryGreen,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = if (isAnnouncementMinimized) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                                contentDescription = if (isAnnouncementMinimized) "Expand Announcement" else "Minimize Announcement",
+                                tint = FlameCyan,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .testTag("live_announcement_toggle_btn")
+                            )
+                        }
+
+                        if (!isAnnouncementMinimized) {
+                            Spacer(modifier = Modifier.padding(top = 4.dp))
+                            Text(
+                                text = appCustomization.activeAnnouncement,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 17.sp
+                                ),
+                                color = TextPrimary
+                            )
+                            if (appCustomization.announcementAuthor.isNotBlank()) {
+                                Spacer(modifier = Modifier.padding(top = 3.dp))
+                                Text(
+                                    text = "প্রেরক: ${appCustomization.announcementAuthor}",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                    color = FlameCyan
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -690,11 +944,24 @@ fun MainTournamentApp(
                     },
                     label = "tab_content_transition"
                 ) { activeTab ->
+                    val currentUserBookings = remember(
+                        myBookings,
+                        userProfile.phone,
+                        userProfile.uid,
+                        userProfile.ign
+                    ) {
+                        myBookings.filter { booking ->
+                            (userProfile.phone.isNotBlank() && booking.bkashSenderNumber == userProfile.phone) ||
+                                (userProfile.uid.isNotBlank() && booking.playerUid == userProfile.uid) ||
+                                (userProfile.ign.isNotBlank() && booking.playerIgn.equals(userProfile.ign, ignoreCase = true))
+                        }
+                    }
+
                     when (activeTab) {
                         TournamentTab.MATCHES -> {
                             MatchesScreen(
                                 matches = matches,
-                                myBookings = myBookings,
+                                myBookings = currentUserBookings,
                                 selectedCategory = selectedCategory,
                                 searchQuery = searchQuery,
                                 walletBalance = walletBalance,
@@ -715,7 +982,7 @@ fun MainTournamentApp(
 
                         TournamentTab.MY_MATCHES -> {
                             MyMatchesScreen(
-                                bookings = myBookings,
+                                bookings = currentUserBookings,
                                 onViewRoomDetails = { viewModel.openRoomDetailsForBooking(it) },
                                 onExploreMatchesClick = { viewModel.selectTab(TournamentTab.MATCHES) },
                                 onViewTransactionHistoryClick = { viewModel.selectTab(TournamentTab.WALLET) }
@@ -746,7 +1013,11 @@ fun MainTournamentApp(
                                 onOpenGlobalChat = { viewModel.selectTab(TournamentTab.GLOBAL_CHAT) },
                                 badgeAppeals = badgeAppeals,
                                 onSubmitBadgeAppeal = { badge, note -> viewModel.submitBadgeAppeal(badge, note) },
-                                onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) }
+                                onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) },
+                                results = results,
+                                isCloudConnected = isCloudConnected,
+                                onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+                                onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) }
                             )
                         }
 
@@ -799,7 +1070,9 @@ fun MainTournamentApp(
                                 onGiveKudos = { viewModel.giveProfileKudos(it) },
                                 badgeAppeals = badgeAppeals,
                                 onSubmitBadgeAppeal = { badge, note -> viewModel.submitBadgeAppeal(badge, note) },
-                                onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) }
+                                onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) },
+                                onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+                                onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) }
                             )
                         }
                     }
@@ -817,6 +1090,7 @@ fun MainTournamentApp(
         }
     }
 
+    if (!isTimedOutLocked) {
     // Slot Booking Dialog
     bookingMatch?.let { match ->
         val takenSlots = myBookings.filter { it.matchId == match.id }.map { it.slotNumber }.toSet()
@@ -859,7 +1133,9 @@ fun MainTournamentApp(
             registeredUsers = registeredUsers,
             currentUser = userProfile,
             onPlayerProfileClick = { selectedPlayerProfileCard = it },
-            onGiveKudos = { viewModel.giveProfileKudos(it) }
+            onGiveKudos = { viewModel.giveProfileKudos(it) },
+            onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+            onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) }
         )
     }
 
@@ -938,7 +1214,9 @@ fun MainTournamentApp(
             registeredUsers = registeredUsers,
             currentUser = userProfile,
             onPlayerProfileClick = { selectedPlayerProfileCard = it },
-            onGiveKudos = { viewModel.giveProfileKudos(it) }
+            onGiveKudos = { viewModel.giveProfileKudos(it) },
+            onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+            onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) }
         )
     }
 
@@ -1000,7 +1278,26 @@ fun MainTournamentApp(
             badgeAppeals = badgeAppeals,
             onApproveBadgeAppeal = { appealId, badge -> viewModel.approveBadgeAppeal(appealId, badge) },
             onDenyBadgeAppeal = { appealId, reason -> viewModel.denyBadgeAppeal(appealId, reason) },
-            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) }
+            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) },
+            moderationLogs = moderationLogs,
+            onWarnUser = { targetKey, reason -> viewModel.warnUser(targetKey, reason) },
+            onClearWarnings = { targetKey -> viewModel.clearUserModerationWarnings(targetKey) },
+            onTimeoutUser = { targetKey, durationMinutes, reason -> viewModel.timeoutUser(targetKey, durationMinutes, reason) },
+            onRemoveTimeout = { targetKey -> viewModel.removeTimeout(targetKey) },
+            onMuteChat = { targetKey, durationHours, reason -> viewModel.muteUserChat(targetKey, durationHours, reason) },
+            onUnmuteChat = { targetKey -> viewModel.unmuteUserChat(targetKey) },
+            onSetMatchBan = { targetKey, banned, reason -> viewModel.setUserMatchBan(targetKey, banned, reason) },
+            onSetWalletFreeze = { targetKey, frozen, reason -> viewModel.setUserWalletFreeze(targetKey, frozen, reason) },
+            onTempBanUser = { targetKey, days, reason -> viewModel.tempBanUser(targetKey, days, reason) },
+            onPermBanUser = { targetKey, reason -> viewModel.banUserWithResult(targetKey, reason) },
+            onUnbanUser = { targetKey -> viewModel.unbanUserWithResult(targetKey) },
+            onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+            onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) },
+            onStripAllBadges = { targetKey -> viewModel.removeAllBadgesFromUser(targetKey) },
+            onPardonAll = { targetKey -> viewModel.pardonAllPunishments(targetKey) },
+            appCustomization = appCustomization,
+            onPublishAnnouncement = { title, message, urgent -> viewModel.publishAppAnnouncement(title, message, urgent) },
+            onClearAnnouncement = { viewModel.clearAppAnnouncement() }
         )
     }
 
@@ -1025,10 +1322,6 @@ fun MainTournamentApp(
             onOpenOwnerPanel = {
                 viewModel.closeSettings()
                 viewModel.openOwnerPanel()
-            },
-            onOpenMasterEditor = {
-                viewModel.closeSettings()
-                showMasterAppEditor = true
             },
             onOpenDepositDialog = { viewModel.openAddMoney() },
             onOpenWithdrawDialog = { viewModel.openWithdraw() },
@@ -1061,6 +1354,15 @@ fun MainTournamentApp(
             onCancelSlotAndRefund = { bookingId ->
                 viewModel.cancelSlotBookingAndRefund(bookingId)
             },
+            onCancelLegacySlot = { matchId, slotNumber ->
+                viewModel.cancelLegacySlotByNumberResult(matchId, slotNumber)
+            },
+            onAddManualSlot = { matchId, slotNumber, ign, uid, phone, fee ->
+                viewModel.createManualSlotBookingResult(matchId, slotNumber, ign, uid, phone, fee)
+            },
+            onUpdateMatchSlotCapacity = { matchId, newCapacity ->
+                viewModel.updateMatchSlotCapacityResult(matchId, newCapacity)
+            },
             onCancelMatchAndRefundAll = { matchId ->
                 viewModel.cancelMatchAndRefundAll(matchId)
             },
@@ -1079,63 +1381,34 @@ fun MainTournamentApp(
             badgeAppeals = badgeAppeals,
             onApproveBadgeAppeal = { appealId, badge -> viewModel.approveBadgeAppeal(appealId, badge) },
             onDenyBadgeAppeal = { appealId, reason -> viewModel.denyBadgeAppeal(appealId, reason) },
-            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) }
-        )
-    }
-
-    // Master App Editor Dialog (Owner only)
-    if (showMasterAppEditor && userProfile.role == UserRole.OWNER) {
-        MasterAppEditorDialog(
+            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) },
+            moderationLogs = moderationLogs,
+            onWarnUser = { targetKey, reason -> viewModel.warnUser(targetKey, reason) },
+            onClearWarnings = { targetKey -> viewModel.clearUserModerationWarnings(targetKey) },
+            onTimeoutUser = { targetKey, durationMinutes, reason -> viewModel.timeoutUser(targetKey, durationMinutes, reason) },
+            onRemoveTimeout = { targetKey -> viewModel.removeTimeout(targetKey) },
+            onMuteChat = { targetKey, durationHours, reason -> viewModel.muteUserChat(targetKey, durationHours, reason) },
+            onUnmuteChat = { targetKey -> viewModel.unmuteUserChat(targetKey) },
+            onSetMatchBan = { targetKey, banned, reason -> viewModel.setUserMatchBan(targetKey, banned, reason) },
+            onSetWalletFreeze = { targetKey, frozen, reason -> viewModel.setUserWalletFreeze(targetKey, frozen, reason) },
+            onTempBanUser = { targetKey, days, reason -> viewModel.tempBanUser(targetKey, days, reason) },
+            onPermBanWithResult = { targetKey, reason -> viewModel.banUserWithResult(targetKey, reason) },
+            onUnbanUserWithResult = { targetKey -> viewModel.unbanUserWithResult(targetKey) },
+            onGrantBadgeResult = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+            onRevokeBadgeResult = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) },
+            onStripAllBadges = { targetKey -> viewModel.removeAllBadgesFromUser(targetKey) },
+            onPardonAll = { targetKey -> viewModel.pardonAllPunishments(targetKey) },
             appCustomization = appCustomization,
-            matches = allMatches,
-            bookings = myBookings,
-            strictRules = strictRules,
-            onDismiss = { showMasterAppEditor = false },
-            onUpdateAppBranding = { name, tagline, logo, ticker, announcement ->
-                viewModel.updateAppBranding(name, tagline, logo, ticker, announcement)
+            results = results,
+            onPublishAnnouncement = { title, message, urgent -> viewModel.publishAppAnnouncement(title, message, urgent) },
+            onClearAnnouncement = { viewModel.clearAppAnnouncement() },
+            onPublishMatchResult = { matchId, winnerKey, kills, prizeOverride, runnerUp, markFinished ->
+                viewModel.publishMatchResultAndPayout(matchId, winnerKey, kills, prizeOverride, runnerUp, markFinished)
             },
-            onUpdateFinancials = { bkash, nagad, whatsApp, minW, maxW ->
-                viewModel.updateFinancialSettings(bkash, nagad, whatsApp, minW, maxW)
+            onAwardPlayerStats = { targetKey, kills, wins, matchesCount, prize, note ->
+                viewModel.awardKillPrizeAndStats(targetKey, kills, wins, matchesCount, prize, note)
             },
-            onToggleMaintenance = { enabled, msg ->
-                viewModel.toggleMaintenanceMode(enabled, msg)
-            },
-            onCreateMatch = { title, category, matchType, mapName, matchDateTime, entryFee, totalPrize, perKill, booyahPrize, totalSlots ->
-                viewModel.createNewMatch(
-                    title, category, matchType, mapName, matchDateTime,
-                    entryFee, totalPrize, perKill, booyahPrize, totalSlots
-                )
-            },
-            onUpdateExistingMatch = { match ->
-                viewModel.updateExistingMatch(match)
-            },
-            onDeleteMatch = { matchId ->
-                viewModel.deleteMatch(matchId)
-            },
-            onUpdateSlotCapacity = { matchId, newCapacity ->
-                viewModel.updateMatchSlotCapacity(matchId, newCapacity)
-            },
-            onCreateManualSlot = { matchId, slotNumber, ign, uid, phone, fee ->
-                viewModel.createManualSlotBooking(matchId, slotNumber, ign, uid, phone, fee)
-            },
-            onCancelSlotAndRefund = { bookingId ->
-                viewModel.cancelSlotBookingAndRefund(bookingId)
-            },
-            onCancelMatchAndRefundAll = { matchId ->
-                viewModel.cancelMatchAndRefundAll(matchId)
-            },
-            onAddRule = { title, desc, penalty, emoji ->
-                viewModel.addStrictRule(title, desc, penalty, emoji)
-            },
-            onUpdateRule = { rule ->
-                viewModel.updateStrictRule(rule)
-            },
-            onDeleteRule = { ruleId ->
-                viewModel.deleteStrictRule(ruleId)
-            },
-            onResetRules = {
-                viewModel.resetDefaultRules()
-            }
+            onResetAppForFreshDownload = { viewModel.resetAppForFreshDownload() }
         )
     }
 
@@ -1145,7 +1418,7 @@ fun MainTournamentApp(
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, FireWaterBorderGradient)
             ) {
                 RulesAndSupportScreen(
                     officialBkashNumber = appCustomization.officialBkashNumber,
@@ -1154,12 +1427,7 @@ fun MainTournamentApp(
                         viewModel.openSupportChat()
                     },
                     strictRules = strictRules,
-                    appCustomization = appCustomization,
-                    isOwner = (userProfile.role == UserRole.OWNER),
-                    onOpenOwnerRulesEditor = {
-                        viewModel.closeRules()
-                        showMasterAppEditor = true
-                    }
+                    appCustomization = appCustomization
                 )
             }
         }
@@ -1167,10 +1435,35 @@ fun MainTournamentApp(
 
     // Global Esports Player Profile Card Modal
     selectedPlayerProfileCard?.let { profileData ->
+        val matchedLiveUser = remember(profileData, registeredUsers) {
+            registeredUsers.firstOrNull { user ->
+                (profileData.userId.isNotBlank() && user.id == profileData.userId) ||
+                    (profileData.userId.isNotBlank() && user.phone == profileData.userId) ||
+                    (profileData.uid.isNotBlank() && profileData.uid != "N/A" && user.uid == profileData.uid) ||
+                    user.ign.equals(profileData.ign, ignoreCase = true)
+            }
+        }
+        val effectiveProfileData = remember(profileData, matchedLiveUser) {
+            if (matchedLiveUser != null) {
+                matchedLiveUser.toPlayerProfileCard(
+                    isSelf = profileData.isSelf,
+                    isOnline = profileData.isOnline
+                ).copy(
+                    matchesPlayed = maxOf(matchedLiveUser.matchesPlayed, profileData.matchesPlayed),
+                    totalSpent = maxOf(matchedLiveUser.totalSpent, profileData.totalSpent),
+                    totalWins = maxOf(matchedLiveUser.totalWins, profileData.totalWins),
+                    totalKills = maxOf(matchedLiveUser.totalKills, profileData.totalKills),
+                    totalEarnings = maxOf(matchedLiveUser.totalEarnings, profileData.totalEarnings),
+                    kudosCount = maxOf(matchedLiveUser.kudosCount, profileData.kudosCount)
+                )
+            } else {
+                profileData
+            }
+        }
         PlayerProfileCardDialog(
-            profile = profileData,
+            profile = effectiveProfileData,
             onDismiss = { selectedPlayerProfileCard = null },
-            onEditOwnProfile = if (profileData.isSelf) {
+            onEditOwnProfile = if (effectiveProfileData.isSelf) {
                 {
                     selectedPlayerProfileCard = null
                     viewModel.openEditProfile()
@@ -1180,8 +1473,207 @@ fun MainTournamentApp(
             userProfileForAppeal = userProfile,
             badgeAppeals = badgeAppeals,
             onSubmitBadgeAppeal = { badge, note -> viewModel.submitBadgeAppeal(badge, note) },
-            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) }
+            onSendAppealChat = { appealId, text, uri -> viewModel.sendAppealChatMessage(appealId, text, uri) },
+            viewerRole = userProfile.role,
+            onGrantBadge = { targetKey, badge -> viewModel.grantBadgeToUserResult(targetKey, badge) },
+            onRevokeBadge = { targetKey, badge -> viewModel.revokeBadgeFromUserResult(targetKey, badge) }
         )
+    }
+    } // end if (!isTimedOutLocked)
+
+    if (isTimedOutLocked && activeTimeoutUntil != null) {
+        TimeoutLockOverlay(
+            remainingMillis = (activeTimeoutUntil - liveNowMillis).coerceAtLeast(0L),
+            reason = userProfile.timeoutReason,
+            moderatorLabel = userProfile.timeoutBy,
+            warningsCount = userProfile.moderationWarningsCount,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(100f)
+        )
+    }
+    } // end root Box
+}
+
+@Composable
+private fun TimeoutLockOverlay(
+    remainingMillis: Long,
+    reason: String?,
+    moderatorLabel: String?,
+    warningsCount: Int,
+    modifier: Modifier = Modifier
+) {
+    // Strictly block Back press and ALL pointer/tap interactions until countdown expires
+    BackHandler(enabled = true) {}
+
+    val totalSeconds = (remainingMillis / 1000L).coerceAtLeast(0L)
+    val days = totalSeconds / 86_400L
+    val hours = (totalSeconds % 86_400L) / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    val formattedTimer = if (days > 0) {
+        String.format("%02dd %02d:%02d:%02d", days, hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
+    Box(
+        modifier = modifier
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1A0806),
+                        ObsidianBlack,
+                        Color(0xFF041524)
+                    )
+                )
+            )
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            }
+            .statusBarsPadding()
+            .padding(24.dp)
+            .testTag("user_timeout_lock_screen"),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(containerColor = VelvetBlack),
+            border = BorderStroke(2.dp, FireWaterBorderGradient),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = FireRed.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, FireOrange.copy(alpha = 0.7f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = "Timeout Active",
+                            tint = EmberGold,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "⏳ অ্যাপ টাইমআউট চলমান",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            color = EmberGold
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(listOf(FireRed.copy(alpha = 0.28f), WaterBlue.copy(alpha = 0.28f)))
+                        )
+                        .border(2.dp, FireWaterBorderGradient, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Timer,
+                        contentDescription = "Timeout Countdown",
+                        tint = WaterCyan,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                Text(
+                    text = "আপনার অ্যাকাউন্ট সাময়িকভাবে টাইমআউটে রয়েছে",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = DisplayFontFamily,
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF070D19),
+                    border = BorderStroke(1.5.dp, WaterCyan.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 18.dp, horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "অবশিষ্ট সময়",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WaterCyan
+                        )
+                        Text(
+                            text = formattedTimer,
+                            fontFamily = MonoFontFamily,
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary,
+                            modifier = Modifier.testTag("timeout_countdown_timer")
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = DarkCard,
+                    border = BorderStroke(1.dp, DarkBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "কারণ: ${reason?.ifBlank { "অ্যাপ মডারেশন নীতিমালা ভঙ্গ" } ?: "অ্যাপ মডারেশন নীতিমালা ভঙ্গ"}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "স্টাফ: ${moderatorLabel?.ifBlank { "মডারেশন টিম" } ?: "মডারেশন টিম"} • ওয়ার্নিং: $warningsCount/৭",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "টাইমআউট সময় শেষ না হওয়া পর্যন্ত অ্যাপের কোনো বাটন, ট্যাব বা ট্যাপ কাজ করবে না। সময় শেষ হলে স্বয়ংক্রিয়ভাবে আনলক হবে।",
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = ErrorRed,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 

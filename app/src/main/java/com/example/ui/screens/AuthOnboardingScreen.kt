@@ -55,7 +55,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material3.CircularProgressIndicator
+import com.example.data.GoogleAuthHelper
+import com.example.data.GoogleSignInOutcome
+import com.example.ui.theme.FireWaterBorderGradient
+import com.example.ui.theme.FireWaterButtonGradient
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -141,12 +149,16 @@ fun AuthOnboardingScreen(
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
+    onGoogleSignInSuccess: (firebaseUid: String, email: String, displayName: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
     appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Create Account, 1 = Sign In
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
+    var cloudAuthBanner by remember { mutableStateOf<String?>(null) }
 
     // Registration States
     var regName by remember { mutableStateOf("") }
@@ -196,14 +208,14 @@ fun AuthOnboardingScreen(
                         Brush.radialGradient(
                             listOf(
                                 FlameYellow.copy(alpha = 0.28f),
-                                NeonPink.copy(alpha = 0.18f),
+                                FlameCyan.copy(alpha = 0.22f),
                                 Color.Transparent
                             )
                         )
                     )
                     .border(
                         2.dp,
-                        Brush.linearGradient(listOf(FlameYellow, Color.White.copy(alpha = 0.9f), NeonPink)),
+                        Brush.linearGradient(listOf(FlameOrange, FlameYellow, FlameCyan)),
                         CircleShape
                     )
                     .padding(6.dp),
@@ -238,8 +250,8 @@ fun AuthOnboardingScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = NeonPink.copy(alpha = 0.18f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.7f))
+                    color = FlameCyan.copy(alpha = 0.14f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.65f))
                 ) {
                     Text(
                         text = "BY TH • ESPORTS",
@@ -426,7 +438,7 @@ fun AuthOnboardingScreen(
                             value = regName,
                             onValueChange = { regName = it },
                             label = { Text("আপনার পুরো নাম") },
-                            placeholder = { Text("যেমন: সাকিব আল হাসান") },
+                            placeholder = { Text("যেমন: Raistar") },
                             leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = FlameYellow) },
                             singleLine = true,
                             modifier = Modifier
@@ -850,6 +862,132 @@ fun AuthOnboardingScreen(
                             fontSize = 14.sp,
                             color = Color.Black
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .background(DarkBorder)
+                        )
+                        Text(
+                            text = "অথবা লাইভ ক্লাউড সিঙ্ক",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .background(DarkBorder)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.Transparent,
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, FireWaterBorderGradient),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(FireWaterButtonGradient)
+                            .clickable(enabled = !isGoogleLoading) {
+                                isGoogleLoading = true
+                                cloudAuthBanner = null
+                                coroutineScope.launch {
+                                    when (val outcome = GoogleAuthHelper.signInInteractive(context)) {
+                                        is GoogleSignInOutcome.Success -> {
+                                            val (ok, msg) = onGoogleSignInSuccess(
+                                                outcome.firebaseUid,
+                                                outcome.email,
+                                                outcome.displayName
+                                            )
+                                            cloudAuthBanner = msg
+                                            if (ok) {
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                        is GoogleSignInOutcome.Cancelled -> {
+                                            cloudAuthBanner = outcome.message
+                                            Toast.makeText(context, outcome.message, Toast.LENGTH_SHORT).show()
+                                        }
+                                        is GoogleSignInOutcome.Error -> {
+                                            cloudAuthBanner = outcome.message
+                                            Toast.makeText(context, outcome.message, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                    isGoogleLoading = false
+                                }
+                            }
+                            .testTag("google_signin_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (isGoogleLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Google সিঙ্ক হচ্ছে...",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.CloudSync,
+                                    contentDescription = "Google Sign In",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "🌐 Google দিয়ে সাইন ইন ও লাইভ সিঙ্ক",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    cloudAuthBanner?.let { banner ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF0E1D2F),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.55f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("google_signin_feedback_banner")
+                        ) {
+                            Text(
+                                text = banner,
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
                 }
             }

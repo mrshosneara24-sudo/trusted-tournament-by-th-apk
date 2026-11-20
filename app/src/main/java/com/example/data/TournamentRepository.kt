@@ -36,17 +36,25 @@ import java.util.UUID
 
 import com.example.model.AppCustomization
 import com.example.model.AppLogoOption
+import com.example.model.ModerationActionType
+import com.example.model.ModerationLogEntry
 import com.example.model.TournamentRuleItem
 
 class TournamentRepository(
-    private val persistenceStore: AppPersistenceStore? = null
+    private val persistenceStore: AppPersistenceStore? = null,
+    private val appContext: Context? = null
 ) {
 
-    constructor(context: Context) : this(AppPersistenceStore(context.applicationContext))
+    constructor(context: Context) : this(
+        persistenceStore = AppPersistenceStore(context.applicationContext),
+        appContext = context.applicationContext
+    )
 
     companion object {
         const val SIGNUP_WELCOME_BONUS = 5
         const val SEVEN_DAYS_MILLIS = 7L * 24 * 60 * 60 * 1000L
+        const val TEN_DAYS_MILLIS = 10L * 24 * 60 * 60 * 1000L
+        const val MODERATION_WARN_BAN_THRESHOLD = 7
 
         @Volatile
         private var instance: TournamentRepository? = null
@@ -57,6 +65,25 @@ class TournamentRepository(
             }
         }
     }
+
+    private val cloudSync: CloudTournamentSync? = appContext?.let { CloudTournamentSync(it) }
+
+    private val _isCloudConnected = MutableStateFlow(cloudSync?.isSignedInCloud() ?: false)
+    val isCloudConnected: StateFlow<Boolean> = _isCloudConnected.asStateFlow()
+
+    private val _cloudUserEmail = MutableStateFlow(cloudSync?.currentCloudEmail().orEmpty())
+    val cloudUserEmail: StateFlow<String> = _cloudUserEmail.asStateFlow()
+
+    private val _cloudStatusMessage = MutableStateFlow(
+        if (cloudSync?.isSignedInCloud() == true) {
+            "লাইভ ক্লাউড সিঙ্ক চালু (${cloudSync.currentCloudEmail()})"
+        } else {
+            "সব বন্ধুর সাথে লাইভ সিঙ্ক করতে Google সাইন-ইন করুন"
+        }
+    )
+    val cloudStatusMessage: StateFlow<String> = _cloudStatusMessage.asStateFlow()
+
+    private val privateCloudAccounts = mutableMapOf<String, Triple<String, String, String>>()
 
     private val _appCustomization = MutableStateFlow(AppCustomization())
     val appCustomization: StateFlow<AppCustomization> = _appCustomization.asStateFlow()
@@ -205,7 +232,7 @@ class TournamentRepository(
                 name = "তানভির হাসান (ওনার)",
                 phone = "01861583924",
                 ign = "TH★DEVIL⚡",
-                uid = "2489103847",
+                uid = "11410365896",
                 bkashNumber = "01861583924",
                 role = UserRole.OWNER,
                 joinedDate = "১৫ অক্টো ২০২৬",
@@ -222,9 +249,7 @@ class TournamentRepository(
     )
     val registeredUsers: StateFlow<List<AppUser>> = _registeredUsers.asStateFlow()
 
-
-    private val _matches = MutableStateFlow<List<TournamentMatch>>(
-        listOf(
+    private fun defaultInitialMatches(): List<TournamentMatch> = listOf(
             TournamentMatch(
                 id = "m1",
                 title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০১ (সুপারফাস্ট এক্সপ্রেস)",
@@ -234,9 +259,9 @@ class TournamentRepository(
                 matchDateTime = "আজ বিকাল ৫:০০ PM",
                 startsInMinutes = 10,
                 entryFee = 10,
-                totalPrize = 350,
-                perKillPrize = 3,
-                booyahPrize = 100,
+                totalPrize = 80,
+                perKillPrize = 1,
+                booyahPrize = 30,
                 totalSlots = 48,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -252,10 +277,10 @@ class TournamentRepository(
                 mapName = "আয়রন কেজ (Iron Cage)",
                 matchDateTime = "আজ বিকাল ৫:৪৫ PM",
                 startsInMinutes = 35,
-                entryFee = 15,
-                totalPrize = 25,
+                entryFee = 10,
+                totalPrize = 15,
                 perKillPrize = 0,
-                booyahPrize = 25,
+                booyahPrize = 15,
                 totalSlots = 2,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -272,9 +297,9 @@ class TournamentRepository(
                 matchDateTime = "আজ সন্ধ্যা ৬:৩০ PM",
                 startsInMinutes = 75,
                 entryFee = 10,
-                totalPrize = 70,
+                totalPrize = 40,
                 perKillPrize = 0,
-                booyahPrize = 70,
+                booyahPrize = 40,
                 totalSlots = 8,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -291,9 +316,9 @@ class TournamentRepository(
                 matchDateTime = "আজ সন্ধ্যা ৭:১৫ PM",
                 startsInMinutes = 110,
                 entryFee = 10,
-                totalPrize = 35,
+                totalPrize = 20,
                 perKillPrize = 0,
-                booyahPrize = 35,
+                booyahPrize = 20,
                 totalSlots = 4,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -309,10 +334,10 @@ class TournamentRepository(
                 mapName = "পারগেটরী (Purgatory)",
                 matchDateTime = "আজ রাত ৮:০০ PM",
                 startsInMinutes = 150,
-                entryFee = 15,
-                totalPrize = 350,
-                perKillPrize = 3,
-                booyahPrize = 100,
+                entryFee = 10,
+                totalPrize = 100,
+                perKillPrize = 1,
+                booyahPrize = 40,
                 totalSlots = 48,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -320,8 +345,9 @@ class TournamentRepository(
                 roomPassword = null,
                 version = "মোবাইল অনলি (ইভনিং ফাস্ট এক্সপ্রেস)"
             )
-        )
     )
+
+    private val _matches = MutableStateFlow<List<TournamentMatch>>(defaultInitialMatches())
     val matches: StateFlow<List<TournamentMatch>> = _matches.asStateFlow()
 
     private val _myBookings = MutableStateFlow<List<SlotBooking>>(emptyList())
@@ -345,6 +371,9 @@ class TournamentRepository(
     private val _badgeAppeals = MutableStateFlow<List<BadgeAppeal>>(emptyList())
     val badgeAppeals: StateFlow<List<BadgeAppeal>> = _badgeAppeals.asStateFlow()
 
+    private val _moderationLogs = MutableStateFlow<List<ModerationLogEntry>>(emptyList())
+    val moderationLogs: StateFlow<List<ModerationLogEntry>> = _moderationLogs.asStateFlow()
+
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(
         listOf(
             ChatMessage(
@@ -364,7 +393,7 @@ class TournamentRepository(
             senderUserId = "u_owner",
             senderName = "তানভির হাসান (মালিক)",
             senderIgn = "TH★DEVIL⚡",
-            senderUid = "2489103847",
+            senderUid = "11410365896",
             senderPhone = "01861583924",
             senderRole = UserRole.OWNER,
             senderAvatarId = "th_logo",
@@ -437,6 +466,7 @@ class TournamentRepository(
             if (saved.globalChatMessages.isNotEmpty()) {
                 _globalChatMessages.value = saved.globalChatMessages
             }
+            _moderationLogs.value = saved.moderationLogs
             // Sanitize legacy Owner clutter (e.g., level 68 / নতুন যোদ্ধা / demo loadout)
             _registeredUsers.value = _registeredUsers.value.map { user ->
                 if (user.role == UserRole.OWNER) {
@@ -461,7 +491,284 @@ class TournamentRepository(
                 )
             }
         }
-        checkAndClearExpiredBans()
+        checkAndClearExpiredModeration()
+        rebuildLiveLeaderboard()
+        if (cloudSync?.isSignedInCloud() == true) {
+            startCloudSync()
+        }
+    }
+
+    private fun rebuildLiveLeaderboard() {
+        val rankedUsers = _registeredUsers.value
+            .filter { user ->
+                !user.isBanned && (
+                    user.totalEarnings > 0 ||
+                        user.totalWins > 0 ||
+                        user.totalKills > 0 ||
+                        user.matchesPlayed > 0
+                    )
+            }
+            .sortedWith(
+                compareByDescending<AppUser> { it.totalEarnings }
+                    .thenByDescending { it.totalWins }
+                    .thenByDescending { it.totalKills }
+                    .thenByDescending { it.matchesPlayed }
+                    .thenByDescending { it.kudosCount }
+                    .thenBy { it.ign.lowercase() }
+            )
+
+        _leaderboard.value = rankedUsers.mapIndexed { idx, user ->
+            val primary = user.primaryBadge
+            LeaderboardPlayer(
+                rank = idx + 1,
+                ign = user.ign.ifBlank { user.name },
+                uid = user.uid,
+                totalKills = user.totalKills,
+                booyahs = user.totalWins,
+                totalEarnings = user.totalEarnings,
+                badge = primary.iconEmoji,
+                primaryBadge = primary,
+                totalSpent = user.totalSpent,
+                matchesPlayed = user.matchesPlayed
+            )
+        }
+    }
+
+    fun startCloudSync() {
+        val sync = cloudSync ?: return
+        sync.startRealtimeSync(
+            CloudTournamentSync.SyncCallbacks(
+                onAppConfigSynced = { cfg, rules ->
+                    _appCustomization.value = cfg
+                    officialWhatsAppGroupUrl.value = cfg.officialWhatsAppUrl
+                    if (!rules.isNullOrEmpty()) {
+                        _strictRules.value = rules
+                    }
+                    saveState()
+                },
+                onMatchesSynced = { cloudMatches ->
+                    if (cloudMatches.isNotEmpty()) {
+                        _matches.value = cloudMatches.sortedBy { it.startsInMinutes }
+                        saveState()
+                    }
+                },
+                onBookingsSynced = { cloudBookings ->
+                    val existingPhones = _myBookings.value.associate { it.bookingId to it.bkashSenderNumber }
+                    _myBookings.value = cloudBookings.map { b ->
+                        val cachedPhone = existingPhones[b.bookingId]
+                        if (b.bkashSenderNumber.isBlank() && !cachedPhone.isNullOrBlank()) {
+                            b.copy(bkashSenderNumber = cachedPhone)
+                        } else b
+                    }.sortedBy { it.slotNumber }
+                    saveState()
+                },
+                onPlayersSynced = { cloudPlayers ->
+                    val existingById = _registeredUsers.value.associateBy { it.id }
+                    val merged = cloudPlayers.map { remote ->
+                        val priv = privateCloudAccounts[remote.id]
+                        val local = existingById[remote.id]
+                            ?: _registeredUsers.value.firstOrNull {
+                                (remote.uid.isNotBlank() && it.uid == remote.uid) ||
+                                    it.ign.equals(remote.ign, ignoreCase = true)
+                            }
+                        val resolvedPhone = priv?.first?.takeIf { it.isNotBlank() }
+                            ?: local?.phone.orEmpty()
+                        val resolvedBkash = priv?.second?.takeIf { it.isNotBlank() }
+                            ?: local?.bkashNumber.orEmpty()
+                        val resolvedJoin = priv?.third?.takeIf { it.isNotBlank() }
+                            ?: local?.joinedDate
+                            ?: remote.joinedDate
+                        remote.copy(
+                            phone = resolvedPhone,
+                            bkashNumber = resolvedBkash,
+                            joinedDate = resolvedJoin,
+                            password = local?.password ?: remote.password
+                        )
+                    }.toMutableList()
+
+                    // Ensure official owner always exists
+                    if (merged.none { it.role == UserRole.OWNER || it.phone == masterOwnerPhone || it.uid == "11410365896" }) {
+                        existingById["u_owner"]?.let { merged.add(0, it) }
+                    }
+                    _registeredUsers.value = merged
+
+                    // Sync active user profile & wallet live if updated remotely (badges, timeout, ban, wallet)
+                    val active = _userProfile.value
+                    if (active.isLoggedIn) {
+                        val updatedSelf = merged.firstOrNull {
+                            (active.phone.isNotBlank() && it.phone == active.phone) ||
+                                (active.uid.isNotBlank() && it.uid == active.uid) ||
+                                (active.ign.isNotBlank() && it.ign.equals(active.ign, ignoreCase = true))
+                        }
+                        if (updatedSelf != null) {
+                            syncTargetToActiveProfile(updatedSelf)
+                            if (updatedSelf.walletBalance != _walletBalance.value && updatedSelf.walletBalance >= 0) {
+                                _walletBalance.value = updatedSelf.walletBalance
+                            }
+                            _userProfile.value = _userProfile.value.copy(
+                                matchesPlayed = updatedSelf.matchesPlayed,
+                                totalWins = updatedSelf.totalWins,
+                                totalKills = updatedSelf.totalKills,
+                                totalEarnings = updatedSelf.totalEarnings,
+                                totalSpent = updatedSelf.totalSpent,
+                                role = updatedSelf.role
+                            )
+                        }
+                    }
+                    rebuildLiveLeaderboard()
+                    saveState()
+                },
+                onPrivateAccountsSynced = { accountMap ->
+                    privateCloudAccounts.putAll(accountMap)
+                    if (accountMap.isNotEmpty()) {
+                        _registeredUsers.value = _registeredUsers.value.map { user ->
+                            val priv = accountMap[user.id]
+                            if (priv != null) {
+                                user.copy(
+                                    phone = priv.first.ifBlank { user.phone },
+                                    bkashNumber = priv.second.ifBlank { user.bkashNumber },
+                                    joinedDate = priv.third.ifBlank { user.joinedDate }
+                                )
+                            } else user
+                        }
+                        saveState()
+                    }
+                },
+                onDepositsSynced = { cloudDeposits ->
+                    if (cloudDeposits.isNotEmpty()) {
+                        _depositRequests.value = cloudDeposits
+                        saveState()
+                    }
+                },
+                onWithdrawsSynced = { cloudWithdraws ->
+                    if (cloudWithdraws.isNotEmpty()) {
+                        _withdrawRequests.value = cloudWithdraws
+                        saveState()
+                    }
+                },
+                onAppealsSynced = { cloudAppeals ->
+                    if (cloudAppeals.isNotEmpty()) {
+                        _badgeAppeals.value = cloudAppeals
+                        saveState()
+                    }
+                },
+                onGlobalChatSynced = { cloudChat ->
+                    if (cloudChat.isNotEmpty()) {
+                        _globalChatMessages.value = cloudChat
+                        saveState()
+                    }
+                },
+                onModerationLogsSynced = { cloudLogs ->
+                    if (cloudLogs.isNotEmpty()) {
+                        _moderationLogs.value = cloudLogs
+                        saveState()
+                    }
+                },
+                onSyncStateChanged = { connected, email, statusText ->
+                    _isCloudConnected.value = connected
+                    _cloudUserEmail.value = email
+                    _cloudStatusMessage.value = statusText
+                    if (connected) {
+                        val isStaff = _userProfile.value.role == UserRole.OWNER ||
+                            _userProfile.value.role == UserRole.ADMIN ||
+                            email.equals("mrshosneara24@gmail.com", ignoreCase = true)
+                        if (isStaff) {
+                            sync.seedInitialMatchesIfCloudEmpty(
+                                _matches.value,
+                                _appCustomization.value,
+                                _strictRules.value
+                            )
+                        }
+                        if (_isLoggedIn.value) {
+                            pushActiveUserToCloud()
+                        }
+                    }
+                }
+            )
+        )
+    }
+
+    fun onGoogleSignInCompleted(firebaseUid: String, email: String, displayName: String): Pair<Boolean, String> {
+        val isBootstrappedOwner = email.equals("mrshosneara24@gmail.com", ignoreCase = true)
+        if (!_isLoggedIn.value) {
+            if (isBootstrappedOwner) {
+                login(masterOwnerPhone, masterOwnerPin)
+            } else {
+                val safeName = displayName.trim().ifBlank { email.substringBefore("@").ifBlank { "FF Player" } }
+                val cleanIgn = safeName.take(18).ifBlank { "TH_Player" }
+                val existing = _registeredUsers.value.firstOrNull {
+                    it.id == "u_g_$firebaseUid" ||
+                        (email.isNotBlank() && it.name.equals(safeName, ignoreCase = true))
+                }
+                if (existing != null) {
+                    login(existing.phone.ifBlank { existing.uid }, existing.password)
+                } else {
+                    val generatedUid = (10000000L + (firebaseUid.hashCode().toLong() and 0x7FFFFFFFL) % 89999999L).toString()
+                    val generatedPhone = "019" + ((10000000L + (firebaseUid.hashCode().toLong() and 0x7FFFFFFFL) % 89999999L).toString())
+                    val newUser = AppUser(
+                        id = "u_g_$firebaseUid",
+                        name = safeName,
+                        phone = generatedPhone,
+                        ign = cleanIgn,
+                        uid = generatedUid,
+                        bkashNumber = generatedPhone,
+                        role = UserRole.PLAYER,
+                        joinedDate = "আজ",
+                        walletBalance = SIGNUP_WELCOME_BONUS,
+                        avatarId = "th_logo",
+                        battleTagline = "TRUSTED TOURNAMENT এ Google ভেরিফাইড যোদ্ধা! 🎯",
+                        guildName = "TRUSTED TH"
+                    )
+                    _registeredUsers.value = listOf(newUser) + _registeredUsers.value
+                    _walletBalance.value = SIGNUP_WELCOME_BONUS
+                    _userProfile.value = UserProfile(
+                        accountName = newUser.name,
+                        phone = newUser.phone,
+                        email = email,
+                        ign = newUser.ign,
+                        uid = newUser.uid,
+                        bkashNumber = newUser.bkashNumber,
+                        avatarId = newUser.avatarId,
+                        joinedDate = newUser.joinedDate,
+                        isLoggedIn = true,
+                        role = UserRole.PLAYER,
+                        guildName = "TRUSTED TH",
+                        battleTagline = newUser.battleTagline
+                    )
+                    _isLoggedIn.value = true
+                    saveState()
+                }
+            }
+        } else if (isBootstrappedOwner && _userProfile.value.role != UserRole.OWNER) {
+            login(masterOwnerPhone, masterOwnerPin)
+        } else if (email.isNotBlank()) {
+            _userProfile.value = _userProfile.value.copy(email = email)
+            saveState()
+        }
+
+        startCloudSync()
+        pushActiveUserToCloud()
+        return true to "🌐 লাইভ ক্লাউড সিঙ্ক চালু হয়েছে ($email)!"
+    }
+
+    suspend fun signOutCloud() {
+        cloudSync?.safeSignOutCloud()
+        _isCloudConnected.value = false
+        _cloudUserEmail.value = ""
+        _cloudStatusMessage.value = "ক্লাউড সিঙ্ক সংযোগ বিচ্ছিন্ন"
+    }
+
+    private fun pushActiveUserToCloud() {
+        val sync = cloudSync ?: return
+        val current = _userProfile.value
+        if (!current.isLoggedIn) return
+        val matched = _registeredUsers.value.firstOrNull {
+            (current.phone.isNotBlank() && it.phone == current.phone) ||
+                (current.uid.isNotBlank() && it.uid == current.uid)
+        }
+        if (matched != null) {
+            sync.pushUser(matched)
+        }
     }
 
     private fun saveState() {
@@ -488,7 +795,8 @@ class TournamentRepository(
                 chatMessages = _chatMessages.value,
                 masterOwnerPin = masterOwnerPin,
                 badgeAppeals = _badgeAppeals.value,
-                globalChatMessages = _globalChatMessages.value
+                globalChatMessages = _globalChatMessages.value,
+                moderationLogs = _moderationLogs.value
             )
         )
     }
@@ -527,13 +835,26 @@ class TournamentRepository(
                     playerRole = current.playerRole,
                     level = current.level,
                     warningsCount = current.warningsCount,
-                    banExpiresAtMillis = current.banExpiresAtMillis
+                    banExpiresAtMillis = current.banExpiresAtMillis,
+                    moderationWarningsCount = current.moderationWarningsCount,
+                    timeoutUntilMillis = current.timeoutUntilMillis,
+                    timeoutReason = current.timeoutReason,
+                    timeoutBy = current.timeoutBy,
+                    isChatMuted = current.isChatMuted,
+                    chatMuteUntilMillis = current.chatMuteUntilMillis,
+                    chatMuteReason = current.chatMuteReason,
+                    isMatchBanned = current.isMatchBanned,
+                    matchBanReason = current.matchBanReason,
+                    isWalletFrozen = current.isWalletFrozen,
+                    walletFreezeReason = current.walletFreezeReason
                 )
             } else {
                 user
             }
         }
+        rebuildLiveLeaderboard()
         saveState()
+        pushActiveUserToCloud()
     }
 
     private fun sanitizePfpForRole(role: UserRole, pfpUri: String?): String? {
@@ -616,7 +937,9 @@ class TournamentRepository(
                 user
             }
         }
+        rebuildLiveLeaderboard()
         saveState()
+        pushActiveUserToCloud()
     }
 
     fun updateProfileAppearance(
@@ -667,15 +990,20 @@ class TournamentRepository(
         val trimmed = targetKey.trim()
         if (trimmed.isBlank()) return 0
         var updatedCount = 0
+        var updatedUserId: String? = null
         _registeredUsers.value = _registeredUsers.value.map { user ->
             if (user.id == trimmed || user.uid == trimmed || user.phone == trimmed || user.ign.equals(trimmed, ignoreCase = true)) {
                 updatedCount = user.kudosCount + 1
+                updatedUserId = user.id
                 user.copy(kudosCount = updatedCount)
             } else {
                 user
             }
         }
-        if (updatedCount > 0) saveState()
+        if (updatedCount > 0) {
+            saveState()
+            updatedUserId?.let { cloudSync?.pushKudosUpdate(it, updatedCount) }
+        }
         return updatedCount
     }
 
@@ -722,7 +1050,7 @@ class TournamentRepository(
                 isLoggedIn = true,
                 accountName = existingUser?.name ?: "তানভির হাসান (ওনার)",
                 ign = existingUser?.ign ?: "TH★DEVIL⚡",
-                uid = existingUser?.uid ?: "2489103847",
+                uid = existingUser?.uid ?: "11410365896",
                 phone = existingUser?.phone ?: masterOwnerPhone,
                 bkashNumber = existingUser?.bkashNumber ?: masterOwnerPhone,
                 email = if (!trimmed.startsWith("01")) trimmed else "owner@trustedth.com",
@@ -781,7 +1109,18 @@ class TournamentRepository(
                 customBadges = existingUser?.customBadges ?: current.customBadges,
                 revokedBadges = existingUser?.revokedBadges ?: current.revokedBadges,
                 warningsCount = existingUser?.warningsCount ?: current.warningsCount,
-                banExpiresAtMillis = existingUser?.banExpiresAtMillis ?: current.banExpiresAtMillis
+                banExpiresAtMillis = existingUser?.banExpiresAtMillis ?: current.banExpiresAtMillis,
+                moderationWarningsCount = existingUser?.moderationWarningsCount ?: current.moderationWarningsCount,
+                timeoutUntilMillis = existingUser?.timeoutUntilMillis ?: current.timeoutUntilMillis,
+                timeoutReason = existingUser?.timeoutReason ?: current.timeoutReason,
+                timeoutBy = existingUser?.timeoutBy ?: current.timeoutBy,
+                isChatMuted = existingUser?.isChatMuted ?: current.isChatMuted,
+                chatMuteUntilMillis = existingUser?.chatMuteUntilMillis ?: current.chatMuteUntilMillis,
+                chatMuteReason = existingUser?.chatMuteReason ?: current.chatMuteReason,
+                isMatchBanned = existingUser?.isMatchBanned ?: current.isMatchBanned,
+                matchBanReason = existingUser?.matchBanReason ?: current.matchBanReason,
+                isWalletFrozen = existingUser?.isWalletFrozen ?: current.isWalletFrozen,
+                walletFreezeReason = existingUser?.walletFreezeReason ?: current.walletFreezeReason
             )
         } else {
             val targetBadges = existingUser?.effectiveBadges ?: emptyList()
@@ -816,7 +1155,18 @@ class TournamentRepository(
                 customBadges = existingUser?.customBadges ?: emptySet(),
                 revokedBadges = existingUser?.revokedBadges ?: emptySet(),
                 warningsCount = existingUser?.warningsCount ?: 0,
-                banExpiresAtMillis = existingUser?.banExpiresAtMillis
+                banExpiresAtMillis = existingUser?.banExpiresAtMillis,
+                moderationWarningsCount = existingUser?.moderationWarningsCount ?: 0,
+                timeoutUntilMillis = existingUser?.timeoutUntilMillis,
+                timeoutReason = existingUser?.timeoutReason,
+                timeoutBy = existingUser?.timeoutBy,
+                isChatMuted = existingUser?.isChatMuted ?: false,
+                chatMuteUntilMillis = existingUser?.chatMuteUntilMillis,
+                chatMuteReason = existingUser?.chatMuteReason,
+                isMatchBanned = existingUser?.isMatchBanned ?: false,
+                matchBanReason = existingUser?.matchBanReason,
+                isWalletFrozen = existingUser?.isWalletFrozen ?: false,
+                walletFreezeReason = existingUser?.walletFreezeReason
             )
         }
         saveState()
@@ -967,6 +1317,7 @@ class TournamentRepository(
         _transactions.value = listOf(welcomeBonusTx) + _transactions.value
         _isLoggedIn.value = true
         saveState()
+        cloudSync?.pushUser(newUser)
         return true
     }
 
@@ -978,7 +1329,8 @@ class TournamentRepository(
     }
 
     fun spinWeeklyWheel(): Int {
-        if (_hasSpunThisWeek.value) return 0
+        checkAndClearExpiredModeration()
+        if (_hasSpunThisWeek.value || isActiveUserTimedOut() || _userProfile.value.isBanned) return 0
         // Weighted spin odds (30 taka is made ultra-ultra rare / extremely hard):
         // ৳৩ : 55.0% (0..5499) -> 55%
         // ৳৪ : 30.0% (5500..8499) -> 30%
@@ -1074,8 +1426,9 @@ class TournamentRepository(
     }
 
     fun claimDailyStreakReward(): Int {
+        checkAndClearExpiredModeration()
         val currentInfo = _dailyStreakInfo.value
-        if (currentInfo.isTodayClaimed) return 0
+        if (currentInfo.isTodayClaimed || isActiveUserTimedOut() || _userProfile.value.isBanned) return 0
 
         val day = currentInfo.currentStreakDay.coerceIn(1, 7)
         val rewardAmount = currentInfo.rewards.getOrElse(day - 1) { 1 }
@@ -1162,12 +1515,19 @@ class TournamentRepository(
         replyToId: String? = null,
         pinAnnouncement: Boolean = false
     ): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
         val current = _userProfile.value
         if (!current.isLoggedIn) {
             return Pair(false, "গ্লোবাল চ্যাটে মেসেজ পাঠাতে আগে লগইন করুন।")
         }
         if (current.isBanned) {
             return Pair(false, "🚫 আপনার একাউন্ট সাসপেন্ড রয়েছে, তাই চ্যাট করতে পারবেন না।")
+        }
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি বর্তমানে অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়া পর্যন্ত চ্যাট করা যাবে না।")
+        }
+        if (current.isChatMuted) {
+            return Pair(false, "🔇 আপনার গ্লোবাল চ্যাট মিউট করা আছে! (${current.chatMuteReason ?: "মডারেশন শাস্তি"})")
         }
         val cleanText = text.trim()
         if (cleanText.isBlank()) {
@@ -1219,6 +1579,7 @@ class TournamentRepository(
         }
         _globalChatMessages.value = baseList + msg
         saveState()
+        cloudSync?.pushGlobalChatMessage(msg)
         return Pair(true, if (shouldPin) "📌 গ্লোবাল চ্যাটে পিনড ঘোষণা পাঠানো হয়েছে!" else "মেসেজ পাঠানো হয়েছে!")
     }
 
@@ -1232,8 +1593,10 @@ class TournamentRepository(
         val nextPinned = !target.isPinnedAnnouncement
         _globalChatMessages.value = _globalChatMessages.value.map { msg ->
             when {
-                msg.id == messageId -> msg.copy(isPinnedAnnouncement = nextPinned)
-                nextPinned -> msg.copy(isPinnedAnnouncement = false)
+                msg.id == messageId -> msg.copy(isPinnedAnnouncement = nextPinned).also { cloudSync?.pushGlobalChatMessage(it) }
+                nextPinned -> msg.copy(isPinnedAnnouncement = false).also {
+                    if (msg.isPinnedAnnouncement) cloudSync?.pushGlobalChatMessage(it)
+                }
                 else -> msg
             }
         }
@@ -1253,24 +1616,27 @@ class TournamentRepository(
         }
         _globalChatMessages.value = _globalChatMessages.value.filterNot { it.id == messageId }
         saveState()
+        cloudSync?.deleteGlobalChatCloud(messageId)
         return Pair(true, "🗑️ মেসেজ ডিলিট করা হয়েছে।")
     }
 
     fun reactToGlobalChatMessage(messageId: String, emoji: String): Boolean {
         if (!_userProfile.value.isLoggedIn) return false
-        var updated = false
+        var updatedMsg: GlobalChatMessage? = null
         _globalChatMessages.value = _globalChatMessages.value.map { msg ->
             if (msg.id == messageId) {
-                updated = true
                 val nextMap = msg.reactions.toMutableMap()
                 nextMap[emoji] = (nextMap[emoji] ?: 0) + 1
-                msg.copy(reactions = nextMap)
+                msg.copy(reactions = nextMap).also { updatedMsg = it }
             } else {
                 msg
             }
         }
-        if (updated) saveState()
-        return updated
+        updatedMsg?.let {
+            saveState()
+            cloudSync?.pushGlobalChatMessage(it)
+        }
+        return updatedMsg != null
     }
 
     fun sendAiAssistantMessage(query: String) {
@@ -1326,7 +1692,9 @@ class TournamentRepository(
         bkashNumber: String,
         trxId: String
     ): Boolean {
-        if (_userProfile.value.isBanned) {
+        checkAndClearExpiredModeration()
+        val current = _userProfile.value
+        if (current.isBanned || isActiveUserTimedOut() || current.isMatchBanned) {
             return false
         }
         val liveMatch = _matches.value.find { it.id == match.id } ?: return false
@@ -1359,8 +1727,9 @@ class TournamentRepository(
         _myBookings.value = listOf(newBooking) + _myBookings.value
 
         // Update match slots
+        val updatedBookedCount = (liveMatch.bookedSlots + 1).coerceAtMost(liveMatch.totalSlots)
         _matches.value = _matches.value.map {
-            if (it.id == liveMatch.id) it.copy(bookedSlots = (it.bookedSlots + 1).coerceAtMost(it.totalSlots)) else it
+            if (it.id == liveMatch.id) it.copy(bookedSlots = updatedBookedCount) else it
         }
 
         // Complete MATCH mission
@@ -1391,6 +1760,7 @@ class TournamentRepository(
         )
         _transactions.value = listOf(tx) + _transactions.value
         syncActiveUserToRegistry()
+        cloudSync?.pushBooking(newBooking, updatedBookedCount)
 
         return true
     }
@@ -1401,8 +1771,16 @@ class TournamentRepository(
         playerIgn: String,
         playerUid: String
     ): Pair<Boolean, String> {
-        if (_userProfile.value.isBanned) {
+        checkAndClearExpiredModeration()
+        val current = _userProfile.value
+        if (current.isBanned) {
             return Pair(false, "আপনার অ্যাকাউন্ট ব্যান করা আছে!")
+        }
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি অ্যাপ টাইমআউটে আছেন! টাইমার শেষ না হওয়া পর্যন্ত স্লট বুক করা যাবে না।")
+        }
+        if (current.isMatchBanned) {
+            return Pair(false, "🎯 আপনার ম্যাচ এন্ট্রি সাময়িকভাবে নিষিদ্ধ (${current.matchBanReason ?: "মডারেশন শাস্তি"})!")
         }
         val liveMatch = _matches.value.find { it.id == match.id }
             ?: return Pair(false, "ম্যাচটি পাওয়া যায়নি!")
@@ -1439,8 +1817,9 @@ class TournamentRepository(
         )
         _myBookings.value = listOf(newBooking) + _myBookings.value
 
+        val updatedBookedCount = (liveMatch.bookedSlots + 1).coerceAtMost(liveMatch.totalSlots)
         _matches.value = _matches.value.map {
-            if (it.id == liveMatch.id) it.copy(bookedSlots = (it.bookedSlots + 1).coerceAtMost(it.totalSlots)) else it
+            if (it.id == liveMatch.id) it.copy(bookedSlots = updatedBookedCount) else it
         }
 
         markMissionCompleted("MATCH")
@@ -1468,8 +1847,50 @@ class TournamentRepository(
         )
         _transactions.value = listOf(tx) + _transactions.value
         syncActiveUserToRegistry()
+        cloudSync?.pushBooking(newBooking, updatedBookedCount)
 
         return Pair(true, "ওয়ালেট থেকে ৳${liveMatch.entryFee} কেটে স্লট #$slotNumber বুক হয়েছে!")
+    }
+
+    private fun refundPlayerForBooking(booking: SlotBooking) {
+        val active = _userProfile.value
+        val matchedUser = _registeredUsers.value.firstOrNull { user ->
+            (booking.bkashSenderNumber.isNotBlank() && (user.phone == booking.bkashSenderNumber || user.bkashNumber == booking.bkashSenderNumber)) ||
+                (booking.playerUid.isNotBlank() && booking.playerUid != "0000000000" && user.uid == booking.playerUid) ||
+                (booking.playerIgn.isNotBlank() && user.ign.equals(booking.playerIgn, ignoreCase = true))
+        }
+
+        if (matchedUser != null) {
+            val updatedUser = matchedUser.copy(
+                walletBalance = matchedUser.walletBalance + booking.feePaid,
+                matchesPlayed = (matchedUser.matchesPlayed - 1).coerceAtLeast(0),
+                totalSpent = (matchedUser.totalSpent - booking.feePaid).coerceAtLeast(0)
+            )
+            _registeredUsers.value = _registeredUsers.value.map {
+                if (it.id == updatedUser.id) updatedUser else it
+            }
+            cloudSync?.pushUser(updatedUser)
+
+            val isSameActive = (active.phone.isNotBlank() && active.phone == updatedUser.phone) ||
+                (active.uid.isNotBlank() && active.uid == updatedUser.uid)
+            if (isSameActive) {
+                _walletBalance.value += booking.feePaid
+                _userProfile.value = active.copy(
+                    matchesPlayed = (active.matchesPlayed - 1).coerceAtLeast(0),
+                    totalSpent = (active.totalSpent - booking.feePaid).coerceAtLeast(0)
+                )
+            }
+        } else {
+            // Fallback when owner self-booked or legacy anonymous slot
+            _walletBalance.value += booking.feePaid
+            if (active.matchesPlayed > 0 || active.totalSpent > 0) {
+                _userProfile.value = active.copy(
+                    matchesPlayed = (active.matchesPlayed - 1).coerceAtLeast(0),
+                    totalSpent = (active.totalSpent - booking.feePaid).coerceAtLeast(0)
+                )
+            }
+        }
+        rebuildLiveLeaderboard()
     }
 
     fun cancelSlotBookingAndRefund(bookingId: String): Boolean {
@@ -1478,23 +1899,19 @@ class TournamentRepository(
         // Remove the booking
         _myBookings.value = _myBookings.value.filter { it.bookingId != bookingId }
 
-        // Reduce match booked slots
+        // Reduce match booked slots safely
+        var nextBookedCount = 0
+        val explicitRemaining = _myBookings.value.count { it.matchId == booking.matchId }
         _matches.value = _matches.value.map { match ->
             if (match.id == booking.matchId) {
-                match.copy(bookedSlots = (match.bookedSlots - 1).coerceAtLeast(0))
+                nextBookedCount = (match.bookedSlots - 1).coerceAtLeast(explicitRemaining).coerceAtLeast(0)
+                match.copy(bookedSlots = nextBookedCount)
             } else match
         }
 
-        // Automatic refund directly to wallet!
-        _walletBalance.value += booking.feePaid
-        if (_userProfile.value.matchesPlayed > 0 || _userProfile.value.totalSpent > 0) {
-            _userProfile.value = _userProfile.value.copy(
-                matchesPlayed = (_userProfile.value.matchesPlayed - 1).coerceAtLeast(0),
-                totalSpent = (_userProfile.value.totalSpent - booking.feePaid).coerceAtLeast(0)
-            )
-        }
+        // Refund the booked player's wallet (not owner's own wallet unless owner booked)
+        refundPlayerForBooking(booking)
 
-        // Add refund transaction record
         val refundTx = WalletTransaction(
             id = UUID.randomUUID().toString(),
             title = "স্লট #${booking.slotNumber} রিফান্ড (ওনার বাতিলকৃত)",
@@ -1508,26 +1925,32 @@ class TournamentRepository(
             matchTitle = booking.matchTitle,
             senderBkash = booking.bkashSenderNumber,
             exactDateTime = "আজ এইমাত্র",
-            userPhone = _userProfile.value.phone
+            userPhone = booking.bkashSenderNumber.ifBlank { _userProfile.value.phone }
         )
         _transactions.value = listOf(refundTx) + _transactions.value
         syncActiveUserToRegistry()
+        cloudSync?.deleteBookingCloud(booking.bookingId, booking.matchId, nextBookedCount)
         return true
     }
 
-    fun cancelLegacySlotByNumber(matchId: String, slotNumber: Int): Boolean {
+    fun cancelLegacySlotByNumberResult(matchId: String, slotNumber: Int): Pair<Boolean, String> {
         val existing = _myBookings.value.find { it.matchId == matchId && it.slotNumber == slotNumber }
         if (existing != null) {
-            return cancelSlotBookingAndRefund(existing.bookingId)
+            val ok = cancelSlotBookingAndRefund(existing.bookingId)
+            return ok to if (ok) {
+                "✅ স্লট #$slotNumber (${existing.playerIgn}) রিমুভ এবং ৳${existing.feePaid} প্লেয়ার ওয়ালেটে রিফান্ড হয়েছে!"
+            } else {
+                "❌ স্লট #$slotNumber বাতিল করা যায়নি!"
+            }
         }
-        val liveMatch = _matches.value.find { it.id == matchId } ?: return false
+        val liveMatch = _matches.value.find { it.id == matchId }
+            ?: return false to "ম্যাচটি খুঁজে পাওয়া যায়নি!"
         if (liveMatch.bookedSlots <= 0 || slotNumber !in 1..liveMatch.totalSlots) {
-            return false
+            return false to "স্লট #$slotNumber বর্তমানে খালি আছে।"
         }
 
-        _matches.value = _matches.value.map { m ->
-            if (m.id == matchId) m.copy(bookedSlots = (m.bookedSlots - 1).coerceAtLeast(0)) else m
-        }
+        val updatedMatch = liveMatch.copy(bookedSlots = (liveMatch.bookedSlots - 1).coerceAtLeast(0))
+        _matches.value = _matches.value.map { m -> if (m.id == matchId) updatedMatch else m }
         _walletBalance.value += liveMatch.entryFee
         val refundTx = WalletTransaction(
             id = UUID.randomUUID().toString(),
@@ -1545,8 +1968,12 @@ class TournamentRepository(
         )
         _transactions.value = listOf(refundTx) + _transactions.value
         syncActiveUserToRegistry()
-        return true
+        cloudSync?.pushMatch(updatedMatch)
+        return true to "✅ স্লট #$slotNumber সফলভাবে রিমুভ ও ৳${liveMatch.entryFee} রিফান্ড হয়েছে!"
     }
+
+    fun cancelLegacySlotByNumber(matchId: String, slotNumber: Int): Boolean =
+        cancelLegacySlotByNumberResult(matchId, slotNumber).first
 
     fun cancelMatchAndRefundAll(matchId: String): Pair<Int, Int> {
         val matchBookings = _myBookings.value.filter { it.matchId == matchId }
@@ -1555,13 +1982,7 @@ class TournamentRepository(
 
         matchBookings.forEach { booking ->
             totalRefund += booking.feePaid
-            _walletBalance.value += booking.feePaid
-            if (_userProfile.value.matchesPlayed > 0 || _userProfile.value.totalSpent > 0) {
-                _userProfile.value = _userProfile.value.copy(
-                    matchesPlayed = (_userProfile.value.matchesPlayed - 1).coerceAtLeast(0),
-                    totalSpent = (_userProfile.value.totalSpent - booking.feePaid).coerceAtLeast(0)
-                )
-            }
+            refundPlayerForBooking(booking)
             val tx = WalletTransaction(
                 id = UUID.randomUUID().toString(),
                 title = "ম্যাচ বাতিল রিফান্ড - স্লট #${booking.slotNumber}",
@@ -1574,17 +1995,20 @@ class TournamentRepository(
                 slotNumber = booking.slotNumber,
                 matchTitle = booking.matchTitle,
                 exactDateTime = "আজ এইমাত্র",
-                userPhone = _userProfile.value.phone
+                userPhone = booking.bkashSenderNumber.ifBlank { _userProfile.value.phone }
             )
             _transactions.value = listOf(tx) + _transactions.value
         }
 
         _myBookings.value = _myBookings.value.filter { it.matchId != matchId }
+        var updatedCancelledMatch: TournamentMatch? = null
         _matches.value = _matches.value.map {
-            if (it.id == matchId) it.copy(bookedSlots = 0, status = MatchStatus.CANCELLED) else it
+            if (it.id == matchId) it.copy(bookedSlots = 0, status = MatchStatus.CANCELLED).also { m -> updatedCancelledMatch = m } else it
         }
 
         syncActiveUserToRegistry()
+        matchBookings.forEach { cloudSync?.deleteBookingCloud(it.bookingId, matchId, 0) }
+        updatedCancelledMatch?.let { cloudSync?.pushMatch(it) }
         return Pair(count, totalRefund)
     }
 
@@ -1594,7 +2018,7 @@ class TournamentRepository(
             phone = "01861583924",
             email = "owner@trustedth.com",
             ign = "TH★DEVIL⚡",
-            uid = "2489103847",
+            uid = "11410365896",
             bkashNumber = "01861583924",
             avatarId = "th_logo",
             level = 0,
@@ -1644,9 +2068,16 @@ class TournamentRepository(
         senderNumber: String,
         trxId: String
     ): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
         val currentUser = _userProfile.value
         if (currentUser.isBanned) {
             return Pair(false, "🚫 আপনার একাউন্ট সাসপেন্ড রয়েছে, তাই ডিপোজিট রিকোয়েস্ট পাঠানো যাবে না!")
+        }
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়ার আগে ডিপোজিট পাঠানো যাবে না।")
+        }
+        if (currentUser.isWalletFrozen) {
+            return Pair(false, "❄️ আপনার ওয়ালেট ফ্রিজ করা আছে (${currentUser.walletFreezeReason ?: "নিরাপত্তা অডিট"})!")
         }
         val cleanPhone = senderNumber.trim()
         val cleanTrx = trxId.trim().uppercase()
@@ -1659,6 +2090,8 @@ class TournamentRepository(
         val isInvalidDummyTrx = cleanTrx.length < 4 ||
             !cleanTrx.all { it.isLetterOrDigit() || it == '-' || it == '_' } ||
             cleanTrx.toSet().size <= 1 ||
+            cleanTrx.startsWith("TEST") ||
+            cleanTrx.startsWith("FAKE") ||
             cleanTrx in setOf("0000", "1234", "12345", "123456", "TEST", "FAKE", "NONE", "NULL")
         if (isInvalidDummyTrx) {
             return Pair(false, "সঠিক আসল TrxID দিন! (ভুয়া বা ডামি TrxID গ্রহণযোগ্য নয়)")
@@ -1700,6 +2133,7 @@ class TournamentRepository(
         )
         _transactions.value = listOf(tx) + _transactions.value
         saveState()
+        cloudSync?.pushDepositRequest(request)
         return Pair(true, "৳$amount ডিপোজিট রিকোয়েস্ট পাঠানো হয়েছে! ওনার অনুমোদন করলেই ওয়ালেটে যোগ হবে।")
     }
 
@@ -1710,16 +2144,19 @@ class TournamentRepository(
             return Pair(false, "এই রিকোয়েস্টটি ইতিমধ্যেই প্রসেস করা হয়েছে!")
         }
 
+        var updatedReq = req
         _depositRequests.value = _depositRequests.value.map {
-            if (it.id == requestId) it.copy(status = RequestStatus.APPROVED, adminNote = "অনুমোদিত ও ওয়ালেটে যুক্ত") else it
+            if (it.id == requestId) it.copy(status = RequestStatus.APPROVED, adminNote = "অনুমোদিত ও ওয়ালেটে যুক্ত").also { r -> updatedReq = r } else it
         }
 
         // Credit user wallet (both in registeredUsers and active balance if matching)
         val userMatch = _registeredUsers.value.find { it.phone == req.userPhone }
         if (userMatch != null) {
+            val updatedUser = userMatch.copy(walletBalance = userMatch.walletBalance + req.amount)
             _registeredUsers.value = _registeredUsers.value.map {
-                if (it.phone == req.userPhone) it.copy(walletBalance = it.walletBalance + req.amount) else it
+                if (it.id == updatedUser.id) updatedUser else it
             }
+            cloudSync?.pushUser(updatedUser)
         }
         if (_userProfile.value.phone == req.userPhone || _userProfile.value.phone.isBlank()) {
             _walletBalance.value += req.amount
@@ -1731,6 +2168,7 @@ class TournamentRepository(
             } else tx
         }
         syncActiveUserToRegistry()
+        cloudSync?.pushDepositRequest(updatedReq)
         return Pair(true, "✅ ${req.userName}-এর ৳${req.amount} ডিপোজিট অনুমোদিত ও ওয়ালেটে যুক্ত হয়েছে!")
     }
 
@@ -1742,8 +2180,9 @@ class TournamentRepository(
         }
 
         val cleanReason = reason.ifBlank { "ভুয়া বা ভুল TrxID" }
+        var updatedReq = req
         _depositRequests.value = _depositRequests.value.map {
-            if (it.id == requestId) it.copy(status = RequestStatus.REJECTED, adminNote = cleanReason) else it
+            if (it.id == requestId) it.copy(status = RequestStatus.REJECTED, adminNote = cleanReason).also { r -> updatedReq = r } else it
         }
         _transactions.value = _transactions.value.map { tx ->
             if (tx.requestId == requestId) {
@@ -1751,6 +2190,7 @@ class TournamentRepository(
             } else tx
         }
         saveState()
+        cloudSync?.pushDepositRequest(updatedReq)
         return Pair(true, "❌ ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে।")
     }
 
@@ -1770,8 +2210,16 @@ class TournamentRepository(
         paymentMethod: WalletPaymentMethod,
         targetNumber: String
     ): Pair<Boolean, String> {
-        if (_userProfile.value.isBanned) {
+        checkAndClearExpiredModeration()
+        val currentUser = _userProfile.value
+        if (currentUser.isBanned) {
             return Pair(false, "🚫 আপনার একাউন্ট সাসপেন্ড রয়েছে, তাই উইথড্র রিকোয়েস্ট পাঠানো যাবে না!")
+        }
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়ার আগে উইথড্র করা যাবে না।")
+        }
+        if (currentUser.isWalletFrozen) {
+            return Pair(false, "❄️ আপনার ওয়ালেট ফ্রিজ করা আছে (${currentUser.walletFreezeReason ?: "নিরাপত্তা অডিট"})! অনুগ্রহ করে সাপোর্টে যোগাযোগ করুন।")
         }
         val eligibility = canUserWithdraw()
         if (!eligibility.first) {
@@ -1795,7 +2243,6 @@ class TournamentRepository(
 
         _walletBalance.value -= amount
 
-        val currentUser = _userProfile.value
         val reqId = "WDR-${System.currentTimeMillis()}"
         val withdrawReq = WithdrawRequest(
             id = reqId,
@@ -1825,6 +2272,7 @@ class TournamentRepository(
         )
         _transactions.value = listOf(tx) + _transactions.value
         syncActiveUserToRegistry()
+        cloudSync?.pushWithdrawRequest(withdrawReq)
         return Pair(true, "৳$amount ${paymentMethod.tag} ক্যাশআউট রিকোয়েস্ট সফল! অনুমোদনের পর টাকা পাঠানো হবে।")
     }
 
@@ -1835,8 +2283,9 @@ class TournamentRepository(
             return Pair(false, "এই রিকোয়েস্টটি ইতিমধ্যেই প্রসেস করা হয়েছে!")
         }
 
+        var updatedReq = req
         _withdrawRequests.value = _withdrawRequests.value.map {
-            if (it.id == requestId) it.copy(status = RequestStatus.APPROVED, adminNote = "পেমেন্ট পাঠানো হয়েছে") else it
+            if (it.id == requestId) it.copy(status = RequestStatus.APPROVED, adminNote = "পেমেন্ট পাঠানো হয়েছে").also { r -> updatedReq = r } else it
         }
         _transactions.value = _transactions.value.map { tx ->
             if (tx.requestId == requestId) {
@@ -1844,6 +2293,7 @@ class TournamentRepository(
             } else tx
         }
         saveState()
+        cloudSync?.pushWithdrawRequest(updatedReq)
         return Pair(true, "✅ ${req.userName}-এর ৳${req.amount} উইথড্র সম্পন্ন চিহ্নিত হয়েছে!")
     }
 
@@ -1855,13 +2305,14 @@ class TournamentRepository(
         }
 
         val cleanReason = reason.ifBlank { "নম্বর বা তথ্যে ত্রুটি" }
+        var updatedReq = req
         _withdrawRequests.value = _withdrawRequests.value.map {
-            if (it.id == requestId) it.copy(status = RequestStatus.REJECTED, adminNote = cleanReason) else it
+            if (it.id == requestId) it.copy(status = RequestStatus.REJECTED, adminNote = cleanReason).also { r -> updatedReq = r } else it
         }
 
         // Refund deducted money back to user
         _registeredUsers.value = _registeredUsers.value.map {
-            if (it.phone == req.userPhone) it.copy(walletBalance = it.walletBalance + req.amount) else it
+            if (it.phone == req.userPhone) it.copy(walletBalance = it.walletBalance + req.amount).also { u -> cloudSync?.pushUser(u) } else it
         }
         if (_userProfile.value.phone == req.userPhone || _userProfile.value.phone.isBlank()) {
             _walletBalance.value += req.amount
@@ -1885,6 +2336,7 @@ class TournamentRepository(
         )
         _transactions.value = listOf(refundTx) + _transactions.value
         syncActiveUserToRegistry()
+        cloudSync?.pushWithdrawRequest(updatedReq)
         return Pair(true, "❌ উইথড্র বাতিল করে ৳${req.amount} প্লেয়ারের ওয়ালেটে ফেরত দেওয়া হয়েছে।")
     }
 
@@ -1919,8 +2371,10 @@ class TournamentRepository(
         }
 
         val newBalance = if (isAdd) targetUser.walletBalance + amount else targetUser.walletBalance - amount
-        list[index] = targetUser.copy(walletBalance = newBalance)
+        val updatedUser = targetUser.copy(walletBalance = newBalance)
+        list[index] = updatedUser
         _registeredUsers.value = list
+        cloudSync?.pushUser(updatedUser)
 
         val activePhone = _userProfile.value.phone
         val activeUid = _userProfile.value.uid
@@ -1962,41 +2416,48 @@ class TournamentRepository(
         }
         val user = list[index]
         val updatedCount = (user.matchesPlayed + delta).coerceAtLeast(0)
-        list[index] = user.copy(matchesPlayed = updatedCount)
+        val updatedUser = user.copy(matchesPlayed = updatedCount)
+        list[index] = updatedUser
         _registeredUsers.value = list
+        cloudSync?.pushUser(updatedUser)
 
         if (_userProfile.value.phone == user.phone || (_userProfile.value.uid.isNotBlank() && _userProfile.value.uid == user.uid)) {
             _userProfile.value = _userProfile.value.copy(matchesPlayed = updatedCount)
         }
+        rebuildLiveLeaderboard()
         saveState()
         return Pair(true, "✅ ${user.name}-এর মোট ম্যাচ সংখ্যা এখন $updatedCount টি।")
     }
 
     fun updateWhatsAppGroupUrl(url: String) {
         officialWhatsAppGroupUrl.value = url
+        _appCustomization.value = _appCustomization.value.copy(officialWhatsAppUrl = url)
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
     }
 
     fun publishRoomCredentials(matchId: String, roomId: String, password: String): Boolean {
+        var updatedMatch: TournamentMatch? = null
         _matches.value = _matches.value.map { match ->
             if (match.id == matchId) {
                 match.copy(
                     roomId = roomId,
                     roomPassword = password,
                     status = MatchStatus.ROOM_OPEN
-                )
+                ).also { updatedMatch = it }
             } else {
                 match
             }
         }
         _myBookings.value = _myBookings.value.map { booking ->
             if (booking.matchId == matchId) {
-                booking.copy(roomId = roomId, roomPassword = password)
+                booking.copy(roomId = roomId, roomPassword = password).also { cloudSync?.pushBooking(it) }
             } else {
                 booking
             }
         }
         saveState()
+        updatedMatch?.let { cloudSync?.pushMatch(it) }
         return true
     }
 
@@ -2030,6 +2491,7 @@ class TournamentRepository(
         )
         _matches.value = listOf(newMatch) + _matches.value
         saveState()
+        cloudSync?.pushMatch(newMatch)
     }
 
     // ==================== OWNER EXCLUSIVE METHODS ====================
@@ -2051,41 +2513,574 @@ class TournamentRepository(
                 isBanned = false
             )
             syncActiveUserToRegistry()
+            pushActiveUserToCloud()
             return true
         }
         return false
     }
 
+    private fun currentActorLabel(role: UserRole = _userProfile.value.role): String {
+        return when (role) {
+            UserRole.OWNER -> "ওনার (${_userProfile.value.ign.ifBlank { "TH" }})"
+            UserRole.ADMIN -> "অ্যাডমিন (${_userProfile.value.ign.ifBlank { "TH" }})"
+            UserRole.PLAYER -> "সিস্টেম"
+        }
+    }
+
+    private fun findUserIndexByKey(targetKey: String): Int {
+        val clean = targetKey.trim()
+        if (clean.isBlank()) return -1
+        return _registeredUsers.value.indexOfFirst {
+            it.id == clean ||
+                it.phone == clean ||
+                it.uid == clean ||
+                it.bkashNumber == clean ||
+                it.ign.equals(clean, ignoreCase = true)
+        }
+    }
+
+    private fun canActorModerateTarget(actorRole: UserRole, target: AppUser): Pair<Boolean, String> {
+        if (target.role == UserRole.OWNER && actorRole != UserRole.OWNER) {
+            return Pair(false, "⛔ অ্যাপের মূল ওনারের বিরুদ্ধে কোনো শাস্তি বা মডারেশন অ্যাকশন নেওয়া যাবে না!")
+        }
+        if (target.role == UserRole.OWNER) {
+            return Pair(false, "👑 সুপ্রিম ওনার অ্যাকাউন্টের উপর শাস্তি কার্যকর করা যাবে না!")
+        }
+        if (actorRole == UserRole.ADMIN && target.role == UserRole.ADMIN) {
+            return Pair(false, "🛡️ একজন অ্যাডমিন আরেকজন অ্যাডমিনকে শাস্তি দিতে পারবেন না! কেবল ওনার এটি করতে পারবেন।")
+        }
+        return Pair(true, "")
+    }
+
+    private fun appendModerationLog(
+        target: AppUser,
+        actionType: ModerationActionType,
+        durationLabel: String = "",
+        reason: String = "",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        timestampMillis: Long = System.currentTimeMillis()
+    ) {
+        val entry = ModerationLogEntry(
+            id = "mod_${UUID.randomUUID().toString().take(8)}",
+            targetUserId = target.id,
+            targetIgn = target.ign.ifBlank { target.name },
+            targetPhone = target.phone,
+            actionType = actionType,
+            durationLabel = durationLabel,
+            reason = reason,
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = timestampMillis,
+            timeLabel = "এইমাত্র"
+        )
+        _moderationLogs.value = (listOf(entry) + _moderationLogs.value).take(80)
+        cloudSync?.pushUser(target)
+        cloudSync?.pushModerationLog(entry, target.id)
+    }
+
+    private fun syncTargetToActiveProfile(updatedUser: AppUser) {
+        val active = _userProfile.value
+        val matches = (active.phone.isNotBlank() && active.phone == updatedUser.phone) ||
+            (active.uid.isNotBlank() && active.uid == updatedUser.uid)
+        if (matches) {
+            _userProfile.value = active.copy(
+                isBanned = updatedUser.isBanned,
+                banReason = updatedUser.banReason,
+                banExpiresAtMillis = updatedUser.banExpiresAtMillis,
+                warningsCount = updatedUser.warningsCount,
+                moderationWarningsCount = updatedUser.moderationWarningsCount,
+                timeoutUntilMillis = updatedUser.timeoutUntilMillis,
+                timeoutReason = updatedUser.timeoutReason,
+                timeoutBy = updatedUser.timeoutBy,
+                isChatMuted = updatedUser.isChatMuted,
+                chatMuteUntilMillis = updatedUser.chatMuteUntilMillis,
+                chatMuteReason = updatedUser.chatMuteReason,
+                isMatchBanned = updatedUser.isMatchBanned,
+                matchBanReason = updatedUser.matchBanReason,
+                isWalletFrozen = updatedUser.isWalletFrozen,
+                walletFreezeReason = updatedUser.walletFreezeReason,
+                customBadges = updatedUser.customBadges,
+                revokedBadges = updatedUser.revokedBadges
+            )
+        }
+    }
+
+    fun isActiveUserTimedOut(nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val p = _userProfile.value
+        if (p.role == UserRole.OWNER) return false
+        val until = p.timeoutUntilMillis ?: return false
+        return until > nowMillis
+    }
+
+    fun formatDurationBangla(minutes: Long): String {
+        val safe = minutes.coerceAtLeast(1)
+        val days = safe / (24 * 60)
+        val remAfterDays = safe % (24 * 60)
+        val hours = remAfterDays / 60
+        val mins = remAfterDays % 60
+        return buildString {
+            if (days > 0) append("${days} দিন ")
+            if (hours > 0) append("${hours} ঘন্টা ")
+            if (mins > 0) append("${mins} মিনিট")
+        }.trim().ifBlank { "${safe} মিনিট" }
+    }
+
+    fun warnUser(
+        targetKey: String,
+        reason: String = "টুর্নামেন্ট নীতিমালা লঙ্ঘন",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "এই নম্বর, UID বা IGN দিয়ে কোনো ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "টুর্নামেন্টের নিয়ম ভঙ্গ ও অসদাচরণ" }
+        val newWarns = target.moderationWarningsCount + 1
+        val reachedSevenWarnLimit = newWarns >= MODERATION_WARN_BAN_THRESHOLD
+        val tenDayExpiry = nowMillis + TEN_DAYS_MILLIS
+
+        val updated = if (reachedSevenWarnLimit) {
+            target.copy(
+                moderationWarningsCount = newWarns,
+                isBanned = true,
+                banReason = "৭টি ওয়ার্নিং পূর্ণ হওয়ায় স্বয়ংক্রিয়ভাবে ১০ দিনের অ্যাপ ব্যান! (সর্বশেষ কারণ: $cleanReason)",
+                bannedAt = "আজ এইমাত্র",
+                banExpiresAtMillis = tenDayExpiry
+            )
+        } else {
+            target.copy(moderationWarningsCount = newWarns)
+        }
+
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.WARN,
+            durationLabel = if (reachedSevenWarnLimit) "১০ দিন অটো-ব্যান ($newWarns/৭)" else "ওয়ার্ন #$newWarns/৭",
+            reason = cleanReason,
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+
+        val msg = if (reachedSevenWarnLimit) {
+            "🚫 ${updated.ign}-এর মোট ৭টি ওয়ার্নিং পূর্ণ হয়েছে! নিয়ম অনুযায়ী স্বয়ংক্রিয়ভাবে ১০ দিনের অ্যাপ ব্যান কার্যকর করা হয়েছে।"
+        } else {
+            "⚠️ ${updated.ign}-কে ওয়ার্নিং দেওয়া হয়েছে ($newWarns/৭)! ৭টি ওয়ার্নিং পূর্ণ হলে ১০ দিনের অ্যাপ ব্যান হবে।"
+        }
+        return Pair(true, msg)
+    }
+
+    fun clearUserModerationWarnings(
+        targetKey: String,
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val updated = target.copy(moderationWarningsCount = 0, warningsCount = 0)
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.CLEAR_WARNINGS,
+            reason = "স্টাফ কর্তৃক ওয়ার্নিং রিসেট",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🧹 ${updated.ign}-এর সকল ওয়ার্নিং রিসেট (০/৭) করা হয়েছে!")
+    }
+
+    fun timeoutUser(
+        targetKey: String,
+        durationMinutes: Long,
+        reason: String = "অস্থায়ী অ্যাপ টাইমআউট",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        if (durationMinutes < 1) {
+            return Pair(false, "কমপক্ষে ১ মিনিটের টাইমআউট সময় দিন!")
+        }
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "মডারেশন নীতিমালা ভঙ্গের কারণে সাময়িক টাইমআউট" }
+        val expiryMillis = nowMillis + (durationMinutes * 60_000L)
+        val durationLabel = formatDurationBangla(durationMinutes)
+        val updated = target.copy(
+            timeoutUntilMillis = expiryMillis,
+            timeoutReason = cleanReason,
+            timeoutBy = moderatorName
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.TIMEOUT,
+            durationLabel = durationLabel,
+            reason = cleanReason,
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "⏳ ${updated.ign}-কে $durationLabel সময়ের জন্য অ্যাপ টাইমআউট দেওয়া হয়েছে! টাইমার শেষ না হওয়া পর্যন্ত অ্যাপ লক থাকবে।")
+    }
+
+    fun removeTimeout(
+        targetKey: String,
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val updated = target.copy(
+            timeoutUntilMillis = null,
+            timeoutReason = null,
+            timeoutBy = null
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.REMOVE_TIMEOUT,
+            reason = "টাইমআউট তুলে নেওয়া হয়েছে",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🔓 ${updated.ign}-এর অ্যাপ টাইমআউট প্রত্যাহার করা হয়েছে!")
+    }
+
+    fun muteUserChat(
+        targetKey: String,
+        durationHours: Long = 24,
+        reason: String = "গ্লোবাল চ্যাটে স্প্যাম বা অশোভন আচরণ",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "গ্লোবাল চ্যাট নীতিমালা লঙ্ঘন" }
+        val until = if (durationHours > 0) nowMillis + (durationHours * 3_600_000L) else null
+        val durationLabel = if (durationHours > 0) "$durationHours ঘন্টা" else "অনির্দিষ্টকাল"
+        val updated = target.copy(
+            isChatMuted = true,
+            chatMuteUntilMillis = until,
+            chatMuteReason = cleanReason
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.CHAT_MUTE,
+            durationLabel = durationLabel,
+            reason = cleanReason,
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🔇 ${updated.ign}-কে $durationLabel-এর জন্য চ্যাট মিউট করা হয়েছে!")
+    }
+
+    fun unmuteUserChat(
+        targetKey: String,
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val updated = target.copy(
+            isChatMuted = false,
+            chatMuteUntilMillis = null,
+            chatMuteReason = null
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.UNMUTE_CHAT,
+            reason = "চ্যাট মিউট প্রত্যাহার",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🔊 ${updated.ign}-এর চ্যাট মিউট খোলা হয়েছে!")
+    }
+
+    fun setUserMatchBan(
+        targetKey: String,
+        banned: Boolean,
+        reason: String = "স্লট শৃঙ্খলা ভঙ্গ বা টিমিং",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "টুর্নামেন্ট নিয়ম ভঙ্গ" }
+        val updated = target.copy(
+            isMatchBanned = banned,
+            matchBanReason = if (banned) cleanReason else null
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = if (banned) ModerationActionType.MATCH_BAN else ModerationActionType.UNBAN_MATCH,
+            reason = if (banned) cleanReason else "ম্যাচ স্লট খুলে দেওয়া হয়েছে",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(
+            true,
+            if (banned) "🎯 ${updated.ign}-এর ম্যাচ স্লট এন্ট্রি নিষিদ্ধ (Match Ban) করা হয়েছে!"
+            else "✅ ${updated.ign}-এর ম্যাচ ব্যান প্রত্যাহার করা হয়েছে!"
+        )
+    }
+
+    fun setUserWalletFreeze(
+        targetKey: String,
+        frozen: Boolean,
+        reason: String = "সন্দেহজনক TrxID বা পেমেন্ট অডিট",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "পেমেন্ট যাচাই ও অডিট" }
+        val updated = target.copy(
+            isWalletFrozen = frozen,
+            walletFreezeReason = if (frozen) cleanReason else null
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        appendModerationLog(
+            target = updated,
+            actionType = if (frozen) ModerationActionType.WALLET_FREEZE else ModerationActionType.UNFREEZE_WALLET,
+            reason = if (frozen) cleanReason else "ওয়ালেট আনফ্রিজ করা হয়েছে",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(
+            true,
+            if (frozen) "❄️ ${updated.ign}-এর ওয়ালেট ও ডিপোজিট/উইথড্র ফ্রিজ করা হয়েছে!"
+            else "🔥 ${updated.ign}-এর ওয়ালেট আনফ্রিজ করা হয়েছে!"
+        )
+    }
+
+    fun tempBanUser(
+        targetKey: String,
+        days: Int,
+        reason: String = "গুরুতর নিয়ম লঙ্ঘন",
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val safeDays = days.coerceAtLeast(1)
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val cleanReason = reason.trim().ifBlank { "$safeDays দিনের অস্থায়ী অ্যাপ ব্যান" }
+        val expiry = nowMillis + safeDays * 24L * 60 * 60 * 1000L
+        val updated = target.copy(
+            isBanned = true,
+            banReason = "$cleanReason (${safeDays} দিনের ব্যান)",
+            bannedAt = "আজ এইমাত্র",
+            banExpiresAtMillis = expiry
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        rebuildLiveLeaderboard()
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.TEMP_BAN,
+            durationLabel = "$safeDays দিন",
+            reason = cleanReason,
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🚫 ${updated.ign}-কে $safeDays দিনের জন্য অ্যাপ ব্যান করা হয়েছে!")
+    }
+
+    fun removeAllBadgesFromUser(
+        targetKey: String,
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val allRevoked = target.revokedBadges + target.effectiveBadges
+        val updated = target.copy(
+            customBadges = emptySet(),
+            revokedBadges = allRevoked
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        rebuildLiveLeaderboard()
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.REMOVE_ALL_BADGES,
+            reason = "শাস্তিমূলক সকল ব্যাজ বাতিল",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "💥 ${updated.ign}-এর সকল ব্যাজ তুলে নেওয়া হয়েছে!")
+    }
+
+    fun pardonAllPunishments(
+        targetKey: String,
+        moderatorRole: UserRole = _userProfile.value.role,
+        moderatorName: String = currentActorLabel(moderatorRole),
+        nowMillis: Long = System.currentTimeMillis()
+    ): Pair<Boolean, String> {
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return Pair(false, "ইউজার পাওয়া যায়নি!")
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val (allowed, denyMsg) = canActorModerateTarget(moderatorRole, target)
+        if (!allowed) return Pair(false, denyMsg)
+
+        val updated = target.copy(
+            isBanned = false,
+            banReason = null,
+            bannedAt = null,
+            banExpiresAtMillis = null,
+            warningsCount = 0,
+            moderationWarningsCount = 0,
+            timeoutUntilMillis = null,
+            timeoutReason = null,
+            timeoutBy = null,
+            isChatMuted = false,
+            chatMuteUntilMillis = null,
+            chatMuteReason = null,
+            isMatchBanned = false,
+            matchBanReason = null,
+            isWalletFrozen = false,
+            walletFreezeReason = null
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+        syncTargetToActiveProfile(updated)
+        rebuildLiveLeaderboard()
+        appendModerationLog(
+            target = updated,
+            actionType = ModerationActionType.PARDON_ALL,
+            reason = "সকল শাস্তি, ব্যান, টাইমআউট, মিউট ও ওয়ার্নিং মওকুফ",
+            moderatorRole = moderatorRole,
+            moderatorName = moderatorName,
+            timestampMillis = nowMillis
+        )
+        saveState()
+        return Pair(true, "🌟 ${updated.ign}-এর সকল শাস্তি ও নিষেধাজ্ঞা সম্পূর্ণভাবে মওকুফ করা হয়েছে!")
+    }
+
     fun banUser(userIdOrPhoneOrUid: String, reason: String): Boolean {
         val list = _registeredUsers.value.toMutableList()
         val index = list.indexOfFirst {
-            it.id == userIdOrPhoneOrUid || it.phone == userIdOrPhoneOrUid || it.uid == userIdOrPhoneOrUid
+            it.id == userIdOrPhoneOrUid || it.phone == userIdOrPhoneOrUid || it.uid == userIdOrPhoneOrUid || it.ign.equals(userIdOrPhoneOrUid, ignoreCase = true)
         }
         val banMsg = reason.ifBlank { "প্রতারণা ও নিয়ম লঙ্ঘনের জন্য ওনার কর্তৃক ব্যান" }
         if (index != -1) {
             val user = list[index]
             // Cannot ban supreme owner
             if (user.role == UserRole.OWNER) return false
+            if (_userProfile.value.role == UserRole.ADMIN && user.role == UserRole.ADMIN) return false
 
-            list[index] = user.copy(
+            val updated = user.copy(
                 isBanned = true,
                 banReason = banMsg,
                 bannedAt = "আজ এইমাত্র",
                 banExpiresAtMillis = null
             )
+            list[index] = updated
             _registeredUsers.value = list
-
-            if (_userProfile.value.phone == user.phone || _userProfile.value.uid == user.uid) {
-                _userProfile.value = _userProfile.value.copy(
-                    isBanned = true,
-                    banReason = banMsg,
-                    banExpiresAtMillis = null
-                )
-            }
+            syncTargetToActiveProfile(updated)
+            rebuildLiveLeaderboard()
+            appendModerationLog(updated, ModerationActionType.PERMANENT_BAN, "আজীবন", banMsg)
             saveState()
             return true
         } else {
-            // Add directly as banned record by phone/uid
             val bannedEntry = AppUser(
                 id = "banned_${System.currentTimeMillis()}",
                 name = "চিটার প্লেয়ার ($userIdOrPhoneOrUid)",
@@ -2100,6 +3095,7 @@ class TournamentRepository(
                 banExpiresAtMillis = null
             )
             _registeredUsers.value = listOf(bannedEntry) + list
+            appendModerationLog(bannedEntry, ModerationActionType.PERMANENT_BAN, "আজীবন", banMsg)
             saveState()
             return true
         }
@@ -2108,62 +3104,87 @@ class TournamentRepository(
     fun unbanUser(userIdOrPhoneOrUid: String): Boolean {
         val list = _registeredUsers.value.toMutableList()
         val index = list.indexOfFirst {
-            it.id == userIdOrPhoneOrUid || it.phone == userIdOrPhoneOrUid || it.uid == userIdOrPhoneOrUid
+            it.id == userIdOrPhoneOrUid || it.phone == userIdOrPhoneOrUid || it.uid == userIdOrPhoneOrUid || it.ign.equals(userIdOrPhoneOrUid, ignoreCase = true)
         }
         if (index != -1) {
             val user = list[index]
-            list[index] = user.copy(
+            val updated = user.copy(
                 isBanned = false,
                 banReason = null,
                 bannedAt = null,
                 banExpiresAtMillis = null,
-                warningsCount = 0
+                warningsCount = 0,
+                moderationWarningsCount = 0
             )
+            list[index] = updated
             _registeredUsers.value = list
-
-            if (_userProfile.value.phone == user.phone || _userProfile.value.uid == user.uid) {
-                _userProfile.value = _userProfile.value.copy(
-                    isBanned = false,
-                    banReason = null,
-                    banExpiresAtMillis = null,
-                    warningsCount = 0
-                )
-            }
+            syncTargetToActiveProfile(updated)
+            rebuildLiveLeaderboard()
+            appendModerationLog(updated, ModerationActionType.UNBAN, reason = "ব্যান প্রত্যাহার")
             saveState()
             return true
         }
         return false
     }
 
-    fun checkAndClearExpiredBans(nowMillis: Long = System.currentTimeMillis()): Int {
+    fun checkAndClearExpiredModeration(nowMillis: Long = System.currentTimeMillis()): Int {
         var clearedCount = 0
+        val active = _userProfile.value
+        var activeClearedInRegistry = false
+
         _registeredUsers.value = _registeredUsers.value.map { user ->
-            val expiry = user.banExpiresAtMillis
-            if (user.isBanned && expiry != null && nowMillis >= expiry) {
+            val banExpired = user.isBanned && user.banExpiresAtMillis != null && nowMillis >= user.banExpiresAtMillis
+            val timeoutExpired = user.timeoutUntilMillis != null && nowMillis >= user.timeoutUntilMillis
+            val muteExpired = user.isChatMuted && user.chatMuteUntilMillis != null && nowMillis >= user.chatMuteUntilMillis
+            if (banExpired || timeoutExpired || muteExpired) {
                 clearedCount++
+                val isActiveMatch = (active.phone.isNotBlank() && active.phone == user.phone) ||
+                    (active.uid.isNotBlank() && active.uid == user.uid)
+                if (isActiveMatch) activeClearedInRegistry = true
                 user.copy(
-                    isBanned = false,
-                    banReason = null,
-                    bannedAt = null,
-                    banExpiresAtMillis = null
+                    isBanned = if (banExpired) false else user.isBanned,
+                    banReason = if (banExpired) null else user.banReason,
+                    bannedAt = if (banExpired) null else user.bannedAt,
+                    banExpiresAtMillis = if (banExpired) null else user.banExpiresAtMillis,
+                    moderationWarningsCount = if (banExpired && user.moderationWarningsCount >= MODERATION_WARN_BAN_THRESHOLD) 0 else user.moderationWarningsCount,
+                    timeoutUntilMillis = if (timeoutExpired) null else user.timeoutUntilMillis,
+                    timeoutReason = if (timeoutExpired) null else user.timeoutReason,
+                    timeoutBy = if (timeoutExpired) null else user.timeoutBy,
+                    isChatMuted = if (muteExpired) false else user.isChatMuted,
+                    chatMuteUntilMillis = if (muteExpired) null else user.chatMuteUntilMillis,
+                    chatMuteReason = if (muteExpired) null else user.chatMuteReason
                 )
             } else {
                 user
             }
         }
 
-        val currentProfile = _userProfile.value
-        val activeExpiry = currentProfile.banExpiresAtMillis
-        if (currentProfile.isBanned && activeExpiry != null && nowMillis >= activeExpiry) {
-            _userProfile.value = currentProfile.copy(
-                isBanned = false,
-                banReason = null,
-                banExpiresAtMillis = null
+        val activeBanExpired = active.isBanned && active.banExpiresAtMillis != null && nowMillis >= active.banExpiresAtMillis
+        val activeTimeoutExpired = active.timeoutUntilMillis != null && nowMillis >= active.timeoutUntilMillis
+        val activeMuteExpired = active.isChatMuted && active.chatMuteUntilMillis != null && nowMillis >= active.chatMuteUntilMillis
+        if (activeBanExpired || activeTimeoutExpired || activeMuteExpired) {
+            if (!activeClearedInRegistry) {
+                clearedCount++
+            }
+            _userProfile.value = active.copy(
+                isBanned = if (activeBanExpired) false else active.isBanned,
+                banReason = if (activeBanExpired) null else active.banReason,
+                banExpiresAtMillis = if (activeBanExpired) null else active.banExpiresAtMillis,
+                moderationWarningsCount = if (activeBanExpired && active.moderationWarningsCount >= MODERATION_WARN_BAN_THRESHOLD) 0 else active.moderationWarningsCount,
+                timeoutUntilMillis = if (activeTimeoutExpired) null else active.timeoutUntilMillis,
+                timeoutReason = if (activeTimeoutExpired) null else active.timeoutReason,
+                timeoutBy = if (activeTimeoutExpired) null else active.timeoutBy,
+                isChatMuted = if (activeMuteExpired) false else active.isChatMuted,
+                chatMuteUntilMillis = if (activeMuteExpired) null else active.chatMuteUntilMillis,
+                chatMuteReason = if (activeMuteExpired) null else active.chatMuteReason
             )
         }
         if (clearedCount > 0) saveState()
         return clearedCount
     }
+
+    fun checkAndClearExpiredBans(nowMillis: Long = System.currentTimeMillis()): Int =
+        checkAndClearExpiredModeration(nowMillis)
 
     fun promoteToAdmin(
         targetUserOrPhone: String,
@@ -2179,11 +3200,12 @@ class TournamentRepository(
 
         if (index != -1) {
             val existing = list[index]
-            list[index] = existing.copy(
+            val promotedUser = existing.copy(
                 role = UserRole.ADMIN,
                 adminPasscode = code,
                 appointedDate = "এইমাত্র"
             )
+            list[index] = promotedUser
             _registeredUsers.value = list
             if ((existing.phone.isNotBlank() && _userProfile.value.phone == existing.phone) ||
                 (existing.uid.isNotBlank() && _userProfile.value.uid == existing.uid)
@@ -2194,6 +3216,9 @@ class TournamentRepository(
                 )
             }
             saveState()
+            cloudSync?.pushUser(promotedUser)
+            cloudSync?.syncAdminGrant(promotedUser.id, grantAdmin = true, ign = promotedUser.ign)
+            rebuildLiveLeaderboard()
             return true
         } else {
             val newAdmin = AppUser(
@@ -2209,6 +3234,8 @@ class TournamentRepository(
             )
             _registeredUsers.value = listOf(newAdmin) + list
             saveState()
+            cloudSync?.pushUser(newAdmin)
+            cloudSync?.syncAdminGrant(newAdmin.id, grantAdmin = true, ign = newAdmin.ign)
             return true
         }
     }
@@ -2221,13 +3248,14 @@ class TournamentRepository(
             val user = list[index]
             if (user.role == UserRole.OWNER) return false // Cannot demote owner
             val demotedBadges = user.effectiveBadges - BadgeType.MODERATOR
-            list[index] = user.copy(
+            val demotedUser = user.copy(
                 role = UserRole.PLAYER,
                 adminPasscode = null,
                 customBannerUri = sanitizeBannerForAccount(UserRole.PLAYER, demotedBadges, user.customBannerUri),
                 bannerColorId = sanitizeBannerColorForAccount(UserRole.PLAYER, demotedBadges, user.bannerColorId),
                 customPfpUri = sanitizePfpForRole(UserRole.PLAYER, user.customPfpUri)
             )
+            list[index] = demotedUser
             _registeredUsers.value = list
             if (_userProfile.value.phone == user.phone || _userProfile.value.uid == user.uid) {
                 val activeBadges = _userProfile.value.earnedBadges - BadgeType.MODERATOR
@@ -2239,6 +3267,9 @@ class TournamentRepository(
                 )
             }
             saveState()
+            cloudSync?.pushUser(demotedUser)
+            cloudSync?.syncAdminGrant(demotedUser.id, grantAdmin = false, ign = demotedUser.ign)
+            rebuildLiveLeaderboard()
             return true
         }
         return false
@@ -2271,6 +3302,9 @@ class TournamentRepository(
         }
 
         val targetUser = list[index]
+        if (targetUser.role == UserRole.OWNER && _userProfile.value.role == UserRole.ADMIN) {
+            return Pair(false, "⛔ অ্যাডমিন ওনারের ব্যাজ পরিবর্তন করতে পারবেন না!")
+        }
         val wasAlreadyActive = badge in targetUser.effectiveBadges
         val updatedCustom = targetUser.customBadges + badge
         val updatedRevoked = targetUser.revokedBadges - badge
@@ -2292,20 +3326,15 @@ class TournamentRepository(
             )
         }
 
-        _leaderboard.value = _leaderboard.value.map { player ->
-            if ((targetUser.uid.isNotBlank() && player.uid == targetUser.uid) ||
-                player.ign.equals(targetUser.ign, ignoreCase = true)
-            ) {
-                player.copy(
-                    primaryBadge = updatedUser.primaryBadge,
-                    badge = updatedUser.primaryBadge.iconEmoji
-                )
-            } else {
-                player
-            }
-        }
+        rebuildLiveLeaderboard()
 
+        appendModerationLog(
+            target = updatedUser,
+            actionType = ModerationActionType.GIVE_BADGE,
+            reason = badge.title
+        )
         saveState()
+        cloudSync?.pushUserBadges(updatedUser)
         val msg = if (wasAlreadyActive) {
             "✅ ${targetUser.name}-এর প্রোফাইলে '${badge.title}' আগে থেকেই সক্রিয় আছে!"
         } else {
@@ -2322,6 +3351,9 @@ class TournamentRepository(
         }
         if (profile.isBanned) {
             return Pair(false, "🚫 আপনার অ্যাকাউন্ট বর্তমানে ব্যান আছে। ব্যান থাকা অবস্থায় আবেদন করা যাবে না!")
+        }
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়ার আগে আবেদন করা যাবে না।")
         }
         val cleanNote = reasonNote.trim()
         if (cleanNote.length < 4) {
@@ -2371,6 +3403,7 @@ class TournamentRepository(
         )
         _badgeAppeals.value = listOf(appeal) + _badgeAppeals.value
         saveState()
+        cloudSync?.pushBadgeAppeal(appeal)
         return Pair(true, "📩 '${requestedBadge.title}'-এর আবেদন সফলভাবে ওনার ও অ্যাডমিনের কাছে পাঠানো হয়েছে!")
     }
 
@@ -2379,6 +3412,14 @@ class TournamentRepository(
         text: String,
         proofImageUri: String? = null
     ): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
+        val profile = _userProfile.value
+        if (isActiveUserTimedOut()) {
+            return Pair(false, "⏳ আপনি অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়ার আগে চ্যাট করা যাবে না।")
+        }
+        if (profile.isChatMuted && profile.role == UserRole.PLAYER) {
+            return Pair(false, "🔇 আপনার চ্যাট মিউট করা আছে!")
+        }
         val cleanText = text.trim()
         val cleanUri = proofImageUri?.trim()?.takeIf { it.isNotBlank() }
         if (cleanText.isBlank() && cleanUri == null) {
@@ -2387,7 +3428,6 @@ class TournamentRepository(
         val appeal = _badgeAppeals.value.firstOrNull { it.id == appealId }
             ?: return Pair(false, "আবেদনটি খুঁজে পাওয়া যায়নি!")
 
-        val profile = _userProfile.value
         val isStaff = profile.role == UserRole.OWNER || profile.role == UserRole.ADMIN
         val roleLabel = when (profile.role) {
             UserRole.OWNER -> "ওনার 👑"
@@ -2406,14 +3446,16 @@ class TournamentRepository(
             proofImageUri = cleanUri,
             timeAgo = "এইমাত্র"
         )
+        var updatedAppeal: BadgeAppeal? = null
         _badgeAppeals.value = _badgeAppeals.value.map { item ->
             if (item.id == appealId) {
-                item.copy(chatMessages = item.chatMessages + msg)
+                item.copy(chatMessages = item.chatMessages + msg).also { updatedAppeal = it }
             } else {
                 item
             }
         }
         saveState()
+        updatedAppeal?.let { cloudSync?.pushBadgeAppeal(it) }
         return Pair(true, "✅ মেসেজ পাঠানো হয়েছে!")
     }
 
@@ -2435,6 +3477,7 @@ class TournamentRepository(
             return Pair(false, grantMsg)
         }
 
+        var updatedAppeal: BadgeAppeal? = null
         _badgeAppeals.value = _badgeAppeals.value.map { item ->
             if (item.id == appealId) {
                 item.copy(
@@ -2442,12 +3485,13 @@ class TournamentRepository(
                     grantedBadge = selectedBadgeToGrant,
                     reviewedBy = reviewerLabel,
                     adminNote = "✅ $reviewerLabel অনুমোদন করেছেন এবং '${selectedBadgeToGrant.title}' ব্যাজ দিয়েছেন।"
-                )
+                ).also { updatedAppeal = it }
             } else {
                 item
             }
         }
         saveState()
+        updatedAppeal?.let { cloudSync?.pushBadgeAppeal(it) }
         return Pair(
             true,
             "✅ আবেদন গৃহীত! '${selectedBadgeToGrant.title}' স্বয়ংক্রিয়ভাবে ${appeal.userIgn}-এর প্রোফাইলে পাঠানো হয়েছে।"
@@ -2535,18 +3579,23 @@ class TournamentRepository(
             "❌ বাতিল + ওয়ার্নিং #$updatedWarnings/৩ ⚠️ ($cleanReason)"
         }
 
+        var updatedAppeal: BadgeAppeal? = null
         _badgeAppeals.value = _badgeAppeals.value.map { item ->
             if (item.id == appealId) {
                 item.copy(
                     status = AppealStatus.REJECTED,
                     reviewedBy = reviewerLabel,
                     adminNote = adminMsg
-                )
+                ).also { updatedAppeal = it }
             } else {
                 item
             }
         }
         saveState()
+        updatedAppeal?.let { cloudSync?.pushBadgeAppeal(it) }
+        if (userIdx != -1) {
+            cloudSync?.pushUser(_registeredUsers.value[userIdx])
+        }
 
         val resultMsg = if (bannedFor7Days) {
             "🚫 ${appeal.userIgn}-এর আবেদন বাতিল করা হয়েছে! মোট ওয়ার্নিং ${updatedWarnings}টি (৩টির বেশি) হওয়ায় ৭ দিনের জন্য অ্যাপ ব্যান কার্যকর হয়েছে!"
@@ -2574,6 +3623,9 @@ class TournamentRepository(
         }
 
         val targetUser = list[index]
+        if (targetUser.role == UserRole.OWNER && _userProfile.value.role == UserRole.ADMIN) {
+            return Pair(false, "⛔ অ্যাডমিন ওনারের ব্যাজ তুলে নিতে পারবেন না!")
+        }
         if (badge !in targetUser.effectiveBadges) {
             return Pair(false, "⚠️ ${targetUser.name}-এর কাছে বর্তমানে '${badge.title}' ব্যাজটি নেই!")
         }
@@ -2598,24 +3650,246 @@ class TournamentRepository(
             )
         }
 
-        _leaderboard.value = _leaderboard.value.map { player ->
-            if ((targetUser.uid.isNotBlank() && player.uid == targetUser.uid) ||
-                player.ign.equals(targetUser.ign, ignoreCase = true)
-            ) {
-                player.copy(
-                    primaryBadge = updatedUser.primaryBadge,
-                    badge = updatedUser.primaryBadge.iconEmoji
-                )
-            } else {
-                player
-            }
-        }
+        rebuildLiveLeaderboard()
 
+        appendModerationLog(
+            target = updatedUser,
+            actionType = ModerationActionType.TAKE_BADGE,
+            reason = badge.title
+        )
         saveState()
+        cloudSync?.pushUserBadges(updatedUser)
         return Pair(true, "🗑️ ${targetUser.name} (${targetUser.phone})-এর থেকে '${badge.title}' ব্যাজটি তুলে নেওয়া হয়েছে!")
     }
 
-    // ==================== A TO Z OWNER APP MANAGEMENT ====================
+    // ==================== OWNER SLOT, CAPACITY & APP MANAGEMENT ====================
+
+    fun publishAppAnnouncement(
+        title: String,
+        message: String,
+        isUrgent: Boolean = false
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন অ্যাপ অ্যানাউন্সমেন্ট দিতে পারবেন!"
+        }
+        val cleanMsg = message.trim()
+        if (cleanMsg.isBlank()) {
+            return false to "দয়া করে অ্যানাউন্সমেন্টের মূল বার্তা লিখুন!"
+        }
+        val cleanTitle = title.trim().ifBlank {
+            if (isUrgent) "🚨 জরুরি ঘোষণা" else "📢 অফিসিয়াল ঘোষণা"
+        }
+        val authorLabel = when (role) {
+            UserRole.OWNER -> "👑 ওনার (${_userProfile.value.ign.ifBlank { "TH" }})"
+            UserRole.ADMIN -> "🛡️ অ্যাডমিন (${_userProfile.value.ign.ifBlank { "TH" }})"
+            UserRole.PLAYER -> "সিস্টেম"
+        }
+        val now = System.currentTimeMillis()
+        _appCustomization.value = _appCustomization.value.copy(
+            announcementTitle = cleanTitle.take(100),
+            activeAnnouncement = cleanMsg.take(300),
+            announcementAuthor = authorLabel.take(60),
+            announcementUpdatedAtMillis = now,
+            isAnnouncementUrgent = isUrgent,
+            isAnnouncementEnabled = true
+        )
+        saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
+        return true to "📢 লাইভ অ্যানাউন্সমেন্ট সবার ফোনে পাঠানো হয়েছে!"
+    }
+
+    fun clearAppAnnouncement(): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন অ্যানাউন্সমেন্ট বন্ধ করতে পারবেন!"
+        }
+        _appCustomization.value = _appCustomization.value.copy(
+            activeAnnouncement = "",
+            isAnnouncementEnabled = false,
+            isAnnouncementUrgent = false,
+            announcementUpdatedAtMillis = System.currentTimeMillis()
+        )
+        saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
+        return true to "🗑️ লাইভ অ্যানাউন্সমেন্ট বন্ধ করা হয়েছে।"
+    }
+
+    fun publishMatchResultAndPayout(
+        matchId: String,
+        winnerTargetKey: String,
+        winnerKills: Int,
+        customPrizeAmount: Int? = null,
+        runnerUpIgn: String = "",
+        markMatchFinished: Boolean = true
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন ম্যাচ রেজাল্ট প্রকাশ করতে পারবেন!"
+        }
+        val match = _matches.value.find { it.id == matchId }
+            ?: return false to "❌ ম্যাচটি খুঁজে পাওয়া যায়নি!"
+        val idx = findUserIndexByKey(winnerTargetKey)
+        if (idx == -1) {
+            return false to "❌ বিজয়ী প্লেয়ারের ফোন, UID বা IGN খুঁজে পাওয়া যায়নি!"
+        }
+        val safeKills = winnerKills.coerceIn(0, 99)
+        val calculatedPrize = (customPrizeAmount ?: (match.booyahPrize + safeKills * match.perKillPrize)).coerceAtLeast(0)
+
+        val list = _registeredUsers.value.toMutableList()
+        val winner = list[idx]
+        val nextMatchesPlayed = winner.matchesPlayed + 1
+        val nextWins = winner.totalWins + 1
+        val nextKills = winner.totalKills + safeKills
+        val nextEarnings = winner.totalEarnings + calculatedPrize
+        val nextBalance = winner.walletBalance + calculatedPrize
+        val nextLevel = if (winner.role == UserRole.OWNER) 0 else (1 + (nextMatchesPlayed / 3))
+
+        val updatedWinner = winner.copy(
+            walletBalance = nextBalance,
+            matchesPlayed = nextMatchesPlayed,
+            totalWins = nextWins,
+            totalKills = nextKills,
+            totalEarnings = nextEarnings,
+            level = nextLevel
+        )
+        list[idx] = updatedWinner
+        _registeredUsers.value = list
+
+        val active = _userProfile.value
+        val isWinnerActive = (active.phone.isNotBlank() && active.phone == updatedWinner.phone) ||
+            (active.uid.isNotBlank() && active.uid == updatedWinner.uid)
+        if (isWinnerActive) {
+            _walletBalance.value = nextBalance
+            _userProfile.value = active.copy(
+                matchesPlayed = nextMatchesPlayed,
+                totalWins = nextWins,
+                totalKills = nextKills,
+                totalEarnings = nextEarnings,
+                level = nextLevel
+            )
+        }
+
+        if (calculatedPrize > 0) {
+            val tx = WalletTransaction(
+                id = UUID.randomUUID().toString(),
+                title = "🏆 বুইয়া প্রাইজ (${match.title})",
+                amount = calculatedPrize,
+                isCredit = true,
+                timeAgo = "এইমাত্র",
+                statusText = "$safeKills কিল + বুইয়া • নতুন ব্যালেন্স: ৳$nextBalance",
+                paymentMethod = "Match Result Auto-Payout",
+                category = TransactionCategory.PRIZE_WIN,
+                matchTitle = match.title,
+                senderBkash = updatedWinner.phone,
+                userPhone = updatedWinner.phone
+            )
+            _transactions.value = listOf(tx) + _transactions.value
+        }
+
+        val resultRecord = MatchResult(
+            id = "res_${System.currentTimeMillis()}",
+            matchTitle = match.title,
+            category = match.category,
+            completedDate = "আজ এইমাত্র",
+            winnerIgn = updatedWinner.ign,
+            winnerUid = updatedWinner.uid,
+            winnerKills = safeKills,
+            prizeMoney = calculatedPrize,
+            runnerUpIgn = runnerUpIgn.trim().ifBlank { "-" },
+            totalPlayers = match.bookedSlots.coerceAtLeast(1)
+        )
+        _results.value = listOf(resultRecord) + _results.value
+
+        var updatedMatch: TournamentMatch? = null
+        if (markMatchFinished && match.status != MatchStatus.FINISHED) {
+            val finished = match.copy(status = MatchStatus.FINISHED)
+            updatedMatch = finished
+            _matches.value = _matches.value.map { if (it.id == match.id) finished else it }
+        }
+
+        rebuildLiveLeaderboard()
+        saveState()
+        cloudSync?.pushUser(updatedWinner)
+        updatedMatch?.let { cloudSync?.pushMatch(it) }
+        return true to "🏆 ${updatedWinner.ign}-কে ৳$calculatedPrize প্রাইজ ($safeKills কিল) ও লাইভ লিডারবোর্ডে #১/আপডেট করা হয়েছে!"
+    }
+
+    fun awardKillPrizeAndStats(
+        targetKey: String,
+        killsToAdd: Int,
+        winsToAdd: Int = 0,
+        matchesToAdd: Int = 1,
+        prizeAmount: Int = 0,
+        note: String = "কিল ও পারফরম্যান্স প্রাইজ"
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন স্ট্যাটস ও প্রাইজ দিতে পারবেন!"
+        }
+        val idx = findUserIndexByKey(targetKey)
+        if (idx == -1) return false to "❌ প্লেয়ার খুঁজে পাওয়া যায়নি!"
+
+        val list = _registeredUsers.value.toMutableList()
+        val target = list[idx]
+        val safeKills = killsToAdd.coerceAtLeast(0)
+        val safeWins = winsToAdd.coerceAtLeast(0)
+        val safeMatches = matchesToAdd.coerceAtLeast(0)
+        val safePrize = prizeAmount.coerceAtLeast(0)
+
+        val nextMatches = target.matchesPlayed + safeMatches
+        val nextWins = target.totalWins + safeWins
+        val nextKills = target.totalKills + safeKills
+        val nextEarnings = target.totalEarnings + safePrize
+        val nextBalance = target.walletBalance + safePrize
+        val nextLevel = if (target.role == UserRole.OWNER) 0 else (1 + (nextMatches / 3))
+
+        val updated = target.copy(
+            walletBalance = nextBalance,
+            matchesPlayed = nextMatches,
+            totalWins = nextWins,
+            totalKills = nextKills,
+            totalEarnings = nextEarnings,
+            level = nextLevel
+        )
+        list[idx] = updated
+        _registeredUsers.value = list
+
+        val active = _userProfile.value
+        if ((active.phone.isNotBlank() && active.phone == updated.phone) ||
+            (active.uid.isNotBlank() && active.uid == updated.uid)
+        ) {
+            _walletBalance.value = nextBalance
+            _userProfile.value = active.copy(
+                matchesPlayed = nextMatches,
+                totalWins = nextWins,
+                totalKills = nextKills,
+                totalEarnings = nextEarnings,
+                level = nextLevel
+            )
+        }
+
+        if (safePrize > 0) {
+            val tx = WalletTransaction(
+                id = UUID.randomUUID().toString(),
+                title = "🎯 $note (+৳$safePrize)",
+                amount = safePrize,
+                isCredit = true,
+                timeAgo = "এইমাত্র",
+                statusText = "+$safeKills কিল • নতুন ব্যালেন্স: ৳$nextBalance",
+                paymentMethod = "TH Prize Distribution",
+                category = TransactionCategory.PRIZE_WIN,
+                senderBkash = updated.phone,
+                userPhone = updated.phone
+            )
+            _transactions.value = listOf(tx) + _transactions.value
+        }
+
+        rebuildLiveLeaderboard()
+        saveState()
+        cloudSync?.pushUser(updated)
+        return true to "⚡ ${updated.ign}: +$safeKills কিল, +৳$safePrize প্রাইজ যোগ ও লাইভ লিডারবোর্ড আপডেট হয়েছে!"
+    }
 
     fun updateAppBranding(
         appName: String,
@@ -2628,10 +3902,13 @@ class TournamentRepository(
             appName = appName.ifBlank { "TRUSTED TOURNAMENT BY TH" },
             appTagline = appTagline.ifBlank { "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট" },
             selectedLogo = logo,
-            noticeTickerText = noticeTicker.ifBlank { "ম্যাচ শুরুর ১৫ মিনিট আগে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!" },
-            activeAnnouncement = announcement.ifBlank { "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!" }
+            noticeTickerText = noticeTicker.ifBlank { "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!" },
+            activeAnnouncement = announcement.ifBlank { "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!" },
+            announcementUpdatedAtMillis = System.currentTimeMillis(),
+            isAnnouncementEnabled = true
         )
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
     }
 
     fun updateFinancialSettings(
@@ -2650,6 +3927,7 @@ class TournamentRepository(
         )
         officialWhatsAppGroupUrl.value = _appCustomization.value.officialWhatsAppUrl
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
     }
 
     fun toggleMaintenanceMode(enabled: Boolean, message: String) {
@@ -2658,6 +3936,7 @@ class TournamentRepository(
             maintenanceMessage = message.ifBlank { "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট শুরু হবে।" }
         )
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
     }
 
     fun updateExistingMatch(updatedMatch: TournamentMatch): Boolean {
@@ -2668,29 +3947,102 @@ class TournamentRepository(
                 updatedMatch
             } else match
         }
-        if (found) saveState()
+        if (found) {
+            saveState()
+            cloudSync?.pushMatch(updatedMatch)
+        }
         return found
     }
 
     fun deleteMatch(matchId: String): Boolean {
         val countBefore = _matches.value.size
-        // Refund any players who booked this match first
         cancelMatchAndRefundAll(matchId)
         _matches.value = _matches.value.filter { it.id != matchId }
         val deleted = _matches.value.size < countBefore
-        if (deleted) saveState()
+        if (deleted) {
+            saveState()
+            cloudSync?.deleteMatchCloud(matchId)
+        }
         return deleted
     }
 
-    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean {
-        if (newCapacity < 2 || newCapacity > 100) return false
+    fun updateMatchSlotCapacityResult(matchId: String, newCapacity: Int): Pair<Boolean, String> {
+        val targetMatch = _matches.value.find { it.id == matchId }
+            ?: return false to "❌ ম্যাচটি খুঁজে পাওয়া যায়নি!"
+        if (newCapacity !in 2..100) {
+            return false to "❌ মোট স্লট সংখ্যা ২ থেকে ১০০-এর মধ্যে হতে হবে!"
+        }
+        if (newCapacity < targetMatch.bookedSlots) {
+            return false to "❌ বর্তমানে ${targetMatch.bookedSlots} টি স্লট বুক আছে! এর নিচে কমানো যাবে না।"
+        }
+        val updatedMatch = targetMatch.copy(totalSlots = newCapacity)
         _matches.value = _matches.value.map { match ->
-            if (match.id == matchId) {
-                match.copy(totalSlots = newCapacity)
-            } else match
+            if (match.id == matchId) updatedMatch else match
         }
         saveState()
-        return true
+        cloudSync?.pushMatch(updatedMatch)
+        return true to "✅ '${targetMatch.title}' ম্যাচের স্লট সংখ্যা ${targetMatch.totalSlots} → $newCapacity করা হয়েছে!"
+    }
+
+    fun updateMatchSlotCapacity(matchId: String, newCapacity: Int): Boolean =
+        updateMatchSlotCapacityResult(matchId, newCapacity).first
+
+    fun createManualSlotBookingResult(
+        matchId: String,
+        slotNumber: Int,
+        playerIgn: String,
+        playerUid: String,
+        phoneOrBkash: String,
+        feePaid: Int
+    ): Pair<Boolean, String> {
+        val targetMatch = _matches.value.find { it.id == matchId }
+            ?: return false to "❌ ম্যাচটি খুঁজে পাওয়া যায়নি!"
+        if (slotNumber < 1 || slotNumber > targetMatch.totalSlots) {
+            return false to "❌ স্লট নম্বর ১ থেকে ${targetMatch.totalSlots}-এর মধ্যে হতে হবে!"
+        }
+
+        // Compute occupied slots combining both explicit bookings & legacy slot count
+        val explicitSlots = _myBookings.value.filter { it.matchId == matchId }.map { it.slotNumber }.toSet()
+        val occupiedSlots = explicitSlots.toMutableSet()
+        var candidate = 1
+        while (occupiedSlots.size < targetMatch.bookedSlots && candidate <= targetMatch.totalSlots) {
+            if (candidate !in occupiedSlots) occupiedSlots.add(candidate)
+            candidate++
+        }
+        if (slotNumber in occupiedSlots) {
+            return false to "❌ স্লট #$slotNumber ইতিমধ্যেই বুকড/দখলকৃত আছে! অনুগ্রহ করে একটি সবুজ ফাঁকা স্লট বেছে নিন।"
+        }
+
+        val cleanIgn = playerIgn.trim().ifBlank { "VIP_PLAYER" }
+        val cleanUid = playerUid.trim().ifBlank { "0000000000" }
+        val cleanPhone = phoneOrBkash.trim().ifBlank { officialBkashNumber }
+        val resolvedFee = if (feePaid > 0) feePaid else targetMatch.entryFee
+
+        val manualBooking = SlotBooking(
+            bookingId = "BK-OWNER-${System.currentTimeMillis() % 100000}-${(10..99).random()}",
+            matchId = targetMatch.id,
+            matchTitle = targetMatch.title,
+            category = targetMatch.category,
+            matchDateTime = targetMatch.matchDateTime,
+            slotNumber = slotNumber,
+            playerIgn = cleanIgn,
+            playerUid = cleanUid,
+            bkashSenderNumber = cleanPhone,
+            trxId = "OWNER-ADDED",
+            feePaid = resolvedFee,
+            isVerified = true,
+            roomId = targetMatch.roomId,
+            roomPassword = targetMatch.roomPassword
+        )
+        _myBookings.value = listOf(manualBooking) + _myBookings.value
+
+        val updatedBookedCount = (targetMatch.bookedSlots + 1).coerceIn(occupiedSlots.size + 1, targetMatch.totalSlots)
+        _matches.value = _matches.value.map { match ->
+            if (match.id == matchId) match.copy(bookedSlots = updatedBookedCount) else match
+        }
+        saveState()
+        cloudSync?.pushBooking(manualBooking, updatedBookedCount)
+        return true to "✅ স্লট #$slotNumber-এ $cleanIgn (UID: $cleanUid) সফলভাবে যোগ ও ক্লাউডে সিঙ্ক হয়েছে!"
     }
 
     fun createManualSlotBooking(
@@ -2700,40 +4052,7 @@ class TournamentRepository(
         playerUid: String,
         phoneOrBkash: String,
         feePaid: Int
-    ): Boolean {
-        val targetMatch = _matches.value.find { it.id == matchId } ?: return false
-        if (slotNumber < 1 || slotNumber > targetMatch.totalSlots) return false
-
-        // Check if slot already taken
-        val alreadyBooked = _myBookings.value.any { it.matchId == matchId && it.slotNumber == slotNumber }
-        if (alreadyBooked) return false
-
-        val manualBooking = SlotBooking(
-            bookingId = "BK-OWNER-${(1000..9999).random()}",
-            matchId = targetMatch.id,
-            matchTitle = targetMatch.title,
-            category = targetMatch.category,
-            matchDateTime = targetMatch.matchDateTime,
-            slotNumber = slotNumber,
-            playerIgn = playerIgn.ifBlank { "VIP_PLAYER" },
-            playerUid = playerUid.ifBlank { "0000000000" },
-            bkashSenderNumber = phoneOrBkash.ifBlank { officialBkashNumber },
-            trxId = "OWNER-RESERVED",
-            feePaid = feePaid,
-            isVerified = true,
-            roomId = targetMatch.roomId,
-            roomPassword = targetMatch.roomPassword
-        )
-        _myBookings.value = listOf(manualBooking) + _myBookings.value
-
-        _matches.value = _matches.value.map { match ->
-            if (match.id == matchId) {
-                match.copy(bookedSlots = (match.bookedSlots + 1).coerceAtMost(match.totalSlots))
-            } else match
-        }
-        saveState()
-        return true
-    }
+    ): Boolean = createManualSlotBookingResult(matchId, slotNumber, playerIgn, playerUid, phoneOrBkash, feePaid).first
 
     fun addStrictRule(title: String, description: String, penalty: String, emoji: String): Boolean {
         if (title.isBlank()) return false
@@ -2746,6 +4065,7 @@ class TournamentRepository(
         )
         _strictRules.value = _strictRules.value + newRule
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
         return true
     }
 
@@ -2757,7 +4077,10 @@ class TournamentRepository(
                 rule
             } else it
         }
-        if (found) saveState()
+        if (found) {
+            saveState()
+            cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
+        }
         return found
     }
 
@@ -2765,16 +4088,38 @@ class TournamentRepository(
         val before = _strictRules.value.size
         _strictRules.value = _strictRules.value.filter { it.id != ruleId }
         val deleted = _strictRules.value.size < before
-        if (deleted) saveState()
+        if (deleted) {
+            saveState()
+            cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
+        }
         return deleted
     }
 
     fun resetDefaultRules() {
         _strictRules.value = defaultRules
         saveState()
+        cloudSync?.pushAppConfig(_appCustomization.value, _strictRules.value)
     }
 
     fun resetAppForFreshDownload() {
+        val ownerUser = AppUser(
+            id = "u_owner",
+            name = "তানভির হাসান (ওনার)",
+            phone = "01861583924",
+            ign = "TH★DEVIL⚡",
+            uid = "11410365896",
+            bkashNumber = "01861583924",
+            role = UserRole.OWNER,
+            joinedDate = "১৫ অক্টো ২০২৬",
+            avatarId = "th_logo",
+            battleTagline = "TRUSTED TOURNAMENT BY TH-এর প্রতিষ্ঠাতা ও অফিসিয়াল ওনার 👑",
+            favoriteWeapon = "",
+            activeCharacter = "",
+            guildName = "TRUSTED TH",
+            playerRole = "অফিসিয়াল ওনার",
+            level = 0,
+            kudosCount = 12
+        )
         persistenceStore?.clearAll()
         masterOwnerPasskey = "TH-OWNER-7788"
         masterOwnerPin = "7788"
@@ -2796,34 +4141,9 @@ class TournamentRepository(
             isLoggedIn = false,
             role = UserRole.PLAYER
         )
-        _registeredUsers.value = listOf(
-            AppUser(
-                id = "u_owner",
-                name = "তানভির হাসান (ওনার)",
-                phone = "01861583924",
-                ign = "TH★DEVIL⚡",
-                uid = "2489103847",
-                bkashNumber = "01861583924",
-                role = UserRole.OWNER,
-                joinedDate = "১৫ অক্টো ২০২৬",
-                avatarId = "th_logo",
-                battleTagline = "TRUSTED TOURNAMENT BY TH-এর প্রতিষ্ঠাতা ও অফিসিয়াল ওনার 👑",
-                favoriteWeapon = "",
-                activeCharacter = "",
-                guildName = "TRUSTED TH",
-                playerRole = "অফিসিয়াল ওনার",
-                level = 0,
-                kudosCount = 12
-            )
-        )
-        _matches.value = _matches.value.map { match ->
-            match.copy(
-                bookedSlots = 0,
-                status = MatchStatus.UPCOMING,
-                roomId = null,
-                roomPassword = null
-            )
-        }
+        _registeredUsers.value = listOf(ownerUser)
+        val resetMatches = defaultInitialMatches()
+        _matches.value = resetMatches
         _myBookings.value = emptyList()
         _results.value = emptyList()
         _transactions.value = emptyList()
@@ -2831,6 +4151,7 @@ class TournamentRepository(
         _withdrawRequests.value = emptyList()
         _leaderboard.value = emptyList()
         _badgeAppeals.value = emptyList()
+        _moderationLogs.value = emptyList()
         _chatMessages.value = listOf(
             ChatMessage(
                 "c_welcome",
@@ -2843,6 +4164,12 @@ class TournamentRepository(
         _globalChatMessages.value = defaultGlobalChatMessages()
         resetAiChat()
         _isLoggedIn.value = false
+        cloudSync?.resetCloudCollectionForFreshDownload(
+            defaultMatches = resetMatches,
+            defaultConfig = AppCustomization(),
+            defaultRules = defaultRules,
+            ownerUser = ownerUser
+        )
     }
 }
 

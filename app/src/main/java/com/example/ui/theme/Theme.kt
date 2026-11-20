@@ -6,25 +6,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val EsportsDarkColorScheme = darkColorScheme(
-    primary = NeonPink,
+    primary = FireOrange,
     onPrimary = TextPrimary,
-    primaryContainer = Color(0xFF330C20),
+    primaryContainer = Color(0xFF331207),
     onPrimaryContainer = Color.White,
-    secondary = FlameYellow,
-    onSecondary = Color(0xFF121218),
-    secondaryContainer = Color(0xFF2D2508),
-    onSecondaryContainer = WarmYellow,
-    tertiary = BkashPink,
-    onTertiary = TextPrimary,
-    tertiaryContainer = Color(0xFF38091E),
-    onTertiaryContainer = Color.White,
+    secondary = WaterCyan,
+    onSecondary = Color(0xFF04111D),
+    secondaryContainer = Color(0xFF06293A),
+    onSecondaryContainer = IceMist,
+    tertiary = EmberGold,
+    onTertiary = Color(0xFF1A1002),
+    tertiaryContainer = Color(0xFF2E2105),
+    onTertiaryContainer = WarmYellow,
     background = DarkBackground,
     surface = DarkSurface,
     surfaceVariant = DarkSurfaceVariant,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
     onSurfaceVariant = TextSecondary,
-    outline = DarkBorder
+    outline = DarkBorder,
+    error = ErrorRed
 )
 
 @Composable

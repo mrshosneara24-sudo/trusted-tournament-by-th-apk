@@ -33,7 +33,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -49,28 +48,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.MatchStatus
 import com.example.model.TournamentMatch
-import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DisplayFontFamily
+import com.example.ui.theme.EmberGold
+import com.example.ui.theme.FireOrange
+import com.example.ui.theme.FireRed
+import com.example.ui.theme.FireWaterBorderGradient
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.NeonPink
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
+import com.example.ui.theme.WaterBlue
+import com.example.ui.theme.WaterCyan
 
 @Composable
 fun MatchCard(
@@ -92,21 +96,22 @@ fun MatchCard(
             .testTag("match_card_${match.id}"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        border = BorderStroke(
-            1.dp,
-            if (isAlreadyBooked) VictoryGreen.copy(alpha = 0.55f) else DarkBorder
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        border = if (isAlreadyBooked) {
+            BorderStroke(1.4.dp, VictoryGreen.copy(alpha = 0.7f))
+        } else {
+            BorderStroke(1.4.dp, FireWaterBorderGradient)
+        },
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Subtle Top Category Accent Strip
+            // Fire & Water Dual-Element Top Accent Strip
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp)
+                    .height(5.dp)
                     .background(
                         Brush.horizontalGradient(
-                            listOf(match.category.accentColor, match.category.accentColor.copy(alpha = 0.18f))
+                            listOf(FireRed, EmberGold, WaterCyan, WaterBlue)
                         )
                     )
             )
@@ -312,7 +317,7 @@ fun MatchCard(
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Payments, contentDescription = "Entry Fee", tint = BkashPink, modifier = Modifier.size(13.dp))
+                                Icon(Icons.Filled.Payments, contentDescription = "Entry Fee", tint = WaterCyan, modifier = Modifier.size(13.dp))
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text("এন্ট্রি ফি", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                             }
@@ -322,7 +327,7 @@ fun MatchCard(
                                 fontFamily = MonoFontFamily,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = BkashPink
+                                color = WaterCyan
                             )
                         }
                     }
@@ -330,35 +335,126 @@ fun MatchCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Slots Progress Bar
-                val progress = match.bookedSlots.toFloat() / match.totalSlots.coerceAtLeast(1)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "স্লট: ${match.bookedSlots}/${match.totalSlots} পূর্ণ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = if (match.isFull) Color(0xFFEF4444) else VictoryGreen
-                        )
-                        Text(
-                            text = if (match.isFull) "স্লট পূর্ণ!" else "${match.availableSlots} টি স্লট বাকি",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { progress },
+                // Elite Fire & Water Live Slot Embed Box
+                val safeTotal = match.totalSlots.coerceAtLeast(1)
+                val progress = (match.bookedSlots.toFloat() / safeTotal).coerceIn(0f, 1f)
+                val percent = (progress * 100).toInt()
+                val previewSlots = safeTotal.coerceAtMost(14)
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF0A1222),
+                    border = BorderStroke(
+                        1.dp,
+                        if (match.isFull) FireRed.copy(alpha = 0.65f) else WaterCyan.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onViewSlotGridClick() }
+                        .testTag("slot_embed_box_${match.id}")
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(7.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = if (match.isFull) Color(0xFFEF4444) else VictoryGreen,
-                        trackColor = DarkElevated,
-                        strokeCap = StrokeCap.Round
-                    )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "🎟️ লাইভ স্লট: ${match.bookedSlots}/${match.totalSlots}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = MonoFontFamily,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = if (match.isFull) FireRed else EmberGold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (match.isFull) FireRed.copy(alpha = 0.18f) else WaterCyan.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "$percent%",
+                                        fontFamily = MonoFontFamily,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (match.isFull) FireRed else WaterCyan,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = if (match.isFull) "স্লট পূর্ণ!" else "${match.availableSlots} টি স্লট বাকি →",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (match.isFull) FireRed else VictoryGreen
+                            )
+                        }
+
+                        // Mini Visual Arena Slot Tiles Preview
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            for (i in 1..previewSlots) {
+                                val tileBooked = i <= match.bookedSlots
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(
+                                            if (tileBooked) {
+                                                Brush.verticalGradient(listOf(FireRed, FireOrange))
+                                            } else {
+                                                Brush.verticalGradient(listOf(VictoryGreen, WaterCyan.copy(alpha = 0.7f)))
+                                            }
+                                        )
+                                )
+                            }
+                            if (safeTotal > previewSlots) {
+                                Text(
+                                    text = "+${safeTotal - previewSlots}",
+                                    fontFamily = MonoFontFamily,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = WaterCyan,
+                                    modifier = Modifier.padding(start = 3.dp)
+                                )
+                            }
+                        }
+
+                        // Dual-Element Progress Track
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(DarkElevated)
+                        ) {
+                            if (progress > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(progress)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(
+                                            if (match.isFull) {
+                                                Brush.horizontalGradient(listOf(FireRed, FireOrange))
+                                            } else {
+                                                Brush.horizontalGradient(listOf(FireOrange, EmberGold, WaterCyan))
+                                            }
+                                        )
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -425,7 +521,7 @@ fun MatchCard(
                                 .height(48.dp)
                                 .testTag("book_slot_btn_${match.id}"),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BkashPink,
+                                containerColor = FireRed,
                                 contentColor = Color.White
                             ),
                             shape = RoundedCornerShape(14.dp)

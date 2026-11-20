@@ -99,6 +99,7 @@ import com.example.model.AppUser
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.UserProfile
+import com.example.model.UserRole
 import com.example.ui.components.BadgePill
 import com.example.ui.components.BadgeShowcaseDialog
 import com.example.ui.components.PlayerProfileCardData
@@ -145,6 +146,8 @@ fun AccountScreen(
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
     onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
+    onGrantBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
+    onRevokeBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -180,6 +183,8 @@ fun AccountScreen(
             badgeAppeals = badgeAppeals,
             onSubmitBadgeAppeal = onSubmitBadgeAppeal,
             onSendAppealChat = onSendAppealChat,
+            onGrantBadge = onGrantBadge,
+            onRevokeBadge = onRevokeBadge,
             modifier = modifier
         )
     }
@@ -241,6 +246,8 @@ private fun LoggedInAccountView(
     badgeAppeals: List<BadgeAppeal> = emptyList(),
     onSubmitBadgeAppeal: ((BadgeType, String) -> Pair<Boolean, String>)? = null,
     onSendAppealChat: ((String, String, String?) -> Pair<Boolean, String>)? = null,
+    onGrantBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
+    onRevokeBadge: ((String, BadgeType) -> Pair<Boolean, String>)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1651,7 +1658,10 @@ private fun LoggedInAccountView(
             onViewAllBadges = {
                 localPlayerProfileCard = null
                 showBadgeDialog = true
-            }
+            },
+            viewerRole = userProfile.role,
+            onGrantBadge = onGrantBadge,
+            onRevokeBadge = onRevokeBadge
         )
     }
 }

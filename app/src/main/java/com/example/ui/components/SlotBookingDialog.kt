@@ -255,7 +255,7 @@ fun SlotBookingDialog(
                     val hasEnough = walletBalance >= match.entryFee
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (hasEnough) VictoryGreen.copy(alpha = 0.14f) else Color(0xFF340C17),
+                        color = if (hasEnough) VictoryGreen.copy(alpha = 0.14f) else Color(0xFF2B0E0A),
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
                             if (hasEnough) VictoryGreen.copy(alpha = 0.6f) else Color(0xFFEF4444)

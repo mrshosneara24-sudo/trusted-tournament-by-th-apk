@@ -166,7 +166,7 @@ fun MatchesScreen(
                         .clickable { onDailyStreakClick() }
                         .testTag("daily_streak_card"),
                     colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BkashPink.copy(alpha = 0.5f))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.55f))
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -176,13 +176,13 @@ fun MatchesScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(BkashPink.copy(alpha = 0.16f)),
+                                .background(FlameOrange.copy(alpha = 0.16f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.LocalFireDepartment,
                                 contentDescription = "Daily Streak",
-                                tint = BkashPink,
+                                tint = FlameOrange,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

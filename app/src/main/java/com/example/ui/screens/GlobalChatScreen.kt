@@ -75,13 +75,13 @@ import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.getBadgeDrawableRes
 import com.example.ui.components.toPlayerProfileCard
-import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkElevated
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DisplayFontFamily
+import com.example.ui.theme.FireRed
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
@@ -90,6 +90,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
+import com.example.ui.theme.WaterBlue
 
 private enum class GlobalChatFilter(val label: String) {
     ALL("💬 সবাই"),
@@ -162,7 +163,7 @@ fun GlobalChatScreen(
                     .fillMaxWidth()
                     .background(
                         Brush.horizontalGradient(
-                            listOf(Color(0xFF1A0F24), DarkSurface, Color(0xFF0C1A24))
+                            listOf(Color(0xFF230E0A), DarkSurface, Color(0xFF061E2E))
                         )
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -182,7 +183,7 @@ fun GlobalChatScreen(
                                 .size(38.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    Brush.linearGradient(listOf(BkashPink, FlameOrange))
+                                    Brush.linearGradient(listOf(FireRed, WaterBlue))
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -261,7 +262,7 @@ fun GlobalChatScreen(
                                 )
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = BkashPink,
+                                selectedContainerColor = WaterBlue,
                                 selectedLabelColor = Color.White,
                                 containerColor = DarkCard,
                                 labelColor = TextSecondary
@@ -426,7 +427,7 @@ fun GlobalChatScreen(
             ) {
                 if (currentUser.isBanned) {
                     Surface(
-                        color = Color(0xFF3A0919),
+                        color = Color(0xFF2B0D09),
                         border = BorderStroke(1.dp, Color(0xFFEF4444)),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -444,6 +445,34 @@ fun GlobalChatScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "আপনার একাউন্ট ব্যান করা আছে, তাই গ্লোবাল চ্যাটে মেসেজ পাঠানো বন্ধ।",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else if (currentUser.isChatMuted && currentUser.role != UserRole.OWNER) {
+                    Surface(
+                        color = Color(0xFF2B0D09),
+                        border = BorderStroke(1.dp, FlameOrange),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("global_chat_muted_banner")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = "Chat Muted",
+                                tint = FlameOrange,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "🔇 আপনার গ্লোবাল চ্যাট সাময়িকভাবে মিউট করা হয়েছে! (${currentUser.chatMuteReason ?: "চ্যাট নীতিমালা ভঙ্গ"})",
                                 fontSize = 11.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold
@@ -593,7 +622,7 @@ fun GlobalChatScreen(
                                 focusedBorderColor = when (currentUser.role) {
                                     UserRole.OWNER -> FlameYellow
                                     UserRole.ADMIN -> FlameOrange
-                                    UserRole.PLAYER -> BkashPink
+                                    UserRole.PLAYER -> WaterBlue
                                 },
                                 unfocusedBorderColor = DarkBorder,
                                 focusedContainerColor = DarkCard,
@@ -620,7 +649,7 @@ fun GlobalChatScreen(
                             color = when (currentUser.role) {
                                 UserRole.OWNER -> FlameYellow
                                 UserRole.ADMIN -> FlameOrange
-                                UserRole.PLAYER -> BkashPink
+                                UserRole.PLAYER -> WaterBlue
                             },
                             modifier = Modifier
                                 .size(48.dp)
@@ -670,7 +699,7 @@ private fun GlobalChatMessageCard(
     val cardBgColor = when {
         resolvedRole == UserRole.OWNER -> Color(0xFF1F1808)
         resolvedRole == UserRole.ADMIN -> Color(0xFF11192B)
-        isOwnMessage -> Color(0xFF230F1D)
+        isOwnMessage -> Color(0xFF0E1B2E)
         else -> DarkCard
     }
 
@@ -963,10 +992,10 @@ private fun GlobalChatMessageCard(
                     val count = message.reactions[emoji] ?: 0
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (count > 0) BkashPink.copy(alpha = 0.16f) else DarkElevated,
+                        color = if (count > 0) WaterBlue.copy(alpha = 0.22f) else DarkElevated,
                         border = BorderStroke(
                             1.dp,
-                            if (count > 0) BkashPink.copy(alpha = 0.5f) else DarkBorder
+                            if (count > 0) WaterBlue.copy(alpha = 0.6f) else DarkBorder
                         ),
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))

@@ -1128,6 +1128,210 @@ class TournamentBusinessLogicTest {
         assertEquals(1, repository.globalChatMessages.value.size)
         assertEquals(UserRole.OWNER, repository.globalChatMessages.value.first().senderRole)
     }
+
+    @Test
+    fun testOwnerUidIs11410365896AndLoweredBudgetMatchPrizesPreservedAcrossReset() {
+        val owner = repository.registeredUsers.value.first { it.role == UserRole.OWNER }
+        assertEquals("11410365896", owner.uid)
+
+        // All default matches must use budget-friendly lowered prizes
+        val matches = repository.matches.value
+        assertTrue("Initial matches must not be empty", matches.isNotEmpty())
+        assertTrue("All match total prizes should be <= 100", matches.all { it.totalPrize <= 100 })
+        assertTrue("All match per-kill prizes should be <= 1", matches.all { it.perKillPrize <= 1 })
+        assertTrue("All match booyah prizes should be <= 40", matches.all { it.booyahPrize <= 40 })
+
+        // Verify login as owner keeps updated UID 11410365896
+        assertTrue(repository.login("01861583924", "7788"))
+        assertEquals("11410365896", repository.userProfile.value.uid)
+
+        // Reset and verify Owner UID + lowered match prizes + clean moderationLogs persist
+        repository.resetAppForFreshDownload()
+        val resetOwner = repository.registeredUsers.value.first { it.role == UserRole.OWNER }
+        assertEquals("11410365896", resetOwner.uid)
+        assertTrue(repository.matches.value.all { it.totalPrize <= 100 && it.perKillPrize <= 1 })
+        assertTrue(repository.moderationLogs.value.isEmpty())
+    }
+
+    @Test
+    fun testModeration7WarningsTrigger10DayAppBanAndExpireCleanly() {
+        val playerPhone = "01711220011"
+        assertTrue(repository.register("Tanvir", "TH_Tanvir", "11220011", playerPhone, playerPhone, password = "pass123"))
+        val baseTime = 1_700_000_000_000L
+
+        // Warnings 1 through 6 increment counter without banning
+        for (i in 1..6) {
+            val res = repository.warnUser(playerPhone, "সতর্কতা #$i", moderatorRole = UserRole.ADMIN, nowMillis = baseTime + i)
+            assertTrue("Warn #$i should succeed", res.first)
+            val target = repository.registeredUsers.value.first { it.phone == playerPhone }
+            assertEquals(i, target.moderationWarningsCount)
+            assertFalse("Must not ban before 7 warnings", target.isBanned)
+        }
+
+        // 7th warning automatically triggers 10-day App Ban
+        val banTriggerTime = baseTime + 10_000L
+        val warn7 = repository.warnUser(playerPhone, "চূড়ান্ত ৭ম ভঙ্গ", moderatorRole = UserRole.OWNER, nowMillis = banTriggerTime)
+        assertTrue("7th warn should succeed", warn7.first)
+        val banned = repository.registeredUsers.value.first { it.phone == playerPhone }
+        assertEquals(7, banned.moderationWarningsCount)
+        assertTrue("7 warnings MUST automatically ban for 10 days", banned.isBanned)
+        assertEquals(banTriggerTime + TournamentRepository.TEN_DAYS_MILLIS, banned.banExpiresAtMillis)
+
+        // Before 10 days -> still banned
+        assertEquals(0, repository.checkAndClearExpiredModeration(banTriggerTime + TournamentRepository.TEN_DAYS_MILLIS - 1000L))
+        assertTrue(repository.registeredUsers.value.first { it.phone == playerPhone }.isBanned)
+
+        // After 10 days -> automatically unbanned and moderation warn count resets to 0
+        assertEquals(1, repository.checkAndClearExpiredModeration(banTriggerTime + TournamentRepository.TEN_DAYS_MILLIS + 1000L))
+        val unbanned = repository.registeredUsers.value.first { it.phone == playerPhone }
+        assertFalse(unbanned.isBanned)
+        assertEquals(0, unbanned.moderationWarningsCount)
+    }
+
+    @Test
+    fun testModerationTimeoutChatMuteMatchBanWalletFreezeBadgeStripAndPardonAll() {
+        val playerPhone = "01755009911"
+        val adminPhone = "01755009922"
+        assertTrue(repository.register("Hasan", "TH_Hasan", "55009911", playerPhone, playerPhone, password = "pass123"))
+        assertTrue(repository.register("ModKai", "TH_ModKai", "55009922", adminPhone, adminPhone, password = "pass123"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "TH-KAI", "ModKai", "TH_ModKai", "55009922"))
+
+        // Log in back as Hasan so active profile checks apply to Hasan
+        repository.logout()
+        assertTrue(repository.login(playerPhone, "pass123"))
+        repository.adjustUserBalance(playerPhone, 200, isAdd = true, reason = "Test")
+
+        val t0 = System.currentTimeMillis()
+        // 1. Custom 90-minute timeout blocks chat, slot booking, deposit, withdraw & daily streak
+        val timeoutRes = repository.timeoutUser(playerPhone, 90L, "স্প্যাম ও অসদাচরণ", moderatorRole = UserRole.ADMIN, nowMillis = t0)
+        assertTrue(timeoutRes.first)
+        assertTrue(repository.isActiveUserTimedOut(t0 + 1000L))
+        assertFalse("Timed-out user cannot send global chat", repository.sendGlobalChatMessage("হ্যালো").first)
+        assertFalse("Timed-out user cannot book slot", repository.bookSlotWithWallet(repository.matches.value.first(), 2, "TH_Hasan", "55009911").first)
+        assertFalse("Timed-out user cannot deposit", repository.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, playerPhone, "BKS778899").first)
+        assertEquals("Timed-out user cannot claim streak", 0, repository.claimDailyStreakReward())
+
+        // Timeout clears after 90 minutes expire
+        assertEquals(1, repository.checkAndClearExpiredModeration(t0 + 90L * 60_000L + 1000L))
+        assertNull(repository.userProfile.value.timeoutUntilMillis)
+
+        // 2. Chat Mute blocks global chat, Unmute restores it
+        assertTrue(repository.muteUserChat(playerPhone, 6L, "গালাগালি", moderatorRole = UserRole.ADMIN).first)
+        assertFalse("Muted user blocked from chat", repository.sendGlobalChatMessage("টেস্ট মেসেজ").first)
+        assertTrue(repository.unmuteUserChat(playerPhone, moderatorRole = UserRole.ADMIN).first)
+        assertTrue("Unmuted user can chat", repository.sendGlobalChatMessage("এখন মেসেজ যায়").first)
+
+        // 3. Match Slot Ban blocks booking, unban restores it
+        assertTrue(repository.setUserMatchBan(playerPhone, true, "স্লট নষ্ট করা", moderatorRole = UserRole.OWNER).first)
+        assertFalse("Match-banned user blocked from booking", repository.bookSlotWithWallet(repository.matches.value.first(), 4, "TH_Hasan", "55009911").first)
+        assertTrue(repository.setUserMatchBan(playerPhone, false, moderatorRole = UserRole.OWNER).first)
+        assertTrue("Match booking works after unban", repository.bookSlotWithWallet(repository.matches.value.first(), 4, "TH_Hasan", "55009911").first)
+
+        // 4. Wallet Freeze blocks deposit & withdraw
+        assertTrue(repository.setUserWalletFreeze(playerPhone, true, "ফ্রড তদন্ত", moderatorRole = UserRole.OWNER).first)
+        assertFalse("Wallet-frozen user blocked from deposit", repository.submitDepositRequest(100, com.example.model.WalletPaymentMethod.NAGAD, playerPhone, "NGD654321").first)
+        assertFalse("Wallet-frozen user blocked from withdraw", repository.submitWithdrawRequest(50, com.example.model.WalletPaymentMethod.BKASH, playerPhone).first)
+
+        // 5. Grant badges, Strip All Badges, then Pardon All punishments
+        assertTrue(repository.grantBadgeToUser(playerPhone, BadgeType.V_BADGE).first)
+        assertTrue(repository.grantBadgeToUser(playerPhone, BadgeType.HEADSHOT_KING).first)
+        assertTrue(repository.removeAllBadgesFromUser(playerPhone, moderatorRole = UserRole.OWNER).first)
+        assertTrue(repository.userProfile.value.earnedBadges.isEmpty())
+
+        assertTrue(repository.pardonAllPunishments(playerPhone, moderatorRole = UserRole.OWNER).first)
+        val pardoned = repository.userProfile.value
+        assertFalse(pardoned.isBanned)
+        assertFalse(pardoned.isChatMuted)
+        assertFalse(pardoned.isMatchBanned)
+        assertFalse(pardoned.isWalletFrozen)
+        assertNull(pardoned.timeoutUntilMillis)
+        assertEquals(0, pardoned.moderationWarningsCount)
+
+        // 6. Staff Hierarchy Protection: Admin CANNOT moderate Owner or another Admin
+        assertFalse("Admin must not warn Owner", repository.warnUser("01861583924", "test", moderatorRole = UserRole.ADMIN).first)
+        assertFalse("Admin must not timeout another Admin", repository.timeoutUser(adminPhone, 10L, "test", moderatorRole = UserRole.ADMIN).first)
+        assertTrue("Owner CAN timeout an Admin", repository.timeoutUser(adminPhone, 10L, "শৃঙ্খলা ভঙ্গ", moderatorRole = UserRole.OWNER).first)
+    }
+
+    @Test
+    fun testLiveAppAnnouncementPublishClearAndLiveLeaderboardAutoRanking() {
+        // 1. Regular players cannot publish announcements
+        val p1 = "01711112222"
+        val p2 = "01733334444"
+        val adminPhone = "01755556666"
+        assertTrue(repository.register("PlayerOne", "TH_One", "11112222", p1, p1, password = "pass123"))
+        assertFalse("Regular player must not publish app announcement", repository.publishAppAnnouncement("Hi", "Test").first)
+
+        // Fresh state has empty leaderboard (no fake players)
+        assertTrue(repository.leaderboard.value.isEmpty())
+
+        // 2. Register second player & admin, promote admin
+        assertTrue(repository.register("PlayerTwo", "TH_Two", "33334444", p2, p2, password = "pass123"))
+        assertTrue(repository.register("AdminThree", "TH_Mod", "55556666", adminPhone, adminPhone, password = "pass123"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "TH-MOD", "AdminThree", "TH_Mod", "55556666"))
+
+        // Admin publishes urgent announcement
+        repository.logout()
+        assertTrue(repository.login(adminPhone, "pass123"))
+        val pubAdmin = repository.publishAppAnnouncement("জরুরি ম্যাচ", "রুম পাসওয়ার্ড ৭৭৮৮", isUrgent = true)
+        assertTrue(pubAdmin.first)
+        assertTrue(repository.appCustomization.value.isAnnouncementEnabled)
+        assertTrue(repository.appCustomization.value.isAnnouncementUrgent)
+        assertEquals("রুম পাসওয়ার্ড ৭৭৮৮", repository.appCustomization.value.activeAnnouncement)
+
+        // Owner clears announcement
+        repository.logout()
+        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.clearAppAnnouncement().first)
+        assertFalse(repository.appCustomization.value.isAnnouncementEnabled)
+        assertEquals("", repository.appCustomization.value.activeAnnouncement)
+
+        // Owner publishes match result & payout for PlayerOne -> populates Leaderboard Rank #1
+        val targetMatch = repository.matches.value.first()
+        val res1 = repository.publishMatchResultAndPayout(
+            matchId = targetMatch.id,
+            winnerTargetKey = p1,
+            winnerKills = 4,
+            customPrizeAmount = 40,
+            runnerUpIgn = "TH_Two",
+            markMatchFinished = true
+        )
+        assertTrue(res1.first)
+        assertEquals(1, repository.leaderboard.value.size)
+        assertEquals("TH_One", repository.leaderboard.value.first().ign)
+        assertEquals(40, repository.leaderboard.value.first().totalEarnings)
+        assertEquals(com.example.model.MatchStatus.FINISHED, repository.matches.value.first { it.id == targetMatch.id }.status)
+
+        // Owner boosts PlayerTwo with higher earnings -> PlayerTwo becomes Rank #1 automatically!
+        val res2 = repository.awardKillPrizeAndStats(
+            targetKey = p2,
+            killsToAdd = 8,
+            winsToAdd = 2,
+            matchesToAdd = 1,
+            prizeAmount = 95,
+            note = "মেগা কিল বোনাস"
+        )
+        assertTrue(res2.first)
+        assertEquals(2, repository.leaderboard.value.size)
+        assertEquals("TH_Two", repository.leaderboard.value[0].ign)
+        assertEquals(1, repository.leaderboard.value[0].rank)
+        assertEquals("TH_One", repository.leaderboard.value[1].ign)
+        assertEquals(2, repository.leaderboard.value[1].rank)
+
+        // Banning PlayerTwo removes them from the live leaderboard; Unbanning restores them!
+        assertTrue(repository.banUser(p2, "হ্যাক"))
+        assertEquals(1, repository.leaderboard.value.size)
+        assertEquals("TH_One", repository.leaderboard.value.first().ign)
+        assertTrue(repository.unbanUser(p2))
+        assertEquals(2, repository.leaderboard.value.size)
+        assertEquals("TH_Two", repository.leaderboard.value.first().ign)
+
+        // Fresh download reset wipes results & leaderboard cleanly
+        repository.resetAppForFreshDownload()
+        assertTrue(repository.leaderboard.value.isEmpty())
+        assertTrue(repository.results.value.isEmpty())
+        assertTrue(repository.appCustomization.value.isAnnouncementEnabled)
+    }
 }
 
 

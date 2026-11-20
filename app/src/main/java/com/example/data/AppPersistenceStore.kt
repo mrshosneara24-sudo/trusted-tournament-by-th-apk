@@ -18,6 +18,8 @@ import com.example.model.LeaderboardPlayer
 import com.example.model.MatchResult
 import com.example.model.MatchStatus
 import com.example.model.MatchType
+import com.example.model.ModerationActionType
+import com.example.model.ModerationLogEntry
 import com.example.model.ProfileBannerColor
 import com.example.model.RequestStatus
 import com.example.model.SlotBooking
@@ -55,7 +57,8 @@ data class PersistedAppState(
     val chatMessages: List<ChatMessage>,
     val masterOwnerPin: String,
     val badgeAppeals: List<BadgeAppeal> = emptyList(),
-    val globalChatMessages: List<GlobalChatMessage> = emptyList()
+    val globalChatMessages: List<GlobalChatMessage> = emptyList(),
+    val moderationLogs: List<ModerationLogEntry> = emptyList()
 )
 
 class AppPersistenceStore(context: Context) {
@@ -92,6 +95,7 @@ class AppPersistenceStore(context: Context) {
                 put("masterOwnerPin", state.masterOwnerPin)
                 put("badgeAppeals", JSONArray().apply { state.badgeAppeals.forEach { put(encodeBadgeAppeal(it)) } })
                 put("globalChatMessages", JSONArray().apply { state.globalChatMessages.forEach { put(encodeGlobalChat(it)) } })
+                put("moderationLogs", JSONArray().apply { state.moderationLogs.forEach { put(encodeModerationLog(it)) } })
             }
             prefs.edit().putString(KEY_STATE_JSON, root.toString()).apply()
         }
@@ -123,7 +127,8 @@ class AppPersistenceStore(context: Context) {
                 chatMessages = decodeList(root.optJSONArray("chatMessages"), ::decodeChat),
                 masterOwnerPin = root.optString("masterOwnerPin", "7788"),
                 badgeAppeals = decodeList(root.optJSONArray("badgeAppeals"), ::decodeBadgeAppeal),
-                globalChatMessages = decodeList(root.optJSONArray("globalChatMessages"), ::decodeGlobalChat)
+                globalChatMessages = decodeList(root.optJSONArray("globalChatMessages"), ::decodeGlobalChat),
+                moderationLogs = decodeList(root.optJSONArray("moderationLogs"), ::decodeModerationLog)
             )
         }.getOrNull()
     }
@@ -197,6 +202,23 @@ class AppPersistenceStore(context: Context) {
         put("revokedBadges", encodeBadgeSet(p.revokedBadges))
         put("warningsCount", p.warningsCount)
         put("banExpiresAtMillis", p.banExpiresAtMillis)
+        put("moderationWarningsCount", p.moderationWarningsCount)
+        put("timeoutUntilMillis", p.timeoutUntilMillis)
+        put("timeoutReason", p.timeoutReason)
+        put("timeoutBy", p.timeoutBy)
+        put("isChatMuted", p.isChatMuted)
+        put("chatMuteUntilMillis", p.chatMuteUntilMillis)
+        put("chatMuteReason", p.chatMuteReason)
+        put("isMatchBanned", p.isMatchBanned)
+        put("matchBanReason", p.matchBanReason)
+        put("isWalletFrozen", p.isWalletFrozen)
+        put("walletFreezeReason", p.walletFreezeReason)
+        put("isRewardBlocked", p.isRewardBlocked)
+        put("rewardBlockReason", p.rewardBlockReason)
+        put("isAppealBanned", p.isAppealBanned)
+        put("appealBanReason", p.appealBanReason)
+        put("isProfileLocked", p.isProfileLocked)
+        put("profileLockReason", p.profileLockReason)
     }
 
     private fun decodeUserProfile(o: JSONObject) = UserProfile(
@@ -235,7 +257,24 @@ class AppPersistenceStore(context: Context) {
         customBadges = decodeBadgeSet(o.optJSONArray("customBadges")),
         revokedBadges = decodeBadgeSet(o.optJSONArray("revokedBadges")),
         warningsCount = o.optInt("warningsCount", 0),
-        banExpiresAtMillis = o.optNullableLong("banExpiresAtMillis")
+        banExpiresAtMillis = o.optNullableLong("banExpiresAtMillis"),
+        moderationWarningsCount = o.optInt("moderationWarningsCount", 0),
+        timeoutUntilMillis = o.optNullableLong("timeoutUntilMillis"),
+        timeoutReason = o.optNullableString("timeoutReason"),
+        timeoutBy = o.optNullableString("timeoutBy"),
+        isChatMuted = o.optBoolean("isChatMuted", false),
+        chatMuteUntilMillis = o.optNullableLong("chatMuteUntilMillis"),
+        chatMuteReason = o.optNullableString("chatMuteReason"),
+        isMatchBanned = o.optBoolean("isMatchBanned", false),
+        matchBanReason = o.optNullableString("matchBanReason"),
+        isWalletFrozen = o.optBoolean("isWalletFrozen", false),
+        walletFreezeReason = o.optNullableString("walletFreezeReason"),
+        isRewardBlocked = o.optBoolean("isRewardBlocked", false),
+        rewardBlockReason = o.optNullableString("rewardBlockReason"),
+        isAppealBanned = o.optBoolean("isAppealBanned", false),
+        appealBanReason = o.optNullableString("appealBanReason"),
+        isProfileLocked = o.optBoolean("isProfileLocked", false),
+        profileLockReason = o.optNullableString("profileLockReason")
     )
 
     private fun encodeAppUser(u: AppUser) = JSONObject().apply {
@@ -274,6 +313,23 @@ class AppPersistenceStore(context: Context) {
         put("kudosCount", u.kudosCount)
         put("warningsCount", u.warningsCount)
         put("banExpiresAtMillis", u.banExpiresAtMillis)
+        put("moderationWarningsCount", u.moderationWarningsCount)
+        put("timeoutUntilMillis", u.timeoutUntilMillis)
+        put("timeoutReason", u.timeoutReason)
+        put("timeoutBy", u.timeoutBy)
+        put("isChatMuted", u.isChatMuted)
+        put("chatMuteUntilMillis", u.chatMuteUntilMillis)
+        put("chatMuteReason", u.chatMuteReason)
+        put("isMatchBanned", u.isMatchBanned)
+        put("matchBanReason", u.matchBanReason)
+        put("isWalletFrozen", u.isWalletFrozen)
+        put("walletFreezeReason", u.walletFreezeReason)
+        put("isRewardBlocked", u.isRewardBlocked)
+        put("rewardBlockReason", u.rewardBlockReason)
+        put("isAppealBanned", u.isAppealBanned)
+        put("appealBanReason", u.appealBanReason)
+        put("isProfileLocked", u.isProfileLocked)
+        put("profileLockReason", u.profileLockReason)
     }
 
     private fun decodeAppUser(o: JSONObject) = AppUser(
@@ -311,7 +367,24 @@ class AppPersistenceStore(context: Context) {
         level = o.optInt("level", 1),
         kudosCount = o.optInt("kudosCount", 0),
         warningsCount = o.optInt("warningsCount", 0),
-        banExpiresAtMillis = o.optNullableLong("banExpiresAtMillis")
+        banExpiresAtMillis = o.optNullableLong("banExpiresAtMillis"),
+        moderationWarningsCount = o.optInt("moderationWarningsCount", 0),
+        timeoutUntilMillis = o.optNullableLong("timeoutUntilMillis"),
+        timeoutReason = o.optNullableString("timeoutReason"),
+        timeoutBy = o.optNullableString("timeoutBy"),
+        isChatMuted = o.optBoolean("isChatMuted", false),
+        chatMuteUntilMillis = o.optNullableLong("chatMuteUntilMillis"),
+        chatMuteReason = o.optNullableString("chatMuteReason"),
+        isMatchBanned = o.optBoolean("isMatchBanned", false),
+        matchBanReason = o.optNullableString("matchBanReason"),
+        isWalletFrozen = o.optBoolean("isWalletFrozen", false),
+        walletFreezeReason = o.optNullableString("walletFreezeReason"),
+        isRewardBlocked = o.optBoolean("isRewardBlocked", false),
+        rewardBlockReason = o.optNullableString("rewardBlockReason"),
+        isAppealBanned = o.optBoolean("isAppealBanned", false),
+        appealBanReason = o.optNullableString("appealBanReason"),
+        isProfileLocked = o.optBoolean("isProfileLocked", false),
+        profileLockReason = o.optNullableString("profileLockReason")
     )
 
     private fun encodeMatch(m: TournamentMatch) = JSONObject().apply {
@@ -591,6 +664,11 @@ class AppPersistenceStore(context: Context) {
         put("selectedLogo", c.selectedLogo.name)
         put("noticeTickerText", c.noticeTickerText)
         put("activeAnnouncement", c.activeAnnouncement)
+        put("announcementTitle", c.announcementTitle)
+        put("announcementAuthor", c.announcementAuthor)
+        put("announcementUpdatedAtMillis", c.announcementUpdatedAtMillis)
+        put("isAnnouncementUrgent", c.isAnnouncementUrgent)
+        put("isAnnouncementEnabled", c.isAnnouncementEnabled)
         put("officialBkashNumber", c.officialBkashNumber)
         put("officialNagadNumber", c.officialNagadNumber)
         put("officialWhatsAppUrl", c.officialWhatsAppUrl)
@@ -606,6 +684,11 @@ class AppPersistenceStore(context: Context) {
         selectedLogo = enumValueOrDefault(o.optString("selectedLogo"), AppLogoOption.TH_LOGO),
         noticeTickerText = o.optString("noticeTickerText", "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!"),
         activeAnnouncement = o.optString("activeAnnouncement", "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!"),
+        announcementTitle = o.optString("announcementTitle", "অফিসিয়াল ঘোষণা"),
+        announcementAuthor = o.optString("announcementAuthor", "👑 TH ওনার"),
+        announcementUpdatedAtMillis = o.optLong("announcementUpdatedAtMillis", 0L),
+        isAnnouncementUrgent = o.optBoolean("isAnnouncementUrgent", false),
+        isAnnouncementEnabled = o.optBoolean("isAnnouncementEnabled", true),
         officialBkashNumber = o.optString("officialBkashNumber", "01861583924"),
         officialNagadNumber = o.optString("officialNagadNumber", "01861583924"),
         officialWhatsAppUrl = o.optString("officialWhatsAppUrl", "https://chat.whatsapp.com/G8TrustedTHTournament"),
@@ -786,6 +869,34 @@ class AppPersistenceStore(context: Context) {
             reactions = reactionsMap
         )
     }
+
+    private fun encodeModerationLog(entry: ModerationLogEntry) = JSONObject().apply {
+        put("id", entry.id)
+        put("targetUserId", entry.targetUserId)
+        put("targetIgn", entry.targetIgn)
+        put("targetPhone", entry.targetPhone)
+        put("actionType", entry.actionType.name)
+        put("durationLabel", entry.durationLabel)
+        put("reason", entry.reason)
+        put("moderatorRole", entry.moderatorRole.name)
+        put("moderatorName", entry.moderatorName)
+        put("timestampMillis", entry.timestampMillis)
+        put("timeLabel", entry.timeLabel)
+    }
+
+    private fun decodeModerationLog(o: JSONObject) = ModerationLogEntry(
+        id = o.optString("id", ""),
+        targetUserId = o.optString("targetUserId", ""),
+        targetIgn = o.optString("targetIgn", "Player"),
+        targetPhone = o.optString("targetPhone", ""),
+        actionType = enumValueOrDefault(o.optString("actionType"), ModerationActionType.WARN),
+        durationLabel = o.optString("durationLabel", ""),
+        reason = o.optString("reason", ""),
+        moderatorRole = enumValueOrDefault(o.optString("moderatorRole"), UserRole.OWNER),
+        moderatorName = o.optString("moderatorName", "ওনার"),
+        timestampMillis = o.optLong("timestampMillis", System.currentTimeMillis()),
+        timeLabel = o.optString("timeLabel", "এইমাত্র")
+    )
 
     private inline fun <reified T : Enum<T>> enumValueOrDefault(name: String, default: T): T {
         return enumValues<T>().firstOrNull { it.name == name } ?: default
