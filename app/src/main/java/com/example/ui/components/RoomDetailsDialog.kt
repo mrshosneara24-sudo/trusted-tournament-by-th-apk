@@ -55,6 +55,7 @@ fun RoomDetailsDialog(
     roomId: String?,
     roomPassword: String?,
     whatsAppUrl: String = "https://chat.whatsapp.com/G8TrustedTHTournament",
+    autoLaunchGame: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -161,7 +162,19 @@ fun RoomDetailsDialog(
                             Button(
                                 onClick = {
                                     clipboardManager.setText(AnnotatedString(roomId))
-                                    Toast.makeText(context, "রুম আইডি কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                    if (autoLaunchGame) {
+                                        val pm = context.packageManager
+                                        val ffIntent = pm.getLaunchIntentForPackage("com.dts.freefiremax")
+                                            ?: pm.getLaunchIntentForPackage("com.dts.freefireth")
+                                        if (ffIntent != null) {
+                                            Toast.makeText(context, "রুম আইডি কপি হয়েছে! ফ্রি ফায়ার চালু হচ্ছে...", Toast.LENGTH_SHORT).show()
+                                            runCatching { context.startActivity(ffIntent) }
+                                        } else {
+                                            Toast.makeText(context, "রুম আইডি কপি হয়েছে! (ফ্রি ফায়ার অ্যাপ ইনস্টল পাওয়া যায়নি)", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "রুম আইডি কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),

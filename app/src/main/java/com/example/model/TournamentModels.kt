@@ -668,3 +668,130 @@ data class AppCustomization(
     val maintenanceMessage: String = "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট রুম উন্মুক্ত করা হবে।"
 )
 
+data class UserPreferences(
+    val roomAlertNotification: Boolean = true,
+    val fiveMinReminder: Boolean = true,
+    val autoLaunchGame: Boolean = false
+)
+
+data class PromoCodeItem(
+    val id: String,
+    val code: String,
+    val title: String,
+    val rewardAmount: Int,
+    val maxUses: Int = 25,
+    val usedCount: Int = 0,
+    val claimedByKeys: List<String> = emptyList(),
+    val active: Boolean = true,
+    val createdBy: String = "👑 ওনার",
+    val createdAtMillis: Long = System.currentTimeMillis()
+) {
+    val remainingUses: Int get() = (maxUses - usedCount).coerceAtLeast(0)
+    val isExhausted: Boolean get() = usedCount >= maxUses
+}
+
+data class BonusGiftDrop(
+    val id: String,
+    val title: String,
+    val subtitle: String = "সবার আগে ক্লেইম করে বোনাস লুটে নিন!",
+    val amountPerClaim: Int = 5,
+    val totalBoxes: Int = 10,
+    val claimedCount: Int = 0,
+    val claimedByKeys: List<String> = emptyList(),
+    val active: Boolean = true,
+    val createdBy: String = "👑 ওনার",
+    val createdAtMillis: Long = System.currentTimeMillis()
+) {
+    val remainingBoxes: Int get() = (totalBoxes - claimedCount).coerceAtLeast(0)
+    val isSoldOut: Boolean get() = claimedCount >= totalBoxes
+}
+
+data class PollOptionItem(
+    val id: String,
+    val label: String,
+    val votes: Int = 0
+)
+
+data class LiveCommunityPoll(
+    val id: String,
+    val question: String,
+    val options: List<PollOptionItem> = emptyList(),
+    val votedByKeys: List<String> = emptyList(),
+    val active: Boolean = true,
+    val createdBy: String = "👑 ওনার",
+    val createdAtMillis: Long = System.currentTimeMillis()
+) {
+    val totalVotes: Int get() = options.sumOf { it.votes }
+}
+
+data class DailyTriviaQuestion(
+    val id: String,
+    val question: String,
+    val options: List<String>,
+    val correctIndex: Int,
+    val rewardAmount: Int = 0,
+    val hint: String = ""
+)
+
+data class DailyTriviaProgress(
+    val lastAttemptDateKey: String = "",
+    val lastAnsweredCorrectly: Boolean = false,
+    val lastSelectedOption: Int = -1,
+    val totalCorrectCount: Int = 0,
+    val currentQuestionIndex: Int = 0
+)
+
+object FreeFireTriviaBank {
+    val questions: List<DailyTriviaQuestion> = listOf(
+        DailyTriviaQuestion(
+            id = "ff_q1",
+            question = "ফ্রি ফায়ারে Booyah পাওয়ার জন্য BR Rank সোলো ম্যাচে সর্বাধিক কতজন প্লেয়ার নামে?",
+            options = listOf("৩২ জন", "৪৮-৫০ জন", "৬০ জন", "১০০ জন"),
+            correctIndex = 1,
+            rewardAmount = 0,
+            hint = "বারমুডা ম্যাপে ক্লাসিক/র‍্যাঙ্ক প্লেন থেকে ৫০ জন ড্রপ করে।"
+        ),
+        DailyTriviaQuestion(
+            id = "ff_q2",
+            question = "নিচের কোন গানটি ফ্রি ফায়ারে 'SMG' ক্যাটাগরির এবং ক্লোজ রেঞ্জে খুবই জনপ্রিয়?",
+            options = listOf("AWM", "MP40", "M1887", "SKS"),
+            correctIndex = 1,
+            rewardAmount = 0,
+            hint = "Cobra স্কিন সহ সবচেয়ে জনপ্রিয় সাব-মেশিন গান!"
+        ),
+        DailyTriviaQuestion(
+            id = "ff_q3",
+            question = "Alok ক্যারেক্টারের অ্যাক্টিভ স্কিল 'Drop the Beat' কী সাহায্য করে?",
+            options = listOf("গ্লু ওয়াল ভাঙতে", "HP ও মুভমেন্ট স্পিড বাড়াতে", "অদৃশ্য হতে", "এয়ারড্রপ ডাকতে"),
+            correctIndex = 1,
+            rewardAmount = 0,
+            hint = "৫ মিটার অরা তৈরি করে প্রতি সেকেন্ডে হিল দেয়।"
+        ),
+        DailyTriviaQuestion(
+            id = "ff_q4",
+            question = "Clash Squad মোডে একটি রাউন্ড জেতার পর সম্পূর্ণ ম্যাচ জিততে মোট কয়টি রাউন্ড জিততে হয়?",
+            options = listOf("৩ রাউন্ড", "৪ রাউন্ড", "৫ রাউন্ড", "৭ রাউন্ড"),
+            correctIndex = 1,
+            rewardAmount = 0,
+            hint = "Best of 7 ফরম্যাটে প্রথম ৪ রাউন্ড জিতলেই Booyah!"
+        ),
+        DailyTriviaQuestion(
+            id = "ff_q5",
+            question = "কভার নেওয়ার জন্য ফ্রি ফায়ারে সবচেয়ে গুরুত্বপূর্ণ ইউটিলিটি গ্রেনেড কোনটি?",
+            options = listOf("Gloo Wall", "Flashbang", "Smoke Grenade", "Landmine"),
+            correctIndex = 0,
+            rewardAmount = 0,
+            hint = "বুলেট আটকাতে সাথে সাথে বরফের দেয়াল তৈরি করে!"
+        )
+    )
+
+    fun todayDateKey(): String {
+        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH).format(java.util.Date())
+    }
+
+    fun questionForDay(index: Int): DailyTriviaQuestion {
+        return questions[Math.floorMod(index, questions.size)]
+    }
+}
+
+

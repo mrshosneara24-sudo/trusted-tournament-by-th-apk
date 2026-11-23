@@ -414,3 +414,126 @@ test("Owner and promoted Admin can publish live app announcements to app_config/
   );
 });
 
+test("Promo codes, bonus gift drops, and live community polls enforce staff creation and anti-double-claim rules", async () => {
+  const past = new Date(Date.now() - 2000);
+  const nowUpdate = new Date(Date.now() - 500);
+
+  // Regular player cannot create promo codes or bonus drops
+  await assertFails(
+    bobDb().collection("promo_codes").doc("promo_bob").set({
+      code: "FREE100",
+      title: "Fake promo",
+      rewardAmount: 100,
+      maxUses: 10,
+      usedCount: 0,
+      claimedByUids: [],
+      claimedByKeys: [],
+      active: true,
+      createdBy: "Bob",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Owner creates valid promo code, bonus drop, and poll
+  await assertSucceeds(
+    ownerDb().collection("promo_codes").doc("promo_th10").set({
+      code: "THFF10",
+      title: "ওনার স্পেশাল গিফট",
+      rewardAmount: 10,
+      maxUses: 5,
+      usedCount: 0,
+      claimedByUids: [],
+      claimedByKeys: [],
+      active: true,
+      createdBy: "👑 ওনার",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Bob can claim promo code once (+1 usedCount & Bob UID added)
+  await assertSucceeds(
+    bobDb().collection("promo_codes").doc("promo_th10").update({
+      usedCount: 1,
+      claimedByUids: [BOB_UID],
+      claimedByKeys: ["01900000001"],
+      updatedAt: nowUpdate,
+    })
+  );
+
+  // Bob CANNOT double-claim or inflate rewardAmount
+  await assertFails(
+    bobDb().collection("promo_codes").doc("promo_th10").update({
+      usedCount: 2,
+      claimedByUids: [BOB_UID],
+      claimedByKeys: ["01900000001"],
+      updatedAt: new Date(Date.now() - 200),
+    })
+  );
+  await assertFails(
+    bobDb().collection("promo_codes").doc("promo_th10").update({
+      rewardAmount: 500,
+      updatedAt: new Date(Date.now() - 200),
+    })
+  );
+
+  // Bonus Drop: Owner creates, Bob claims 1 box
+  await assertSucceeds(
+    ownerDb().collection("bonus_drops").doc("drop_1").set({
+      title: "🎁 বোনাস রেইন",
+      subtitle: "দ্রুত ক্লেইম করুন",
+      amountPerClaim: 5,
+      totalBoxes: 10,
+      claimedCount: 0,
+      claimedByUids: [],
+      claimedByKeys: [],
+      active: true,
+      createdBy: "👑 ওনার",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+  await assertSucceeds(
+    bobDb().collection("bonus_drops").doc("drop_1").update({
+      claimedCount: 1,
+      claimedByUids: [BOB_UID],
+      claimedByKeys: ["01900000001"],
+      updatedAt: nowUpdate,
+    })
+  );
+
+  // Community Poll: Owner creates, Bob votes once
+  await assertSucceeds(
+    ownerDb().collection("community_polls").doc("poll_1").set({
+      question: "পরের ম্যাচ কোন ম্যাপে চান?",
+      options: [
+        { id: "o1", label: "বারমুডা", votes: 0 },
+        { id: "o2", label: "পুরগেটরি", votes: 0 },
+      ],
+      votedByUids: [],
+      votedByKeys: [],
+      active: true,
+      createdBy: "👑 ওনার",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+  await assertSucceeds(
+    bobDb().collection("community_polls").doc("poll_1").update({
+      options: [
+        { id: "o1", label: "বারমুডা", votes: 1 },
+        { id: "o2", label: "পুরগেটরি", votes: 0 },
+      ],
+      votedByUids: [BOB_UID],
+      votedByKeys: ["01900000001"],
+      updatedAt: nowUpdate,
+    })
+  );
+});
+
+

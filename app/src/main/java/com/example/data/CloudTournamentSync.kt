@@ -10,14 +10,18 @@ import com.example.model.AppealChatMessage
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
 import com.example.model.GlobalChatMessage
+import com.example.model.LiveCommunityPoll
 import com.example.model.MatchStatus
 import com.example.model.MatchType
 import com.example.model.ModerationActionType
 import com.example.model.ModerationLogEntry
+import com.example.model.PollOptionItem
 import com.example.model.ProfileBannerColor
+import com.example.model.PromoCodeItem
 import com.example.model.RequestStatus
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
@@ -63,6 +67,9 @@ class CloudTournamentSync(private val context: Context) {
         private const val COL_BADGE_APPEALS = "badge_appeals"
         private const val COL_GLOBAL_CHAT = "global_chat"
         private const val COL_MODERATION_LOGS = "moderation_logs"
+        private const val COL_PROMO_CODES = "promo_codes"
+        private const val COL_BONUS_DROPS = "bonus_drops"
+        private const val COL_COMMUNITY_POLLS = "community_polls"
     }
 
     data class SyncCallbacks(
@@ -76,6 +83,9 @@ class CloudTournamentSync(private val context: Context) {
         val onAppealsSynced: (List<BadgeAppeal>) -> Unit,
         val onGlobalChatSynced: (List<GlobalChatMessage>) -> Unit,
         val onModerationLogsSynced: (List<ModerationLogEntry>) -> Unit,
+        val onPromoCodesSynced: (List<PromoCodeItem>) -> Unit = {},
+        val onBonusDropsSynced: (List<BonusGiftDrop>) -> Unit = {},
+        val onCommunityPollsSynced: (List<LiveCommunityPoll>) -> Unit = {},
         val onSyncStateChanged: (connected: Boolean, email: String, statusText: String) -> Unit
     )
 
@@ -309,6 +319,51 @@ class CloudTournamentSync(private val context: Context) {
                     callbacks?.onModerationLogsSynced(list)
                 }
             }
+
+            // 11. Promo Redeem Codes
+            registrations += db.collection(COL_PROMO_CODES)
+                .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                .addSnapshotListener { snaps, err ->
+                    if (err != null) {
+                        handleFirestoreError(err, "LIST", COL_PROMO_CODES)
+                        return@addSnapshotListener
+                    }
+                    if (snaps != null) {
+                        val list = snaps.documents.mapNotNull { parsePromoCode(it) }
+                            .sortedByDescending { it.createdAtMillis }
+                        callbacks?.onPromoCodesSynced(list)
+                    }
+                }
+
+            // 12. Live Bonus Gift Drops
+            registrations += db.collection(COL_BONUS_DROPS)
+                .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                .addSnapshotListener { snaps, err ->
+                    if (err != null) {
+                        handleFirestoreError(err, "LIST", COL_BONUS_DROPS)
+                        return@addSnapshotListener
+                    }
+                    if (snaps != null) {
+                        val list = snaps.documents.mapNotNull { parseBonusDrop(it) }
+                            .sortedByDescending { it.createdAtMillis }
+                        callbacks?.onBonusDropsSynced(list)
+                    }
+                }
+
+            // 13. Live Community Polls
+            registrations += db.collection(COL_COMMUNITY_POLLS)
+                .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                .addSnapshotListener { snaps, err ->
+                    if (err != null) {
+                        handleFirestoreError(err, "LIST", COL_COMMUNITY_POLLS)
+                        return@addSnapshotListener
+                    }
+                    if (snaps != null) {
+                        val list = snaps.documents.mapNotNull { parseCommunityPoll(it) }
+                            .sortedByDescending { it.createdAtMillis }
+                        callbacks?.onCommunityPollsSynced(list)
+                    }
+                }
         }
     }
 
@@ -868,10 +923,266 @@ class CloudTournamentSync(private val context: Context) {
                         .await()
                     oldChat.documents.forEach { it.reference.delete().await() }
                 }
+                runCatching {
+                    val oldPromos = db.collection(COL_PROMO_CODES)
+                        .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                        .get()
+                        .await()
+                    oldPromos.documents.forEach { it.reference.delete().await() }
+                }
+                runCatching {
+                    val oldDrops = db.collection(COL_BONUS_DROPS)
+                        .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                        .get()
+                        .await()
+                    oldDrops.documents.forEach { it.reference.delete().await() }
+                }
+                runCatching {
+                    val oldPolls = db.collection(COL_COMMUNITY_POLLS)
+                        .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                        .get()
+                        .await()
+                    oldPolls.documents.forEach { it.reference.delete().await() }
+                }
 
                 pushUser(ownerUser, user.uid)
             } catch (e: Exception) {
                 handleFirestoreError(e, "RESET", "global")
+            }
+        }
+    }
+
+    fun pushPromoCode(promo: PromoCodeItem) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(promo.id)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                val docRef = db.collection(COL_PROMO_CODES).document(safeId)
+                val existingSnap = docRef.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val existingUids = (existingSnap.get("claimedByUids") as? List<String>) ?: emptyList()
+                val fields = hashMapOf<String, Any>(
+                    "code" to promo.code.take(30),
+                    "title" to promo.title.take(80),
+                    "rewardAmount" to promo.rewardAmount.coerceIn(1, 500),
+                    "maxUses" to promo.maxUses.coerceIn(1, 1000),
+                    "usedCount" to promo.usedCount.coerceIn(0, promo.maxUses.coerceIn(1, 1000)),
+                    "claimedByUids" to existingUids,
+                    "claimedByKeys" to promo.claimedByKeys.take(1000),
+                    "active" to promo.active,
+                    "createdBy" to promo.createdBy.take(60),
+                    "createdAtMillis" to promo.createdAtMillis.coerceAtLeast(0L)
+                )
+                upsertWithTimestamps(docRef, fields)
+            } catch (e: Exception) {
+                handleFirestoreError(e, "WRITE", "$COL_PROMO_CODES/$safeId")
+            }
+        }
+    }
+
+    fun claimPromoCodeCloud(promo: PromoCodeItem, claimerKey: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(promo.id)
+        scope.launch {
+            try {
+                val docRef = db.collection(COL_PROMO_CODES).document(safeId)
+                val snap = docRef.get().await()
+                if (!snap.exists()) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val uids = ((snap.get("claimedByUids") as? List<String>) ?: emptyList()).toMutableList()
+                @Suppress("UNCHECKED_CAST")
+                val keys = ((snap.get("claimedByKeys") as? List<String>) ?: emptyList()).toMutableList()
+                if (user.uid in uids) return@launch
+                val currentUsed = (snap.get("usedCount") as? Number)?.toInt() ?: 0
+                val maxUses = (snap.get("maxUses") as? Number)?.toInt() ?: promo.maxUses
+                if (currentUsed >= maxUses) return@launch
+                uids.add(user.uid)
+                if (claimerKey.isNotBlank() && claimerKey !in keys) keys.add(claimerKey)
+                docRef.update(
+                    mapOf(
+                        "usedCount" to (currentUsed + 1),
+                        "claimedByUids" to uids,
+                        "claimedByKeys" to keys,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "UPDATE", "$COL_PROMO_CODES/$safeId")
+            }
+        }
+    }
+
+    fun deletePromoCodeCloud(promoId: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(promoId)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                db.collection(COL_PROMO_CODES).document(safeId).delete().await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "DELETE", "$COL_PROMO_CODES/$safeId")
+            }
+        }
+    }
+
+    fun pushBonusDrop(drop: BonusGiftDrop) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(drop.id)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                val docRef = db.collection(COL_BONUS_DROPS).document(safeId)
+                val existingSnap = docRef.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val existingUids = (existingSnap.get("claimedByUids") as? List<String>) ?: emptyList()
+                val fields = hashMapOf<String, Any>(
+                    "title" to drop.title.take(80),
+                    "subtitle" to drop.subtitle.take(160),
+                    "amountPerClaim" to drop.amountPerClaim.coerceIn(1, 200),
+                    "totalBoxes" to drop.totalBoxes.coerceIn(1, 500),
+                    "claimedCount" to drop.claimedCount.coerceIn(0, drop.totalBoxes.coerceIn(1, 500)),
+                    "claimedByUids" to existingUids,
+                    "claimedByKeys" to drop.claimedByKeys.take(500),
+                    "active" to drop.active,
+                    "createdBy" to drop.createdBy.take(60),
+                    "createdAtMillis" to drop.createdAtMillis.coerceAtLeast(0L)
+                )
+                upsertWithTimestamps(docRef, fields)
+            } catch (e: Exception) {
+                handleFirestoreError(e, "WRITE", "$COL_BONUS_DROPS/$safeId")
+            }
+        }
+    }
+
+    fun claimBonusDropCloud(dropId: String, claimerKey: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(dropId)
+        scope.launch {
+            try {
+                val docRef = db.collection(COL_BONUS_DROPS).document(safeId)
+                val snap = docRef.get().await()
+                if (!snap.exists()) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val uids = ((snap.get("claimedByUids") as? List<String>) ?: emptyList()).toMutableList()
+                @Suppress("UNCHECKED_CAST")
+                val keys = ((snap.get("claimedByKeys") as? List<String>) ?: emptyList()).toMutableList()
+                if (user.uid in uids) return@launch
+                val currentClaimed = (snap.get("claimedCount") as? Number)?.toInt() ?: 0
+                val totalBoxes = (snap.get("totalBoxes") as? Number)?.toInt() ?: 1
+                if (currentClaimed >= totalBoxes) return@launch
+                uids.add(user.uid)
+                if (claimerKey.isNotBlank() && claimerKey !in keys) keys.add(claimerKey)
+                docRef.update(
+                    mapOf(
+                        "claimedCount" to (currentClaimed + 1),
+                        "claimedByUids" to uids,
+                        "claimedByKeys" to keys,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "UPDATE", "$COL_BONUS_DROPS/$safeId")
+            }
+        }
+    }
+
+    fun deleteBonusDropCloud(dropId: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(dropId)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                db.collection(COL_BONUS_DROPS).document(safeId).delete().await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "DELETE", "$COL_BONUS_DROPS/$safeId")
+            }
+        }
+    }
+
+    fun pushCommunityPoll(poll: LiveCommunityPoll) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(poll.id)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                val docRef = db.collection(COL_COMMUNITY_POLLS).document(safeId)
+                val existingSnap = docRef.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val existingUids = (existingSnap.get("votedByUids") as? List<String>) ?: emptyList()
+                val fields = hashMapOf<String, Any>(
+                    "question" to poll.question.take(180),
+                    "options" to poll.options.take(6).map { opt ->
+                        mapOf("id" to opt.id, "label" to opt.label.take(80), "votes" to opt.votes.coerceAtLeast(0))
+                    },
+                    "votedByUids" to existingUids,
+                    "votedByKeys" to poll.votedByKeys.take(1000),
+                    "active" to poll.active,
+                    "createdBy" to poll.createdBy.take(60),
+                    "createdAtMillis" to poll.createdAtMillis.coerceAtLeast(0L)
+                )
+                upsertWithTimestamps(docRef, fields)
+            } catch (e: Exception) {
+                handleFirestoreError(e, "WRITE", "$COL_COMMUNITY_POLLS/$safeId")
+            }
+        }
+    }
+
+    fun voteCommunityPollCloud(pollId: String, optionId: String, voterKey: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(pollId)
+        scope.launch {
+            try {
+                val docRef = db.collection(COL_COMMUNITY_POLLS).document(safeId)
+                val snap = docRef.get().await()
+                if (!snap.exists()) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val uids = ((snap.get("votedByUids") as? List<String>) ?: emptyList()).toMutableList()
+                @Suppress("UNCHECKED_CAST")
+                val keys = ((snap.get("votedByKeys") as? List<String>) ?: emptyList()).toMutableList()
+                if (user.uid in uids) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val rawOptions = (snap.get("options") as? List<Map<String, Any?>>) ?: return@launch
+                val updatedOptions = rawOptions.map { opt ->
+                    val id = opt["id"] as? String ?: ""
+                    val label = opt["label"] as? String ?: ""
+                    val votes = (opt["votes"] as? Number)?.toInt() ?: 0
+                    mapOf("id" to id, "label" to label, "votes" to if (id == optionId) votes + 1 else votes)
+                }
+                uids.add(user.uid)
+                if (voterKey.isNotBlank() && voterKey !in keys) keys.add(voterKey)
+                docRef.update(
+                    mapOf(
+                        "options" to updatedOptions,
+                        "votedByUids" to uids,
+                        "votedByKeys" to keys,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "UPDATE", "$COL_COMMUNITY_POLLS/$safeId")
+            }
+        }
+    }
+
+    fun deleteCommunityPollCloud(pollId: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(pollId)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                db.collection(COL_COMMUNITY_POLLS).document(safeId).delete().await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "DELETE", "$COL_COMMUNITY_POLLS/$safeId")
             }
         }
     }
@@ -1215,6 +1526,73 @@ class CloudTournamentSync(private val context: Context) {
                 moderatorName = snap.getString("moderatorName").orEmpty(),
                 timestampMillis = (snap.get("timestampMillis") as? Number)?.toLong() ?: 0L,
                 timeLabel = snap.getString("timeLabel") ?: "এইমাত্র"
+            )
+        }.getOrNull()
+    }
+
+    private fun parsePromoCode(snap: DocumentSnapshot): PromoCodeItem? {
+        return runCatching {
+            val code = snap.getString("code") ?: return@runCatching null
+            @Suppress("UNCHECKED_CAST")
+            val claimedKeys = (snap.get("claimedByKeys") as? List<String>) ?: emptyList()
+            PromoCodeItem(
+                id = snap.id,
+                code = code,
+                title = snap.getString("title") ?: "প্রোমো কোড",
+                rewardAmount = (snap.get("rewardAmount") as? Number)?.toInt() ?: 5,
+                maxUses = (snap.get("maxUses") as? Number)?.toInt() ?: 25,
+                usedCount = (snap.get("usedCount") as? Number)?.toInt() ?: 0,
+                claimedByKeys = claimedKeys,
+                active = snap.getBoolean("active") ?: true,
+                createdBy = snap.getString("createdBy") ?: "👑 ওনার",
+                createdAtMillis = (snap.get("createdAtMillis") as? Number)?.toLong() ?: 0L
+            )
+        }.getOrNull()
+    }
+
+    private fun parseBonusDrop(snap: DocumentSnapshot): BonusGiftDrop? {
+        return runCatching {
+            val title = snap.getString("title") ?: return@runCatching null
+            @Suppress("UNCHECKED_CAST")
+            val claimedKeys = (snap.get("claimedByKeys") as? List<String>) ?: emptyList()
+            BonusGiftDrop(
+                id = snap.id,
+                title = title,
+                subtitle = snap.getString("subtitle") ?: "সবার আগে ক্লেইম করে বোনাস লুটে নিন!",
+                amountPerClaim = (snap.get("amountPerClaim") as? Number)?.toInt() ?: 5,
+                totalBoxes = (snap.get("totalBoxes") as? Number)?.toInt() ?: 10,
+                claimedCount = (snap.get("claimedCount") as? Number)?.toInt() ?: 0,
+                claimedByKeys = claimedKeys,
+                active = snap.getBoolean("active") ?: true,
+                createdBy = snap.getString("createdBy") ?: "👑 ওনার",
+                createdAtMillis = (snap.get("createdAtMillis") as? Number)?.toLong() ?: 0L
+            )
+        }.getOrNull()
+    }
+
+    private fun parseCommunityPoll(snap: DocumentSnapshot): LiveCommunityPoll? {
+        return runCatching {
+            val question = snap.getString("question") ?: return@runCatching null
+            @Suppress("UNCHECKED_CAST")
+            val rawOptions = snap.get("options") as? List<Map<String, Any?>> ?: emptyList()
+            val options = rawOptions.mapIndexedNotNull { idx, m ->
+                val label = m["label"] as? String ?: return@mapIndexedNotNull null
+                PollOptionItem(
+                    id = (m["id"] as? String) ?: "opt_$idx",
+                    label = label,
+                    votes = (m["votes"] as? Number)?.toInt() ?: 0
+                )
+            }
+            @Suppress("UNCHECKED_CAST")
+            val votedKeys = (snap.get("votedByKeys") as? List<String>) ?: emptyList()
+            LiveCommunityPoll(
+                id = snap.id,
+                question = question,
+                options = options,
+                votedByKeys = votedKeys,
+                active = snap.getBoolean("active") ?: true,
+                createdBy = snap.getString("createdBy") ?: "👑 ওনার",
+                createdAtMillis = (snap.get("createdAtMillis") as? Number)?.toLong() ?: 0L
             )
         }.getOrNull()
     }

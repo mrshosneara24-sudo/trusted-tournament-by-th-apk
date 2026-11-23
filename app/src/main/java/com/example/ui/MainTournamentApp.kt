@@ -206,6 +206,25 @@ fun MainTournamentApp(
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
     val badgeAppeals by viewModel.badgeAppeals.collectAsStateWithLifecycle()
     val moderationLogs by viewModel.moderationLogs.collectAsStateWithLifecycle()
+    val userPreferences by viewModel.userPreferences.collectAsStateWithLifecycle()
+    val promoCodes by viewModel.promoCodes.collectAsStateWithLifecycle()
+    val bonusDrops by viewModel.bonusDrops.collectAsStateWithLifecycle()
+    val communityPolls by viewModel.communityPolls.collectAsStateWithLifecycle()
+    val triviaProgress by viewModel.triviaProgress.collectAsStateWithLifecycle()
+
+    val currentActorKeys = remember(userProfile, registeredUsers) {
+        val matched = registeredUsers.firstOrNull {
+            (userProfile.phone.isNotBlank() && it.phone == userProfile.phone) ||
+                (userProfile.uid.isNotBlank() && it.uid == userProfile.uid) ||
+                (userProfile.ign.isNotBlank() && it.ign.equals(userProfile.ign, ignoreCase = true))
+        }
+        setOfNotNull(
+            matched?.id?.takeIf { it.isNotBlank() },
+            userProfile.phone.takeIf { it.isNotBlank() },
+            userProfile.uid.takeIf { it.isNotBlank() },
+            userProfile.ign.takeIf { it.isNotBlank() }
+        )
+    }
 
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -976,7 +995,14 @@ fun MainTournamentApp(
                                 onDailyStreakClick = { viewModel.openDailyStreak() },
                                 dailyMissions = dailyMissions,
                                 onClaimMission = { viewModel.claimMission(it) },
-                                appCustomization = appCustomization
+                                appCustomization = appCustomization,
+                                bonusDrops = bonusDrops,
+                                communityPolls = communityPolls,
+                                triviaProgress = triviaProgress,
+                                currentActorKeys = currentActorKeys,
+                                onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
+                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
+                                onAnswerTrivia = { idx -> viewModel.answerDailyTrivia(idx) }
                             )
                         }
 
@@ -998,7 +1024,9 @@ fun MainTournamentApp(
                                 matchesPlayed = userProfile.matchesPlayed,
                                 depositRequests = depositRequests,
                                 withdrawRequests = withdrawRequests,
-                                currentUserPhone = userProfile.phone
+                                currentUserPhone = userProfile.phone,
+                                promoCodes = promoCodes,
+                                onRedeemPromoCode = { code -> viewModel.redeemPromoCode(code) }
                             )
                         }
 
@@ -1032,7 +1060,12 @@ fun MainTournamentApp(
                                 onTogglePin = { msgId -> viewModel.togglePinGlobalChatMessage(msgId) },
                                 onDeleteMessage = { msgId -> viewModel.deleteGlobalChatMessage(msgId) },
                                 onReactMessage = { msgId, emoji -> viewModel.reactToGlobalChatMessage(msgId, emoji) },
-                                onPlayerProfileClick = { selectedPlayerProfileCard = it }
+                                onPlayerProfileClick = { selectedPlayerProfileCard = it },
+                                bonusDrops = bonusDrops,
+                                communityPolls = communityPolls,
+                                currentActorKeys = currentActorKeys,
+                                onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
+                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) }
                             )
                         }
 
@@ -1147,6 +1180,7 @@ fun MainTournamentApp(
             roomId = data.roomId,
             roomPassword = data.roomPassword,
             whatsAppUrl = officialWhatsAppUrl,
+            autoLaunchGame = userPreferences.autoLaunchGame,
             onDismiss = { viewModel.closeRoomDetails() }
         )
     }
@@ -1297,7 +1331,20 @@ fun MainTournamentApp(
             onPardonAll = { targetKey -> viewModel.pardonAllPunishments(targetKey) },
             appCustomization = appCustomization,
             onPublishAnnouncement = { title, message, urgent -> viewModel.publishAppAnnouncement(title, message, urgent) },
-            onClearAnnouncement = { viewModel.clearAppAnnouncement() }
+            onClearAnnouncement = { viewModel.clearAppAnnouncement() },
+            promoCodes = promoCodes,
+            bonusDrops = bonusDrops,
+            communityPolls = communityPolls,
+            onCreatePromoCode = { code, title, reward, maxUses -> viewModel.createPromoCode(code, title, reward, maxUses) },
+            onTogglePromoActive = { promoId, active -> viewModel.togglePromoCodeActive(promoId, active) },
+            onDeletePromoCode = { promoId -> viewModel.deletePromoCode(promoId) },
+            onLaunchBonusDrop = { title, sub, amount, boxes -> viewModel.launchBonusGiftDrop(title, sub, amount, boxes) },
+            onCloseBonusDrop = { dropId -> viewModel.closeBonusGiftDrop(dropId) },
+            onDeleteBonusDrop = { dropId -> viewModel.deleteBonusGiftDrop(dropId) },
+            onLaunchCommunityPoll = { q, opts -> viewModel.launchCommunityPoll(q, opts) },
+            onCloseCommunityPoll = { pollId -> viewModel.closeCommunityPoll(pollId) },
+            onDeleteCommunityPoll = { pollId -> viewModel.deleteCommunityPoll(pollId) },
+            onBroadcastMatchToChat = { matchId -> viewModel.broadcastMatchToGlobalChat(matchId) }
         )
     }
 
@@ -1329,6 +1376,11 @@ fun MainTournamentApp(
             onRejectDeposit = { reqId -> viewModel.rejectDepositRequest(reqId) },
             onApproveWithdraw = { reqId -> viewModel.approveWithdrawRequest(reqId) },
             onRejectWithdraw = { reqId -> viewModel.rejectWithdrawRequest(reqId) },
+            userPreferences = userPreferences,
+            onUpdateUserPreferences = { roomAlert, fiveMin, autoLaunch ->
+                viewModel.updateUserPreferences(roomAlert, fiveMin, autoLaunch)
+            },
+            onRefreshAppCache = { viewModel.refreshAppAndCloudState() },
             onResetAppForFreshDownload = { viewModel.resetAppForFreshDownload() }
         )
     }
@@ -1408,6 +1460,30 @@ fun MainTournamentApp(
             onAwardPlayerStats = { targetKey, kills, wins, matchesCount, prize, note ->
                 viewModel.awardKillPrizeAndStats(targetKey, kills, wins, matchesCount, prize, note)
             },
+            promoCodes = promoCodes,
+            bonusDrops = bonusDrops,
+            communityPolls = communityPolls,
+            strictRules = strictRules,
+            auditSummaryText = viewModel.buildOwnerAuditSummaryText(),
+            onCreatePromoCode = { code, title, reward, maxUses -> viewModel.createPromoCode(code, title, reward, maxUses) },
+            onTogglePromoActive = { promoId, active -> viewModel.togglePromoCodeActive(promoId, active) },
+            onDeletePromoCode = { promoId -> viewModel.deletePromoCode(promoId) },
+            onLaunchBonusDrop = { title, sub, amount, boxes -> viewModel.launchBonusGiftDrop(title, sub, amount, boxes) },
+            onCloseBonusDrop = { dropId -> viewModel.closeBonusGiftDrop(dropId) },
+            onDeleteBonusDrop = { dropId -> viewModel.deleteBonusGiftDrop(dropId) },
+            onLaunchCommunityPoll = { q, opts -> viewModel.launchCommunityPoll(q, opts) },
+            onCloseCommunityPoll = { pollId -> viewModel.closeCommunityPoll(pollId) },
+            onDeleteCommunityPoll = { pollId -> viewModel.deleteCommunityPoll(pollId) },
+            onBroadcastMatchToChat = { matchId -> viewModel.broadcastMatchToGlobalChat(matchId) },
+            onRefreshCloudState = { viewModel.refreshAppAndCloudState() },
+            onUpdateAppBranding = { name, tag, logo, ticker, ann -> viewModel.updateAppBranding(name, tag, logo, ticker, ann) },
+            onUpdateFinancialSettings = { bkash, nagad, wa, minW, maxW -> viewModel.updateFinancialSettings(bkash, nagad, wa, minW, maxW) },
+            onToggleMaintenanceMode = { enabled, msg -> viewModel.toggleMaintenanceMode(enabled, msg) },
+            onUpdateExistingMatch = { match -> viewModel.updateExistingMatch(match) },
+            onDeleteMatch = { matchId -> viewModel.deleteMatch(matchId) },
+            onAddStrictRule = { title, desc, penalty, emoji -> viewModel.addStrictRule(title, desc, penalty, emoji) },
+            onDeleteStrictRule = { ruleId -> viewModel.deleteStrictRule(ruleId) },
+            onResetDefaultRules = { viewModel.resetDefaultRules() },
             onResetAppForFreshDownload = { viewModel.resetAppForFreshDownload() }
         )
     }

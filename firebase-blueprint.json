@@ -276,6 +276,63 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["role", "createdAt"]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Promo / gift redeem code managed by Owner and Admins.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "rewardAmount": { "type": "integer" },
+        "maxUses": { "type": "integer" },
+        "usedCount": { "type": "integer" },
+        "claimedByUids": { "type": "array" },
+        "claimedByKeys": { "type": "array" },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "title", "rewardAmount", "maxUses", "usedCount", "claimedByUids", "claimedByKeys", "active", "createdBy", "createdAtMillis", "createdAt", "updatedAt"]
+    },
+    "BonusGiftDrop": {
+      "title": "BonusGiftDrop",
+      "description": "Real-time limited-box bonus gift drop for players.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "amountPerClaim": { "type": "integer" },
+        "totalBoxes": { "type": "integer" },
+        "claimedCount": { "type": "integer" },
+        "claimedByUids": { "type": "array" },
+        "claimedByKeys": { "type": "array" },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "subtitle", "amountPerClaim", "totalBoxes", "claimedCount", "claimedByUids", "claimedByKeys", "active", "createdBy", "createdAtMillis", "createdAt", "updatedAt"]
+    },
+    "LiveCommunityPoll": {
+      "title": "LiveCommunityPoll",
+      "description": "Real-time community poll for players to vote on matches and events.",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "options": { "type": "array" },
+        "votedByUids": { "type": "array" },
+        "votedByKeys": { "type": "array" },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["question", "options", "votedByUids", "votedByKeys", "active", "createdBy", "createdAtMillis", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -322,6 +379,18 @@
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminGrant" },
       "description": "Verified Owner/Admin role grants keyed by Firebase UID."
+    },
+    "/promo_codes/{codeId}": {
+      "schema": { "$ref": "#/entities/PromoCode" },
+      "description": "Redeemable wallet promo codes created by staff."
+    },
+    "/bonus_drops/{dropId}": {
+      "schema": { "$ref": "#/entities/BonusGiftDrop" },
+      "description": "Timed limited-box bonus drops for live players."
+    },
+    "/community_polls/{pollId}": {
+      "schema": { "$ref": "#/entities/LiveCommunityPoll" },
+      "description": "Live interactive community voting polls."
     }
   }
 }

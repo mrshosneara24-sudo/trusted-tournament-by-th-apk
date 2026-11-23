@@ -36,9 +36,16 @@ import java.util.UUID
 
 import com.example.model.AppCustomization
 import com.example.model.AppLogoOption
+import com.example.model.BonusGiftDrop
+import com.example.model.DailyTriviaProgress
+import com.example.model.FreeFireTriviaBank
+import com.example.model.LiveCommunityPoll
 import com.example.model.ModerationActionType
 import com.example.model.ModerationLogEntry
+import com.example.model.PollOptionItem
+import com.example.model.PromoCodeItem
 import com.example.model.TournamentRuleItem
+import com.example.model.UserPreferences
 
 class TournamentRepository(
     private val persistenceStore: AppPersistenceStore? = null,
@@ -430,6 +437,21 @@ class TournamentRepository(
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
+    private val _userPreferences = MutableStateFlow(UserPreferences())
+    val userPreferences: StateFlow<UserPreferences> = _userPreferences.asStateFlow()
+
+    private val _promoCodes = MutableStateFlow<List<PromoCodeItem>>(emptyList())
+    val promoCodes: StateFlow<List<PromoCodeItem>> = _promoCodes.asStateFlow()
+
+    private val _bonusDrops = MutableStateFlow<List<BonusGiftDrop>>(emptyList())
+    val bonusDrops: StateFlow<List<BonusGiftDrop>> = _bonusDrops.asStateFlow()
+
+    private val _communityPolls = MutableStateFlow<List<LiveCommunityPoll>>(emptyList())
+    val communityPolls: StateFlow<List<LiveCommunityPoll>> = _communityPolls.asStateFlow()
+
+    private val _triviaProgress = MutableStateFlow(DailyTriviaProgress())
+    val triviaProgress: StateFlow<DailyTriviaProgress> = _triviaProgress.asStateFlow()
+
     init {
         persistenceStore?.loadState()?.let { saved ->
             _isLoggedIn.value = saved.isLoggedIn
@@ -467,6 +489,11 @@ class TournamentRepository(
                 _globalChatMessages.value = saved.globalChatMessages
             }
             _moderationLogs.value = saved.moderationLogs
+            _userPreferences.value = saved.userPreferences
+            _promoCodes.value = saved.promoCodes
+            _bonusDrops.value = saved.bonusDrops
+            _communityPolls.value = saved.communityPolls
+            _triviaProgress.value = saved.triviaProgress
             // Sanitize legacy Owner clutter (e.g., level 68 / নতুন যোদ্ধা / demo loadout)
             _registeredUsers.value = _registeredUsers.value.map { user ->
                 if (user.role == UserRole.OWNER) {
@@ -664,6 +691,18 @@ class TournamentRepository(
                         saveState()
                     }
                 },
+                onPromoCodesSynced = { cloudPromos ->
+                    _promoCodes.value = cloudPromos
+                    saveState()
+                },
+                onBonusDropsSynced = { cloudDrops ->
+                    _bonusDrops.value = cloudDrops
+                    saveState()
+                },
+                onCommunityPollsSynced = { cloudPolls ->
+                    _communityPolls.value = cloudPolls
+                    saveState()
+                },
                 onSyncStateChanged = { connected, email, statusText ->
                     _isCloudConnected.value = connected
                     _cloudUserEmail.value = email
@@ -796,7 +835,12 @@ class TournamentRepository(
                 masterOwnerPin = masterOwnerPin,
                 badgeAppeals = _badgeAppeals.value,
                 globalChatMessages = _globalChatMessages.value,
-                moderationLogs = _moderationLogs.value
+                moderationLogs = _moderationLogs.value,
+                userPreferences = _userPreferences.value,
+                promoCodes = _promoCodes.value,
+                bonusDrops = _bonusDrops.value,
+                communityPolls = _communityPolls.value,
+                triviaProgress = _triviaProgress.value
             )
         )
     }
@@ -2010,37 +2054,6 @@ class TournamentRepository(
         matchBookings.forEach { cloudSync?.deleteBookingCloud(it.bookingId, matchId, 0) }
         updatedCancelledMatch?.let { cloudSync?.pushMatch(it) }
         return Pair(count, totalRefund)
-    }
-
-    fun loginAsDemoOwner(): Boolean {
-        _userProfile.value = UserProfile(
-            accountName = "তানভির হাসান (ওনার)",
-            phone = "01861583924",
-            email = "owner@trustedth.com",
-            ign = "TH★DEVIL⚡",
-            uid = "11410365896",
-            bkashNumber = "01861583924",
-            avatarId = "th_logo",
-            level = 0,
-            rankBadge = "অফিসিয়াল ওনার 👑",
-            matchesPlayed = 0,
-            totalWins = 0,
-            totalKills = 0,
-            totalEarnings = 0,
-            totalSpent = 0,
-            favoriteWeapon = "",
-            activeCharacter = "",
-            guildName = "TRUSTED TH",
-            playerRole = "অফিসিয়াল ওনার",
-            battleTagline = "TRUSTED TOURNAMENT BY TH-এর প্রতিষ্ঠাতা ও অফিসিয়াল ওনার 👑",
-            joinedDate = "১৫ অক্টো ২০২৬",
-            isLoggedIn = true,
-            role = UserRole.OWNER,
-            isBanned = false
-        )
-        _isLoggedIn.value = true
-        saveState()
-        return true
     }
 
     fun addMoneyWithBkash(amount: Int, bkashNumber: String, trxId: String) {
@@ -4162,6 +4175,10 @@ class TournamentRepository(
             )
         )
         _globalChatMessages.value = defaultGlobalChatMessages()
+        _promoCodes.value = emptyList()
+        _bonusDrops.value = emptyList()
+        _communityPolls.value = emptyList()
+        _triviaProgress.value = DailyTriviaProgress()
         resetAiChat()
         _isLoggedIn.value = false
         cloudSync?.resetCloudCollectionForFreshDownload(
@@ -4170,6 +4187,450 @@ class TournamentRepository(
             defaultRules = defaultRules,
             ownerUser = ownerUser
         )
+    }
+
+    // ==================== USER PREFERENCES & REAL REFRESH ====================
+
+    fun updateUserPreferences(
+        roomAlertNotification: Boolean = _userPreferences.value.roomAlertNotification,
+        fiveMinReminder: Boolean = _userPreferences.value.fiveMinReminder,
+        autoLaunchGame: Boolean = _userPreferences.value.autoLaunchGame
+    ) {
+        _userPreferences.value = UserPreferences(
+            roomAlertNotification = roomAlertNotification,
+            fiveMinReminder = fiveMinReminder,
+            autoLaunchGame = autoLaunchGame
+        )
+        saveState()
+    }
+
+    fun refreshAppAndCloudState(): String {
+        checkAndClearExpiredModeration()
+        rebuildLiveLeaderboard()
+        saveState()
+        val sync = cloudSync
+        return if (sync != null && sync.isSignedInCloud()) {
+            sync.detachListeners()
+            startCloudSync()
+            pushActiveUserToCloud()
+            "🔄 লাইভ ক্লাউড সিঙ্ক, লিডারবোর্ড ও ডেটা রিফ্রেশ হয়েছে!"
+        } else {
+            "🔄 লোকাল ডেটা ও লাইভ লিডারবোর্ড রিফ্রেশ হয়েছে!"
+        }
+    }
+
+    private fun currentActorKey(): String {
+        val p = _userProfile.value
+        val matched = _registeredUsers.value.firstOrNull {
+            (p.phone.isNotBlank() && it.phone == p.phone) ||
+                (p.uid.isNotBlank() && it.uid == p.uid)
+        }
+        return matched?.id?.ifBlank { p.phone.ifBlank { p.uid } }
+            ?: p.phone.ifBlank { p.uid.ifBlank { p.ign } }
+    }
+
+    private fun currentStaffLabel(): String {
+        val p = _userProfile.value
+        return when (p.role) {
+            UserRole.OWNER -> "👑 ওনার (${p.ign.ifBlank { "TH" }})"
+            UserRole.ADMIN -> "🛡️ অ্যাডমিন (${p.ign.ifBlank { "Staff" }})"
+            UserRole.PLAYER -> p.ign.ifBlank { "Player" }
+        }
+    }
+
+    // ==================== PROMO / GIFT REDEEM CODES ====================
+
+    fun createPromoCode(
+        code: String,
+        title: String,
+        rewardAmount: Int,
+        maxUses: Int
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন প্রোমো কোড তৈরি করতে পারবেন!"
+        }
+        val cleanCode = code.trim().uppercase().replace(" ", "")
+        if (cleanCode.length < 3 || cleanCode.length > 25) {
+            return false to "❌ প্রোমো কোড ৩ থেকে ২৫ অক্ষরের মধ্যে হতে হবে!"
+        }
+        if (rewardAmount !in 1..500) {
+            return false to "❌ পুরস্কার ৳১ থেকে ৳৫০০-এর মধ্যে হতে হবে!"
+        }
+        if (maxUses !in 1..1000) {
+            return false to "❌ ব্যবহারের সীমা ১ থেকে ১০০০ জন হতে হবে!"
+        }
+        if (_promoCodes.value.any { it.code.equals(cleanCode, ignoreCase = true) }) {
+            return false to "❌ '$cleanCode' কোডটি ইতিমধ্যেই চালু আছে!"
+        }
+        val promo = PromoCodeItem(
+            id = "promo_${System.currentTimeMillis()}",
+            code = cleanCode,
+            title = title.trim().ifBlank { "🎁 স্পেশাল গিফট প্রোমো" },
+            rewardAmount = rewardAmount,
+            maxUses = maxUses,
+            usedCount = 0,
+            claimedByKeys = emptyList(),
+            active = true,
+            createdBy = currentStaffLabel(),
+            createdAtMillis = System.currentTimeMillis()
+        )
+        _promoCodes.value = listOf(promo) + _promoCodes.value
+        saveState()
+        cloudSync?.pushPromoCode(promo)
+        return true to "🎟️ '$cleanCode' (৳$rewardAmount • $maxUses জন) প্রোমো কোড লাইভ হয়েছে!"
+    }
+
+    fun togglePromoCodeActive(promoId: String, active: Boolean): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন পরিবর্তন করতে পারবেন!"
+        }
+        var updatedPromo: PromoCodeItem? = null
+        _promoCodes.value = _promoCodes.value.map { p ->
+            if (p.id == promoId) p.copy(active = active).also { updatedPromo = it } else p
+        }
+        val target = updatedPromo ?: return false to "❌ প্রোমো কোডটি পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.pushPromoCode(target)
+        return true to if (active) "✅ ${target.code} পুনরায় চালু হয়েছে!" else "⏸️ ${target.code} বন্ধ করা হয়েছে!"
+    }
+
+    fun deletePromoCode(promoId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন মুছতে পারবেন!"
+        }
+        val before = _promoCodes.value.size
+        _promoCodes.value = _promoCodes.value.filter { it.id != promoId }
+        if (_promoCodes.value.size == before) return false to "❌ কোডটি পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.deletePromoCodeCloud(promoId)
+        return true to "🗑️ প্রোমো কোডটি মুছে ফেলা হয়েছে।"
+    }
+
+    fun redeemPromoCode(rawCode: String): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
+        val profile = _userProfile.value
+        if (!profile.isLoggedIn) return false to "❌ আগে অ্যাকাউন্টে লগইন করুন!"
+        if (profile.isBanned) return false to "🚫 আপনার অ্যাকাউন্ট ব্যান থাকায় রিডিম করা যাবে না!"
+        if (isActiveUserTimedOut()) return false to "⏳ টাইমআউট শেষ না হওয়া পর্যন্ত রিডিম করা যাবে না!"
+        if (profile.isWalletFrozen) return false to "❄️ আপনার ওয়ালেট ফ্রিজ করা আছে!"
+        if (profile.isRewardBlocked) return false to "🔒 আপনার অ্যাকাউন্টে বোনাস রিডিম ব্লক করা আছে!"
+
+        val cleanCode = rawCode.trim().uppercase().replace(" ", "")
+        if (cleanCode.isBlank()) return false to "🎟️ দয়া করে একটি প্রোমো কোড লিখুন!"
+
+        val promo = _promoCodes.value.firstOrNull { it.code.equals(cleanCode, ignoreCase = true) }
+            ?: return false to "❌ '$cleanCode' সঠিক প্রোমো কোড নয় বা মেয়াদ শেষ!"
+        if (!promo.active) return false to "⏸️ '$cleanCode' প্রোমো কোডটি বর্তমানে বন্ধ রয়েছে!"
+        if (promo.isExhausted) return false to "💨 '$cleanCode' কোডের সবগুলো ক্লেইম শেষ হয়ে গেছে!"
+
+        val actorKey = currentActorKey()
+        if (actorKey in promo.claimedByKeys) {
+            return false to "⚠️ আপনি ইতিমধ্যেই '$cleanCode' কোডটি ব্যবহার করেছেন!"
+        }
+
+        val updatedPromo = promo.copy(
+            usedCount = promo.usedCount + 1,
+            claimedByKeys = promo.claimedByKeys + actorKey
+        )
+        _promoCodes.value = _promoCodes.value.map { if (it.id == promo.id) updatedPromo else it }
+        _walletBalance.value += promo.rewardAmount
+
+        val tx = WalletTransaction(
+            id = UUID.randomUUID().toString(),
+            title = "🎟️ প্রোমো রিডিম (${promo.code})",
+            amount = promo.rewardAmount,
+            isCredit = true,
+            timeAgo = "এইমাত্র",
+            statusText = "${promo.title} • +৳${promo.rewardAmount} ওয়ালেটে যুক্ত",
+            paymentMethod = "Promo Redeem",
+            category = TransactionCategory.PRIZE_WIN,
+            trxId = promo.code,
+            userPhone = profile.phone
+        )
+        _transactions.value = listOf(tx) + _transactions.value
+        syncActiveUserToRegistry()
+        cloudSync?.claimPromoCodeCloud(updatedPromo, actorKey)
+        return true to "🎉 অভিনন্দন! '${promo.code}' রিডিম করে +৳${promo.rewardAmount} ওয়ালেটে পেয়েছেন!"
+    }
+
+    // ==================== LIVE BONUS GIFT DROPS (বোনাস রেইন) ====================
+
+    fun launchBonusGiftDrop(
+        title: String,
+        subtitle: String,
+        amountPerClaim: Int,
+        totalBoxes: Int
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন বোনাস ড্রপ চালু করতে পারবেন!"
+        }
+        val cleanTitle = title.trim().ifBlank { "🎁 লাইভ বোনাস গিফট বক্স!" }
+        if (amountPerClaim !in 1..200) return false to "❌ প্রতি বক্সে পুরস্কার ৳১ থেকে ৳২০০ হতে হবে!"
+        if (totalBoxes !in 1..500) return false to "❌ মোট বক্স ১ থেকে ৫০০টি হতে হবে!"
+
+        val drop = BonusGiftDrop(
+            id = "drop_${System.currentTimeMillis()}",
+            title = cleanTitle,
+            subtitle = subtitle.trim().ifBlank { "আগে আসলে আগে পাবেন • দ্রুত ক্লেইম বাটনে চাপুন!" },
+            amountPerClaim = amountPerClaim,
+            totalBoxes = totalBoxes,
+            claimedCount = 0,
+            claimedByKeys = emptyList(),
+            active = true,
+            createdBy = currentStaffLabel(),
+            createdAtMillis = System.currentTimeMillis()
+        )
+        _bonusDrops.value = listOf(drop) + _bonusDrops.value
+        saveState()
+        cloudSync?.pushBonusDrop(drop)
+        return true to "🎁 '$cleanTitle' ($totalBoxes টি বক্স x ৳$amountPerClaim) সব প্লেয়ারের স্ক্রিনে লাইভ হয়েছে!"
+    }
+
+    fun claimBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
+        val profile = _userProfile.value
+        if (!profile.isLoggedIn) return false to "❌ আগে অ্যাকাউন্টে লগইন করুন!"
+        if (profile.isBanned) return false to "🚫 ব্যানকৃত অ্যাকাউন্ট দিয়ে বোনাস নেওয়া যাবে না!"
+        if (isActiveUserTimedOut()) return false to "⏳ টাইমআউট চলাকালীন বোনাস নেওয়া যাবে না!"
+        if (profile.isWalletFrozen || profile.isRewardBlocked) {
+            return false to "🔒 আপনার অ্যাকাউন্টে বোনাস গ্রহণ সীমিত রয়েছে!"
+        }
+
+        val drop = _bonusDrops.value.firstOrNull { it.id == dropId }
+            ?: return false to "❌ গিফট ড্রপটি পাওয়া যায়নি!"
+        if (!drop.active) return false to "⏸️ এই গিফট ড্রপটি শেষ হয়ে গেছে!"
+        if (drop.isSoldOut) return false to "💨 দুঃখিত! সবগুলো বোনাস বক্স অন্যরা ক্লেইম করে ফেলেছে!"
+
+        val actorKey = currentActorKey()
+        if (actorKey in drop.claimedByKeys) {
+            return false to "✅ আপনি এই গিফট ড্রপ থেকে ইতিমধ্যেই ৳${drop.amountPerClaim} ক্লেইম করেছেন!"
+        }
+
+        val updatedDrop = drop.copy(
+            claimedCount = drop.claimedCount + 1,
+            claimedByKeys = drop.claimedByKeys + actorKey
+        )
+        _bonusDrops.value = _bonusDrops.value.map { if (it.id == drop.id) updatedDrop else it }
+        _walletBalance.value += drop.amountPerClaim
+
+        val tx = WalletTransaction(
+            id = UUID.randomUUID().toString(),
+            title = "🎁 লাইভ বোনাস ড্রপ (${drop.title})",
+            amount = drop.amountPerClaim,
+            isCredit = true,
+            timeAgo = "এইমাত্র",
+            statusText = "${drop.createdBy}-এর বোনাস রেইন থেকে +৳${drop.amountPerClaim}",
+            paymentMethod = "Live Gift Drop",
+            category = TransactionCategory.PRIZE_WIN,
+            userPhone = profile.phone
+        )
+        _transactions.value = listOf(tx) + _transactions.value
+        syncActiveUserToRegistry()
+        cloudSync?.claimBonusDropCloud(drop.id, actorKey)
+        return true to "🎉 বুম! গিফট বক্স খুলে +৳${drop.amountPerClaim} ওয়ালেটে পেয়েছেন!"
+    }
+
+    fun closeBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন ড্রপ বন্ধ করতে পারবেন!"
+        }
+        var target: BonusGiftDrop? = null
+        _bonusDrops.value = _bonusDrops.value.map { d ->
+            if (d.id == dropId) d.copy(active = false).also { target = it } else d
+        }
+        val closed = target ?: return false to "❌ ড্রপটি পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.pushBonusDrop(closed)
+        return true to "⏸️ '${closed.title}' গিফট ড্রপ বন্ধ করা হয়েছে।"
+    }
+
+    fun deleteBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন মুছতে পারবেন!"
+        }
+        _bonusDrops.value = _bonusDrops.value.filter { it.id != dropId }
+        saveState()
+        cloudSync?.deleteBonusDropCloud(dropId)
+        return true to "🗑️ গিফট ড্রপটি মুছে ফেলা হয়েছে।"
+    }
+
+    // ==================== LIVE COMMUNITY POLLS ====================
+
+    fun launchCommunityPoll(
+        question: String,
+        optionLabels: List<String>
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন পোল চালু করতে পারবেন!"
+        }
+        val cleanQuestion = question.trim()
+        val cleanOptions = optionLabels.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(4)
+        if (cleanQuestion.length < 3) return false to "❌ পোলের প্রশ্ন কমপক্ষে ৩ অক্ষরের হতে হবে!"
+        if (cleanOptions.size < 2) return false to "❌ কমপক্ষে ২টি অপশন দিন!"
+
+        val poll = LiveCommunityPoll(
+            id = "poll_${System.currentTimeMillis()}",
+            question = cleanQuestion,
+            options = cleanOptions.mapIndexed { idx, label ->
+                PollOptionItem(id = "opt_${idx + 1}", label = label, votes = 0)
+            },
+            votedByKeys = emptyList(),
+            active = true,
+            createdBy = currentStaffLabel(),
+            createdAtMillis = System.currentTimeMillis()
+        )
+        _communityPolls.value = listOf(poll) + _communityPolls.value
+        saveState()
+        cloudSync?.pushCommunityPoll(poll)
+        return true to "📊 লাইভ কমিউনিটি পোল সবার কাছে প্রকাশিত হয়েছে!"
+    }
+
+    fun voteCommunityPoll(pollId: String, optionId: String): Pair<Boolean, String> {
+        val profile = _userProfile.value
+        if (!profile.isLoggedIn) return false to "❌ ভোট দিতে আগে লগইন করুন!"
+        if (profile.isBanned) return false to "🚫 ব্যানকৃত অ্যাকাউন্ট ভোট দিতে পারবে না!"
+
+        val poll = _communityPolls.value.firstOrNull { it.id == pollId }
+            ?: return false to "❌ পোলটি খুঁজে পাওয়া যায়নি!"
+        if (!poll.active) return false to "⏸️ এই পোলের ভোটগ্রহণ শেষ হয়ে গেছে!"
+
+        val actorKey = currentActorKey()
+        if (actorKey in poll.votedByKeys) {
+            return false to "✅ আপনি এই পোলে ইতিমধ্যেই ভোট দিয়েছেন!"
+        }
+        if (poll.options.none { it.id == optionId }) {
+            return false to "❌ অপশনটি সঠিক নয়!"
+        }
+
+        val updatedPoll = poll.copy(
+            options = poll.options.map { opt ->
+                if (opt.id == optionId) opt.copy(votes = opt.votes + 1) else opt
+            },
+            votedByKeys = poll.votedByKeys + actorKey
+        )
+        _communityPolls.value = _communityPolls.value.map { if (it.id == poll.id) updatedPoll else it }
+        saveState()
+        cloudSync?.voteCommunityPollCloud(poll.id, optionId, actorKey)
+        return true to "🗳️ আপনার ভোট সফলভাবে যুক্ত হয়েছে!"
+    }
+
+    fun closeCommunityPoll(pollId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন পোল বন্ধ করতে পারবেন!"
+        }
+        var target: LiveCommunityPoll? = null
+        _communityPolls.value = _communityPolls.value.map { p ->
+            if (p.id == pollId) p.copy(active = false).also { target = it } else p
+        }
+        val closed = target ?: return false to "❌ পোলটি পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.pushCommunityPoll(closed)
+        return true to "⏸️ পোলটি বন্ধ করা হয়েছে।"
+    }
+
+    fun deleteCommunityPoll(pollId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন মুছতে পারবেন!"
+        }
+        _communityPolls.value = _communityPolls.value.filter { it.id != pollId }
+        saveState()
+        cloudSync?.deleteCommunityPollCloud(pollId)
+        return true to "🗑️ পোলটি মুছে ফেলা হয়েছে।"
+    }
+
+    // ==================== DAILY FREE FIRE TRIVIA CHALLENGE ====================
+
+    fun answerDailyTrivia(selectedIndex: Int): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
+        val profile = _userProfile.value
+        if (!profile.isLoggedIn) return false to "❌ খেলতে আগে লগইন করুন!"
+        if (profile.isBanned) return false to "🚫 ব্যানকৃত অ্যাকাউন্টে ট্রিভিয়া বন্ধ আছে!"
+
+        val today = FreeFireTriviaBank.todayDateKey()
+        val progress = _triviaProgress.value
+        if (progress.lastAttemptDateKey == today) {
+            return false to "🧠 আজকের ডেইলি ফ্রি ফায়ার কুইজ ইতিমধ্যেই খেলা হয়েছে! আগামীকাল আবার আসুন।"
+        }
+
+        val question = FreeFireTriviaBank.questionForDay(progress.currentQuestionIndex)
+        if (selectedIndex !in question.options.indices) {
+            return false to "❌ সঠিক অপশন নির্বাচন করুন!"
+        }
+
+        val isCorrect = selectedIndex == question.correctIndex
+        val updatedCorrectCount = progress.totalCorrectCount + if (isCorrect) 1 else 0
+
+        _triviaProgress.value = DailyTriviaProgress(
+            lastAttemptDateKey = today,
+            lastAnsweredCorrectly = isCorrect,
+            lastSelectedOption = selectedIndex,
+            totalCorrectCount = updatedCorrectCount,
+            currentQuestionIndex = (progress.currentQuestionIndex + 1) % FreeFireTriviaBank.questions.size
+        )
+        saveState()
+
+        return if (isCorrect) {
+            true to "🎉 দারুণ! একদম সঠিক উত্তর দিয়েছেন! (মোট সঠিক: ${updatedCorrectCount}টি)"
+        } else {
+            false to "❌ ভুল উত্তর! সঠিক উত্তর ছিল: ${question.options[question.correctIndex]}"
+        }
+    }
+
+    // ==================== OWNER AUDIT & GLOBAL MATCH BROADCAST ====================
+
+    fun broadcastMatchToGlobalChat(matchId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন ম্যাচ ব্রডকাস্ট করতে পারবেন!"
+        }
+        val match = _matches.value.firstOrNull { it.id == matchId }
+            ?: return false to "❌ ম্যাচটি খুঁজে পাওয়া যায়নি!"
+        val spotsLeft = (match.totalSlots - match.bookedSlots).coerceAtLeast(0)
+        val roomHint = if (!match.roomId.isNullOrBlank()) {
+            "\n🔑 রুম আইডি প্রকাশিত হয়েছে — যারা স্লট নিয়েছেন রুম ডিটেইলস দেখুন!"
+        } else {
+            "\n🔥 মাত্র $spotsLeft টি স্লট বাকি! এখনই ম্যাচ লিস্ট থেকে জয়েন করুন!"
+        }
+        val msgText = "📢 [ম্যাচ অ্যালার্ট] ${match.title} • ${match.mapName}\n⏰ সময়: ${match.matchDateTime} | এন্ট্রি: ৳${match.entryFee} | প্রাইজ: ৳${match.totalPrize}$roomHint"
+        return sendGlobalChatMessage(
+            text = msgText,
+            replyToId = null,
+            pinAnnouncement = true
+        )
+    }
+
+    fun buildOwnerAuditSummaryText(): String {
+        val users = _registeredUsers.value
+        val playerWalletSum = users.sumOf { it.walletBalance }
+        val totalDepositsApproved = _depositRequests.value.filter { it.status == RequestStatus.APPROVED }.sumOf { it.amount }
+        val totalWithdrawsApproved = _withdrawRequests.value.filter { it.status == RequestStatus.APPROVED }.sumOf { it.amount }
+        val pendingDeps = _depositRequests.value.count { it.status == RequestStatus.PENDING }
+        val pendingWdrs = _withdrawRequests.value.count { it.status == RequestStatus.PENDING }
+        val pendingAppeals = _badgeAppeals.value.count { it.status == AppealStatus.PENDING }
+        val bannedCount = users.count { it.isBanned }
+        val bookedSlotsTotal = _matches.value.sumOf { it.bookedSlots }
+        val promoClaims = _promoCodes.value.sumOf { it.usedCount }
+        val dropClaims = _bonusDrops.value.sumOf { it.claimedCount }
+        return buildString {
+            appendLine("📊 ${_appCustomization.value.appName} — লাইভ অডিট রিপোর্ট")
+            appendLine("👥 মোট ইউজার: ${users.size} জন (ব্যান: $bannedCount জন)")
+            appendLine("🎮 সক্রিয় ম্যাচ: ${_matches.value.size} টি | মোট বুকড স্লট: $bookedSlotsTotal টি")
+            appendLine("💰 সব প্লেয়ারের মোট ওয়ালেট: ৳$playerWalletSum")
+            appendLine("📥 অ্যাপ্রুভড ডিপোজিট: ৳$totalDepositsApproved (পেন্ডিং: $pendingDeps টি)")
+            appendLine("📤 অ্যাপ্রুভড উইথড্র: ৳$totalWithdrawsApproved (পেন্ডিং: $pendingWdrs টি)")
+            appendLine("🏅 পেন্ডিং ব্যাজ আপিল: $pendingAppeals টি")
+            appendLine("🎟️ প্রোমো ক্লেইম: $promoClaims বার | 🎁 বোনাস ড্রপ ক্লেইম: $dropClaims বার")
+            append("🌐 ক্লাউড সিঙ্ক: ${if (_isCloudConnected.value) "চালু (${_cloudUserEmail.value})" else "অফলাইন/বন্ধ"}")
+        }
     }
 }
 

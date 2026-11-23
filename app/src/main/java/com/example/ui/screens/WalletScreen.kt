@@ -55,11 +55,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.DepositRequest
+import com.example.model.PromoCodeItem
 import com.example.model.RequestStatus
 import com.example.model.TransactionCategory
 import com.example.model.WalletTransaction
 import com.example.model.WithdrawRequest
 import com.example.ui.components.PaymentReceiptDialog
+import com.example.ui.components.PromoCodeRedeemCard
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
@@ -85,6 +87,8 @@ fun WalletScreen(
     depositRequests: List<DepositRequest> = emptyList(),
     withdrawRequests: List<WithdrawRequest> = emptyList(),
     currentUserPhone: String = "",
+    promoCodes: List<PromoCodeItem> = emptyList(),
+    onRedeemPromoCode: (String) -> Pair<Boolean, String> = { false to "" },
     modifier: Modifier = Modifier
 ) {
     var selectedCategory by remember { mutableStateOf(TransactionCategory.ALL) }
@@ -324,6 +328,14 @@ fun WalletScreen(
                     }
                 }
             }
+        }
+
+        // Promo / Gift Redeem Card
+        item {
+            PromoCodeRedeemCard(
+                activePromoCount = promoCodes.count { it.active && !it.isExhausted },
+                onRedeemCode = onRedeemPromoCode
+            )
         }
 
         // Deposit & Withdraw System Guide Card

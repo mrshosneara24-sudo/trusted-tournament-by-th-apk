@@ -10,20 +10,25 @@ import com.example.model.AppLogoOption
 import com.example.model.AppUser
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.BonusGiftDrop
 import com.example.model.ChatMessage
 import com.example.model.DailyGamerMission
 import com.example.model.DailyStreakInfo
+import com.example.model.DailyTriviaProgress
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
+import com.example.model.LiveCommunityPoll
 import com.example.model.MatchResult
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
+import com.example.model.PromoCodeItem
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
 import com.example.model.TournamentMatch
 import com.example.model.TournamentRuleItem
+import com.example.model.UserPreferences
 import com.example.model.UserProfile
 import com.example.model.UserRole
 import com.example.model.WalletPaymentMethod
@@ -105,6 +110,11 @@ class TournamentViewModel(
     val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
     val badgeAppeals: StateFlow<List<BadgeAppeal>> = repository.badgeAppeals
     val moderationLogs: StateFlow<List<ModerationLogEntry>> = repository.moderationLogs
+    val userPreferences: StateFlow<UserPreferences> = repository.userPreferences
+    val promoCodes: StateFlow<List<PromoCodeItem>> = repository.promoCodes
+    val bonusDrops: StateFlow<List<BonusGiftDrop>> = repository.bonusDrops
+    val communityPolls: StateFlow<List<LiveCommunityPoll>> = repository.communityPolls
+    val triviaProgress: StateFlow<DailyTriviaProgress> = repository.triviaProgress
 
     // Dialog States (updated synchronously on open/close and kept reactively synced with repository.matches)
     private val _bookingMatchId = MutableStateFlow<String?>(null)
@@ -689,14 +699,6 @@ class TournamentViewModel(
         return result
     }
 
-    fun loginAsDemoOwner(): Boolean {
-        val success = repository.loginAsDemoOwner()
-        if (success) {
-            _snackbarMessage.value = "👑 ওনার তানভির হাসান হিসেবে সফলভাবে লগইন হয়েছে!"
-        }
-        return success
-    }
-
     fun updateProfile(
         accountName: String,
         newIgn: String,
@@ -1179,5 +1181,105 @@ class TournamentViewModel(
         _currentTab.value = TournamentTab.MATCHES
         _snackbarMessage.value = "🔄 অ্যাপ সম্পূর্ণ ফ্রেশ ডাউনলোড অবস্থায় রিসেট করা হয়েছে!"
     }
+
+    fun updateUserPreferences(
+        roomAlertNotification: Boolean = userPreferences.value.roomAlertNotification,
+        fiveMinReminder: Boolean = userPreferences.value.fiveMinReminder,
+        autoLaunchGame: Boolean = userPreferences.value.autoLaunchGame
+    ) {
+        repository.updateUserPreferences(roomAlertNotification, fiveMinReminder, autoLaunchGame)
+    }
+
+    fun refreshAppAndCloudState(): String {
+        val msg = repository.refreshAppAndCloudState()
+        _snackbarMessage.value = msg
+        return msg
+    }
+
+    fun createPromoCode(code: String, title: String, rewardAmount: Int, maxUses: Int): Pair<Boolean, String> {
+        val res = repository.createPromoCode(code, title, rewardAmount, maxUses)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun togglePromoCodeActive(promoId: String, active: Boolean): Pair<Boolean, String> {
+        val res = repository.togglePromoCodeActive(promoId, active)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deletePromoCode(promoId: String): Pair<Boolean, String> {
+        val res = repository.deletePromoCode(promoId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun redeemPromoCode(rawCode: String): Pair<Boolean, String> {
+        val res = repository.redeemPromoCode(rawCode)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun launchBonusGiftDrop(title: String, subtitle: String, amountPerClaim: Int, totalBoxes: Int): Pair<Boolean, String> {
+        val res = repository.launchBonusGiftDrop(title, subtitle, amountPerClaim, totalBoxes)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun claimBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        val res = repository.claimBonusGiftDrop(dropId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun closeBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        val res = repository.closeBonusGiftDrop(dropId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deleteBonusGiftDrop(dropId: String): Pair<Boolean, String> {
+        val res = repository.deleteBonusGiftDrop(dropId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun launchCommunityPoll(question: String, optionLabels: List<String>): Pair<Boolean, String> {
+        val res = repository.launchCommunityPoll(question, optionLabels)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun voteCommunityPoll(pollId: String, optionId: String): Pair<Boolean, String> {
+        val res = repository.voteCommunityPoll(pollId, optionId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun closeCommunityPoll(pollId: String): Pair<Boolean, String> {
+        val res = repository.closeCommunityPoll(pollId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deleteCommunityPoll(pollId: String): Pair<Boolean, String> {
+        val res = repository.deleteCommunityPoll(pollId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun answerDailyTrivia(selectedIndex: Int): Pair<Boolean, String> {
+        val res = repository.answerDailyTrivia(selectedIndex)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun broadcastMatchToGlobalChat(matchId: String): Pair<Boolean, String> {
+        val res = repository.broadcastMatchToGlobalChat(matchId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun buildOwnerAuditSummaryText(): String = repository.buildOwnerAuditSummaryText()
 }
 

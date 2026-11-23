@@ -78,6 +78,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppCustomization
 import com.example.model.DepositRequest
 import com.example.model.RequestStatus
+import com.example.model.UserPreferences
 import com.example.model.WithdrawRequest
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
@@ -113,14 +114,14 @@ fun SettingsDialog(
     onRejectDeposit: (requestId: String) -> Boolean = { false },
     onApproveWithdraw: (requestId: String) -> Boolean = { false },
     onRejectWithdraw: (requestId: String) -> Boolean = { false },
+    userPreferences: UserPreferences = UserPreferences(),
+    onUpdateUserPreferences: (roomAlert: Boolean, fiveMin: Boolean, autoLaunch: Boolean) -> Unit = { _, _, _ -> },
+    onRefreshAppCache: () -> String = { "অ্যাপ ও ক্লাউড ক্যাশে রিফ্রেশ সম্পন্ন!" },
     onResetAppForFreshDownload: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    var roomAlertNotification by remember { mutableStateOf(true) }
-    var fiveMinReminder by remember { mutableStateOf(true) }
-    var autoLaunchGame by remember { mutableStateOf(true) }
     var showFreshResetConfirm by remember { mutableStateOf(false) }
 
     val userDeposits = remember(depositRequests, currentUserPhone) {
@@ -547,8 +548,14 @@ fun SettingsDialog(
                             icon = Icons.Filled.NotificationsActive,
                             title = "রুম আইডি ও পাসওয়ার্ড অ্যালার্ট",
                             subtitle = "অ্যাডমিন রুম দিলে সাথে সাথে সাউন্ড নোটিফিকেশন",
-                            checked = roomAlertNotification,
-                            onCheckedChange = { roomAlertNotification = it }
+                            checked = userPreferences.roomAlertNotification,
+                            onCheckedChange = {
+                                onUpdateUserPreferences(
+                                    it,
+                                    userPreferences.fiveMinReminder,
+                                    userPreferences.autoLaunchGame
+                                )
+                            }
                         )
 
                         HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 8.dp))
@@ -557,8 +564,14 @@ fun SettingsDialog(
                             icon = Icons.Filled.Bolt,
                             title = "ম্যাচ শুরু হওয়ার ৫ মিনিট আগের অ্যালার্ট",
                             subtitle = "কাস্টম রুমে জয়েন করার আগাম রিমাইন্ডার",
-                            checked = fiveMinReminder,
-                            onCheckedChange = { fiveMinReminder = it }
+                            checked = userPreferences.fiveMinReminder,
+                            onCheckedChange = {
+                                onUpdateUserPreferences(
+                                    userPreferences.roomAlertNotification,
+                                    it,
+                                    userPreferences.autoLaunchGame
+                                )
+                            }
                         )
 
                         HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 8.dp))
@@ -567,8 +580,14 @@ fun SettingsDialog(
                             icon = Icons.Filled.SportsEsports,
                             title = "অটো ফ্রি ফায়ার ওপেন",
                             subtitle = "রুম আইডি কপি করার পর স্বয়ংক্রিয়ভাবে ফ্রি ফায়ার লঞ্চ",
-                            checked = autoLaunchGame,
-                            onCheckedChange = { autoLaunchGame = it }
+                            checked = userPreferences.autoLaunchGame,
+                            onCheckedChange = {
+                                onUpdateUserPreferences(
+                                    userPreferences.roomAlertNotification,
+                                    userPreferences.fiveMinReminder,
+                                    it
+                                )
+                            }
                         )
                     }
                 }
@@ -844,15 +863,19 @@ fun SettingsDialog(
 
                         Button(
                             onClick = {
-                                Toast.makeText(context, "অ্যাপ ক্যাশে ও মেমোরি রিফ্রেশ সম্পন্ন!", Toast.LENGTH_SHORT).show()
+                                val msg = onRefreshAppCache()
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("settings_refresh_cache_btn"),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = DarkElevated)
                         ) {
-                            Icon(imageVector = Icons.Filled.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextPrimary)
+                            Icon(imageVector = Icons.Filled.CleaningServices, contentDescription = "Refresh App Cache", modifier = Modifier.size(16.dp), tint = TextPrimary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("অ্যাপ ক্যাশে রিফ্রেশ করুন", fontSize = 12.sp, color = TextPrimary)
+                            Text("অ্যাপ ক্যাশে ও লাইভ ডাটা রিফ্রেশ করুন", fontSize = 12.sp, color = TextPrimary)
                         }
 
                         if (isOwner) {

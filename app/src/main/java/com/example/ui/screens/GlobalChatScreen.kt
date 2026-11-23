@@ -68,9 +68,13 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.AppUser
 import com.example.model.BadgeType
+import com.example.model.BonusGiftDrop
 import com.example.model.GlobalChatMessage
+import com.example.model.LiveCommunityPoll
 import com.example.model.UserProfile
 import com.example.model.UserRole
+import com.example.ui.components.LiveBonusDropBannerCard
+import com.example.ui.components.LiveCommunityPollCard
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.getBadgeDrawableRes
@@ -118,6 +122,11 @@ fun GlobalChatScreen(
     onDeleteMessage: (messageId: String) -> Pair<Boolean, String>,
     onReactMessage: (messageId: String, emoji: String) -> Boolean,
     onPlayerProfileClick: (PlayerProfileCardData) -> Unit,
+    bonusDrops: List<BonusGiftDrop> = emptyList(),
+    communityPolls: List<LiveCommunityPoll> = emptyList(),
+    currentActorKeys: Set<String> = emptySet(),
+    onClaimBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onVoteCommunityPoll: (String, String) -> Pair<Boolean, String> = { _, _ -> false to "" },
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
@@ -334,6 +343,33 @@ fun GlobalChatScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // Live Bonus Drops & Polls directly inside Global Chat
+        val activeChatDrops = bonusDrops.filter { it.active }
+        val activeChatPolls = communityPolls.filter { it.active }
+        if (activeChatDrops.isNotEmpty() || activeChatPolls.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                activeChatDrops.take(1).forEach { drop ->
+                    LiveBonusDropBannerCard(
+                        drop = drop,
+                        hasClaimed = currentActorKeys.any { it in drop.claimedByKeys },
+                        onClaimClick = onClaimBonusDrop
+                    )
+                }
+                activeChatPolls.take(1).forEach { poll ->
+                    LiveCommunityPollCard(
+                        poll = poll,
+                        hasVoted = currentActorKeys.any { it in poll.votedByKeys },
+                        onVote = onVoteCommunityPoll
+                    )
                 }
             }
         }

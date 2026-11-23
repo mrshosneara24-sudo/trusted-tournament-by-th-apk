@@ -588,19 +588,6 @@ fun SlotBookingDialog(
                                             fontSize = 10.sp
                                         )
                                     }
-                                    Button(
-                                        onClick = {
-                                            trxId = "9KJ3L49M"
-                                            Toast.makeText(context, "নমুনা TrxID যুক্ত করা হয়েছে!", Toast.LENGTH_SHORT).show()
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen.copy(alpha = 0.25f)),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen),
-                                        shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.height(28.dp),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
-                                    ) {
-                                        Text("নমুনা বসান", fontSize = 10.sp, color = VictoryGreen, fontWeight = FontWeight.Bold)
-                                    }
                                 }
                             }
                         }

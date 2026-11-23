@@ -324,15 +324,20 @@ class TournamentBusinessLogicTest {
     }
 
     @Test
-    fun testDemoOwnerLoginSetsOwnerRoleAndLoggedIn() {
+    fun testRealOwnerAccountLoginAndVerification() {
         // App starts logged out for new users
         assertFalse("App starts with isLoggedIn = false", repository.isLoggedIn.value)
 
-        val success = repository.loginAsDemoOwner()
-        assertTrue("Demo owner login should succeed", success)
+        // Wrong PIN rejected
+        assertFalse(repository.login(repository.masterOwnerPhone, "0000"))
+        assertFalse(repository.isLoggedIn.value)
+
+        // Real Owner credentials succeed
+        val success = repository.login(repository.masterOwnerPhone, repository.masterOwnerPin)
+        assertTrue("Real owner login should succeed", success)
         assertTrue("isLoggedIn must be true after login", repository.isLoggedIn.value)
         assertEquals("Role must be OWNER", UserRole.OWNER, repository.userProfile.value.role)
-        assertEquals("Owner name must be তানভির হাসান (ওনার)", "তানভির হাসান (ওনার)", repository.userProfile.value.accountName)
+        assertEquals("TH★DEVIL⚡", repository.userProfile.value.ign)
     }
 
     @Test
@@ -1331,6 +1336,109 @@ class TournamentBusinessLogicTest {
         assertTrue(repository.leaderboard.value.isEmpty())
         assertTrue(repository.results.value.isEmpty())
         assertTrue(repository.appCustomization.value.isAnnouncementEnabled)
+    }
+
+    @Test
+    fun testPromoCodesRedeemLimitsAndFrozenWalletBlock() {
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val created = repository.createPromoCode("THWIN25", "স্পেশাল বোনাস", 25, maxUses = 1)
+        assertTrue(created.first)
+        assertEquals(1, repository.promoCodes.value.size)
+        val promoId = repository.promoCodes.value.first().id
+
+        // Register Player 1 and redeem once -> succeeds
+        val p1 = "01710101010"
+        val p2 = "01720202020"
+        assertTrue(repository.register("PlayerA", "TH_PlayerA", "10101010", p1, p1, password = "pass123"))
+        val balBefore = repository.walletBalance.value
+        val redeem1 = repository.redeemPromoCode("thwin25")
+        assertTrue(redeem1.first)
+        assertEquals(balBefore + 25, repository.walletBalance.value)
+        assertTrue(repository.transactions.value.first().title.contains("THWIN25"))
+
+        // Duplicate redeem by same player rejected
+        assertFalse(repository.redeemPromoCode("THWIN25").first)
+
+        // Second player rejected once maxUses=1 is reached
+        assertTrue(repository.register("PlayerB", "TH_PlayerB", "20202020", p2, p2, password = "pass123"))
+        assertFalse(repository.redeemPromoCode("THWIN25").first)
+
+        // Toggle active & frozen wallet block on a fresh promo code
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.createPromoCode("THFREEZE", "টেস্ট", 10, maxUses = 5).first)
+        assertTrue(repository.setUserWalletFreeze(p2, true, "তদন্ত", moderatorRole = UserRole.OWNER).first)
+        repository.logout()
+        assertTrue(repository.login(p2, "pass123"))
+        assertFalse("Frozen wallet cannot redeem promo code", repository.redeemPromoCode("THFREEZE").first)
+
+        // Owner delete promo code
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.togglePromoCodeActive(promoId, false).first)
+        assertTrue(repository.deletePromoCode(promoId).first)
+    }
+
+    @Test
+    fun testBonusGiftDropsCommunityPollsAndDailyTrivia() {
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val dropRes = repository.launchBonusGiftDrop("⚡ বোনাস রেইন", "ক্লেইম করুন", amountPerClaim = 7, totalBoxes = 1)
+        assertTrue(dropRes.first)
+        val dropId = repository.bonusDrops.value.first().id
+
+        val pollRes = repository.launchCommunityPoll("কোন ম্যাপ সেরা?", listOf("Bermuda", "Purgatory"))
+        assertTrue(pollRes.first)
+        val poll = repository.communityPolls.value.first()
+
+        // Player claims drop & votes on poll & answers daily trivia
+        val p1 = "01730303030"
+        val p2 = "01740404040"
+        assertTrue(repository.register("Gamer1", "TH_G1", "30303030", p1, p1, password = "pass123"))
+        val bal0 = repository.walletBalance.value
+        assertTrue(repository.claimBonusGiftDrop(dropId).first)
+        assertEquals(bal0 + 7, repository.walletBalance.value)
+        assertFalse("Double claim rejected", repository.claimBonusGiftDrop(dropId).first)
+
+        val vote1 = repository.voteCommunityPoll(poll.id, poll.options.first().id)
+        assertTrue(vote1.first)
+        assertEquals(1, repository.communityPolls.value.first().totalVotes)
+        assertFalse("Double vote rejected", repository.voteCommunityPoll(poll.id, poll.options.last().id).first)
+
+        // Daily Trivia is a fun no-money quiz (awards 0 Taka, tracks correct count once per day)
+        val qIdx = repository.triviaProgress.value.currentQuestionIndex
+        val q = com.example.model.FreeFireTriviaBank.questionForDay(qIdx)
+        val balBeforeTrivia = repository.walletBalance.value
+        val triviaRes = repository.answerDailyTrivia(q.correctIndex)
+        assertTrue(triviaRes.first)
+        assertEquals("Daily trivia must NOT give wallet money", balBeforeTrivia, repository.walletBalance.value)
+        assertEquals(1, repository.triviaProgress.value.totalCorrectCount)
+        assertFalse("Second trivia attempt same day rejected", repository.answerDailyTrivia(q.correctIndex).first)
+
+        // Second player cannot claim exhausted bonus drop (totalBoxes=1)
+        assertTrue(repository.register("Gamer2", "TH_G2", "40404040", p2, p2, password = "pass123"))
+        assertFalse(repository.claimBonusGiftDrop(dropId).first)
+    }
+
+    @Test
+    fun testPreferencesRefreshBroadcastAuditAndFreshReset() {
+        repository.updateUserPreferences(roomAlertNotification = false, fiveMinReminder = true, autoLaunchGame = true)
+        assertFalse(repository.userPreferences.value.roomAlertNotification)
+        assertTrue(repository.userPreferences.value.autoLaunchGame)
+
+        val refreshMsg = repository.refreshAppAndCloudState()
+        assertTrue(refreshMsg.isNotBlank())
+
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val matchId = repository.matches.value.first().id
+        assertTrue(repository.broadcastMatchToGlobalChat(matchId).first)
+        assertTrue(repository.globalChatMessages.value.any { it.isPinnedAnnouncement })
+
+        val audit = repository.buildOwnerAuditSummaryText()
+        assertTrue(audit.contains("TRUSTED TOURNAMENT"))
+
+        repository.resetAppForFreshDownload()
+        assertTrue(repository.promoCodes.value.isEmpty())
+        assertTrue(repository.bonusDrops.value.isEmpty())
+        assertTrue(repository.communityPolls.value.isEmpty())
+        assertEquals("", repository.triviaProgress.value.lastAttemptDateKey)
     }
 }
 

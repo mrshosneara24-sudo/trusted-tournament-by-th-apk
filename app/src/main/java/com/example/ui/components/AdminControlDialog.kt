@@ -69,10 +69,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppCustomization
 import com.example.model.AppUser
+import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.LiveCommunityPoll
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
+import com.example.model.PromoCodeItem
 import com.example.model.TournamentMatch
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
@@ -138,7 +141,20 @@ fun AdminControlDialog(
     onPardonAll: (targetKey: String) -> Pair<Boolean, String> = { false to "" },
     appCustomization: AppCustomization = AppCustomization(),
     onPublishAnnouncement: (title: String, message: String, isUrgent: Boolean) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
-    onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" }
+    onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" },
+    promoCodes: List<PromoCodeItem> = emptyList(),
+    bonusDrops: List<BonusGiftDrop> = emptyList(),
+    communityPolls: List<LiveCommunityPoll> = emptyList(),
+    onCreatePromoCode: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onTogglePromoActive: (String, Boolean) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeletePromoCode: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchBonusDrop: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onCloseBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchCommunityPoll: (String, List<String>) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onCloseCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onBroadcastMatchToChat: (String) -> Pair<Boolean, String> = { false to "" }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -325,6 +341,19 @@ fun AdminControlDialog(
                             )
                         }
                     )
+                    Tab(
+                        selected = selectedTab == 8,
+                        onClick = { selectedTab = 8 },
+                        modifier = Modifier.testTag("admin_tab_fun_controls"),
+                        text = {
+                            Text(
+                                text = "🎁 ড্রপ/পোল/প্রোমো",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 8) VictoryGreen else Color.White
+                            )
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -403,6 +432,24 @@ fun AdminControlDialog(
                             appCustomization = appCustomization,
                             onPublishAnnouncement = onPublishAnnouncement,
                             onClearAnnouncement = onClearAnnouncement
+                        )
+                    }
+                    8 -> {
+                        AdminAndOwnerFunControlSection(
+                            matches = matches,
+                            promoCodes = promoCodes,
+                            bonusDrops = bonusDrops,
+                            communityPolls = communityPolls,
+                            onCreatePromoCode = onCreatePromoCode,
+                            onTogglePromoActive = onTogglePromoActive,
+                            onDeletePromoCode = onDeletePromoCode,
+                            onLaunchBonusDrop = onLaunchBonusDrop,
+                            onCloseBonusDrop = onCloseBonusDrop,
+                            onDeleteBonusDrop = onDeleteBonusDrop,
+                            onLaunchCommunityPoll = onLaunchCommunityPoll,
+                            onCloseCommunityPoll = onCloseCommunityPoll,
+                            onDeleteCommunityPoll = onDeleteCommunityPoll,
+                            onBroadcastMatchToChat = onBroadcastMatchToChat
                         )
                     }
                 }

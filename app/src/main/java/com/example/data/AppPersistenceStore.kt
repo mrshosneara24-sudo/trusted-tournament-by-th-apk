@@ -8,25 +8,31 @@ import com.example.model.AppealChatMessage
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.BonusGiftDrop
 import com.example.model.ChatMessage
 import com.example.model.DailyGamerMission
 import com.example.model.DailyStreakInfo
+import com.example.model.DailyTriviaProgress
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
+import com.example.model.LiveCommunityPoll
 import com.example.model.MatchResult
 import com.example.model.MatchStatus
 import com.example.model.MatchType
 import com.example.model.ModerationActionType
 import com.example.model.ModerationLogEntry
+import com.example.model.PollOptionItem
 import com.example.model.ProfileBannerColor
+import com.example.model.PromoCodeItem
 import com.example.model.RequestStatus
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
 import com.example.model.TournamentMatch
 import com.example.model.TournamentRuleItem
 import com.example.model.TransactionCategory
+import com.example.model.UserPreferences
 import com.example.model.UserProfile
 import com.example.model.UserRole
 import com.example.model.WalletPaymentMethod
@@ -58,7 +64,12 @@ data class PersistedAppState(
     val masterOwnerPin: String,
     val badgeAppeals: List<BadgeAppeal> = emptyList(),
     val globalChatMessages: List<GlobalChatMessage> = emptyList(),
-    val moderationLogs: List<ModerationLogEntry> = emptyList()
+    val moderationLogs: List<ModerationLogEntry> = emptyList(),
+    val userPreferences: UserPreferences = UserPreferences(),
+    val promoCodes: List<PromoCodeItem> = emptyList(),
+    val bonusDrops: List<BonusGiftDrop> = emptyList(),
+    val communityPolls: List<LiveCommunityPoll> = emptyList(),
+    val triviaProgress: DailyTriviaProgress = DailyTriviaProgress()
 )
 
 class AppPersistenceStore(context: Context) {
@@ -96,6 +107,11 @@ class AppPersistenceStore(context: Context) {
                 put("badgeAppeals", JSONArray().apply { state.badgeAppeals.forEach { put(encodeBadgeAppeal(it)) } })
                 put("globalChatMessages", JSONArray().apply { state.globalChatMessages.forEach { put(encodeGlobalChat(it)) } })
                 put("moderationLogs", JSONArray().apply { state.moderationLogs.forEach { put(encodeModerationLog(it)) } })
+                put("userPreferences", encodeUserPreferences(state.userPreferences))
+                put("promoCodes", JSONArray().apply { state.promoCodes.forEach { put(encodePromoCode(it)) } })
+                put("bonusDrops", JSONArray().apply { state.bonusDrops.forEach { put(encodeBonusDrop(it)) } })
+                put("communityPolls", JSONArray().apply { state.communityPolls.forEach { put(encodeCommunityPoll(it)) } })
+                put("triviaProgress", encodeTriviaProgress(state.triviaProgress))
             }
             prefs.edit().putString(KEY_STATE_JSON, root.toString()).apply()
         }
@@ -128,7 +144,12 @@ class AppPersistenceStore(context: Context) {
                 masterOwnerPin = root.optString("masterOwnerPin", "7788"),
                 badgeAppeals = decodeList(root.optJSONArray("badgeAppeals"), ::decodeBadgeAppeal),
                 globalChatMessages = decodeList(root.optJSONArray("globalChatMessages"), ::decodeGlobalChat),
-                moderationLogs = decodeList(root.optJSONArray("moderationLogs"), ::decodeModerationLog)
+                moderationLogs = decodeList(root.optJSONArray("moderationLogs"), ::decodeModerationLog),
+                userPreferences = root.optJSONObject("userPreferences")?.let(::decodeUserPreferences) ?: UserPreferences(),
+                promoCodes = decodeList(root.optJSONArray("promoCodes"), ::decodePromoCode),
+                bonusDrops = decodeList(root.optJSONArray("bonusDrops"), ::decodeBonusDrop),
+                communityPolls = decodeList(root.optJSONArray("communityPolls"), ::decodeCommunityPoll),
+                triviaProgress = root.optJSONObject("triviaProgress")?.let(::decodeTriviaProgress) ?: DailyTriviaProgress()
             )
         }.getOrNull()
     }
@@ -901,4 +922,138 @@ class AppPersistenceStore(context: Context) {
     private inline fun <reified T : Enum<T>> enumValueOrDefault(name: String, default: T): T {
         return enumValues<T>().firstOrNull { it.name == name } ?: default
     }
+
+    private fun decodeStringList(array: JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        val list = ArrayList<String>(array.length())
+        for (i in 0 until array.length()) {
+            val v = array.optString(i)
+            if (v.isNotBlank()) list.add(v)
+        }
+        return list
+    }
+
+    private fun encodeUserPreferences(p: UserPreferences) = JSONObject().apply {
+        put("roomAlertNotification", p.roomAlertNotification)
+        put("fiveMinReminder", p.fiveMinReminder)
+        put("autoLaunchGame", p.autoLaunchGame)
+    }
+
+    private fun decodeUserPreferences(o: JSONObject) = UserPreferences(
+        roomAlertNotification = o.optBoolean("roomAlertNotification", true),
+        fiveMinReminder = o.optBoolean("fiveMinReminder", true),
+        autoLaunchGame = o.optBoolean("autoLaunchGame", false)
+    )
+
+    private fun encodePromoCode(p: PromoCodeItem) = JSONObject().apply {
+        put("id", p.id)
+        put("code", p.code)
+        put("title", p.title)
+        put("rewardAmount", p.rewardAmount)
+        put("maxUses", p.maxUses)
+        put("usedCount", p.usedCount)
+        put("claimedByKeys", JSONArray().apply { p.claimedByKeys.forEach { put(it) } })
+        put("active", p.active)
+        put("createdBy", p.createdBy)
+        put("createdAtMillis", p.createdAtMillis)
+    }
+
+    private fun decodePromoCode(o: JSONObject) = PromoCodeItem(
+        id = o.optString("id", ""),
+        code = o.optString("code", ""),
+        title = o.optString("title", "প্রোমো কোড"),
+        rewardAmount = o.optInt("rewardAmount", 5),
+        maxUses = o.optInt("maxUses", 25),
+        usedCount = o.optInt("usedCount", 0),
+        claimedByKeys = decodeStringList(o.optJSONArray("claimedByKeys")),
+        active = o.optBoolean("active", true),
+        createdBy = o.optString("createdBy", "👑 ওনার"),
+        createdAtMillis = o.optLong("createdAtMillis", System.currentTimeMillis())
+    )
+
+    private fun encodeBonusDrop(d: BonusGiftDrop) = JSONObject().apply {
+        put("id", d.id)
+        put("title", d.title)
+        put("subtitle", d.subtitle)
+        put("amountPerClaim", d.amountPerClaim)
+        put("totalBoxes", d.totalBoxes)
+        put("claimedCount", d.claimedCount)
+        put("claimedByKeys", JSONArray().apply { d.claimedByKeys.forEach { put(it) } })
+        put("active", d.active)
+        put("createdBy", d.createdBy)
+        put("createdAtMillis", d.createdAtMillis)
+    }
+
+    private fun decodeBonusDrop(o: JSONObject) = BonusGiftDrop(
+        id = o.optString("id", ""),
+        title = o.optString("title", "🎁 লাইভ বোনাস গিফট ড্রপ"),
+        subtitle = o.optString("subtitle", "সবার আগে ক্লেইম করে বোনাস লুটে নিন!"),
+        amountPerClaim = o.optInt("amountPerClaim", 5),
+        totalBoxes = o.optInt("totalBoxes", 10),
+        claimedCount = o.optInt("claimedCount", 0),
+        claimedByKeys = decodeStringList(o.optJSONArray("claimedByKeys")),
+        active = o.optBoolean("active", true),
+        createdBy = o.optString("createdBy", "👑 ওনার"),
+        createdAtMillis = o.optLong("createdAtMillis", System.currentTimeMillis())
+    )
+
+    private fun encodeCommunityPoll(poll: LiveCommunityPoll) = JSONObject().apply {
+        put("id", poll.id)
+        put("question", poll.question)
+        put("options", JSONArray().apply {
+            poll.options.forEach { opt ->
+                put(JSONObject().apply {
+                    put("id", opt.id)
+                    put("label", opt.label)
+                    put("votes", opt.votes)
+                })
+            }
+        })
+        put("votedByKeys", JSONArray().apply { poll.votedByKeys.forEach { put(it) } })
+        put("active", poll.active)
+        put("createdBy", poll.createdBy)
+        put("createdAtMillis", poll.createdAtMillis)
+    }
+
+    private fun decodeCommunityPoll(o: JSONObject): LiveCommunityPoll {
+        val optsArr = o.optJSONArray("options")
+        val opts = mutableListOf<PollOptionItem>()
+        if (optsArr != null) {
+            for (i in 0 until optsArr.length()) {
+                val obj = optsArr.optJSONObject(i) ?: continue
+                opts.add(
+                    PollOptionItem(
+                        id = obj.optString("id", "opt_$i"),
+                        label = obj.optString("label", "Option ${i + 1}"),
+                        votes = obj.optInt("votes", 0)
+                    )
+                )
+            }
+        }
+        return LiveCommunityPoll(
+            id = o.optString("id", ""),
+            question = o.optString("question", ""),
+            options = opts,
+            votedByKeys = decodeStringList(o.optJSONArray("votedByKeys")),
+            active = o.optBoolean("active", true),
+            createdBy = o.optString("createdBy", "👑 ওনার"),
+            createdAtMillis = o.optLong("createdAtMillis", System.currentTimeMillis())
+        )
+    }
+
+    private fun encodeTriviaProgress(t: DailyTriviaProgress) = JSONObject().apply {
+        put("lastAttemptDateKey", t.lastAttemptDateKey)
+        put("lastAnsweredCorrectly", t.lastAnsweredCorrectly)
+        put("lastSelectedOption", t.lastSelectedOption)
+        put("totalCorrectCount", t.totalCorrectCount)
+        put("currentQuestionIndex", t.currentQuestionIndex)
+    }
+
+    private fun decodeTriviaProgress(o: JSONObject) = DailyTriviaProgress(
+        lastAttemptDateKey = o.optString("lastAttemptDateKey", ""),
+        lastAnsweredCorrectly = o.optBoolean("lastAnsweredCorrectly", false),
+        lastSelectedOption = o.optInt("lastSelectedOption", -1),
+        totalCorrectCount = o.optInt("totalCorrectCount", 0),
+        currentQuestionIndex = o.optInt("currentQuestionIndex", 0)
+    )
 }

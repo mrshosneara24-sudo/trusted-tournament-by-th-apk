@@ -104,16 +104,21 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.model.AppCustomization
+import com.example.model.AppLogoOption
 import com.example.model.AppUser
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
+import com.example.model.LiveCommunityPoll
 import com.example.model.MatchResult
 import com.example.model.ModerationLogEntry
+import com.example.model.PromoCodeItem
 import com.example.model.RequestStatus
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
+import com.example.model.TournamentRuleItem
 import com.example.model.UserProfile
 import com.example.model.UserRole
 import com.example.model.WithdrawRequest
@@ -189,6 +194,30 @@ fun OwnerControlDialog(
     onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" },
     onPublishMatchResult: (matchId: String, winnerTargetKey: String, winnerKills: Int, customPrizeAmount: Int?, runnerUpIgn: String, markMatchFinished: Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
     onAwardPlayerStats: (targetKey: String, killsToAdd: Int, winsToAdd: Int, matchesToAdd: Int, prizeAmount: Int, note: String) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    promoCodes: List<PromoCodeItem> = emptyList(),
+    bonusDrops: List<BonusGiftDrop> = emptyList(),
+    communityPolls: List<LiveCommunityPoll> = emptyList(),
+    strictRules: List<TournamentRuleItem> = emptyList(),
+    auditSummaryText: String = "",
+    onCreatePromoCode: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onTogglePromoActive: (String, Boolean) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeletePromoCode: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchBonusDrop: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onCloseBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchCommunityPoll: (String, List<String>) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onCloseCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onBroadcastMatchToChat: (String) -> Pair<Boolean, String> = { false to "" },
+    onRefreshCloudState: () -> String = { "রিফ্রেশ সম্পন্ন!" },
+    onUpdateAppBranding: (String, String, AppLogoOption, String, String) -> Unit = { _, _, _, _, _ -> },
+    onUpdateFinancialSettings: (String, String, String, Int, Int) -> Unit = { _, _, _, _, _ -> },
+    onToggleMaintenanceMode: (Boolean, String) -> Unit = { _, _ -> },
+    onUpdateExistingMatch: (TournamentMatch) -> Boolean = { false },
+    onDeleteMatch: (String) -> Boolean = { false },
+    onAddStrictRule: (String, String, String, String) -> Boolean = { _, _, _, _ -> false },
+    onDeleteStrictRule: (String) -> Boolean = { false },
+    onResetDefaultRules: () -> Unit = {},
     onResetAppForFreshDownload: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -286,6 +315,30 @@ fun OwnerControlDialog(
                     onClearAnnouncement = onClearAnnouncement,
                     onPublishMatchResult = onPublishMatchResult,
                     onAwardPlayerStats = onAwardPlayerStats,
+                    promoCodes = promoCodes,
+                    bonusDrops = bonusDrops,
+                    communityPolls = communityPolls,
+                    strictRules = strictRules,
+                    auditSummaryText = auditSummaryText,
+                    onCreatePromoCode = onCreatePromoCode,
+                    onTogglePromoActive = onTogglePromoActive,
+                    onDeletePromoCode = onDeletePromoCode,
+                    onLaunchBonusDrop = onLaunchBonusDrop,
+                    onCloseBonusDrop = onCloseBonusDrop,
+                    onDeleteBonusDrop = onDeleteBonusDrop,
+                    onLaunchCommunityPoll = onLaunchCommunityPoll,
+                    onCloseCommunityPoll = onCloseCommunityPoll,
+                    onDeleteCommunityPoll = onDeleteCommunityPoll,
+                    onBroadcastMatchToChat = onBroadcastMatchToChat,
+                    onRefreshCloudState = onRefreshCloudState,
+                    onUpdateAppBranding = onUpdateAppBranding,
+                    onUpdateFinancialSettings = onUpdateFinancialSettings,
+                    onToggleMaintenanceMode = onToggleMaintenanceMode,
+                    onUpdateExistingMatch = onUpdateExistingMatch,
+                    onDeleteMatch = onDeleteMatch,
+                    onAddStrictRule = onAddStrictRule,
+                    onDeleteStrictRule = onDeleteStrictRule,
+                    onResetDefaultRules = onResetDefaultRules,
                     onResetAppForFreshDownload = onResetAppForFreshDownload
                 )
             }
@@ -488,6 +541,30 @@ private fun OwnerDashboardContent(
     onClearAnnouncement: () -> Pair<Boolean, String> = { false to "" },
     onPublishMatchResult: (matchId: String, winnerTargetKey: String, winnerKills: Int, customPrizeAmount: Int?, runnerUpIgn: String, markMatchFinished: Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
     onAwardPlayerStats: (targetKey: String, killsToAdd: Int, winsToAdd: Int, matchesToAdd: Int, prizeAmount: Int, note: String) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
+    promoCodes: List<PromoCodeItem> = emptyList(),
+    bonusDrops: List<BonusGiftDrop> = emptyList(),
+    communityPolls: List<LiveCommunityPoll> = emptyList(),
+    strictRules: List<TournamentRuleItem> = emptyList(),
+    auditSummaryText: String = "",
+    onCreatePromoCode: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onTogglePromoActive: (String, Boolean) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeletePromoCode: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchBonusDrop: (String, String, Int, Int) -> Pair<Boolean, String> = { _, _, _, _ -> false to "" },
+    onCloseBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onLaunchCommunityPoll: (String, List<String>) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onCloseCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
+    onBroadcastMatchToChat: (String) -> Pair<Boolean, String> = { false to "" },
+    onRefreshCloudState: () -> String = { "রিফ্রেশ সম্পন্ন!" },
+    onUpdateAppBranding: (String, String, AppLogoOption, String, String) -> Unit = { _, _, _, _, _ -> },
+    onUpdateFinancialSettings: (String, String, String, Int, Int) -> Unit = { _, _, _, _, _ -> },
+    onToggleMaintenanceMode: (Boolean, String) -> Unit = { _, _ -> },
+    onUpdateExistingMatch: (TournamentMatch) -> Boolean = { false },
+    onDeleteMatch: (String) -> Boolean = { false },
+    onAddStrictRule: (String, String, String, String) -> Boolean = { _, _, _, _ -> false },
+    onDeleteStrictRule: (String) -> Boolean = { false },
+    onResetDefaultRules: () -> Unit = {},
     onResetAppForFreshDownload: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -510,7 +587,9 @@ private fun OwnerDashboardContent(
         "🏆 রেজাল্ট ও প্রাইজ",
         "📢 ঘোষণা",
         "📖 ওনার গাইড",
-        "⚙️ সেটিংস"
+        "⚙️ সেটিংস",
+        "🎁 ড্রপ ও পোল",
+        "🎛️ অ্যাপ স্টুডিও"
     )
     val tabTags = listOf(
         "owner_tab_balance",
@@ -523,7 +602,9 @@ private fun OwnerDashboardContent(
         "owner_tab_results",
         "owner_tab_announcement",
         "owner_tab_guide",
-        "owner_tab_settings"
+        "owner_tab_settings",
+        "owner_tab_fun_controls",
+        "owner_tab_owner_studio"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -806,6 +887,53 @@ private fun OwnerDashboardContent(
                         onDismiss()
                     }
                 )
+                11 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        AdminAndOwnerFunControlSection(
+                            matches = matches,
+                            promoCodes = promoCodes,
+                            bonusDrops = bonusDrops,
+                            communityPolls = communityPolls,
+                            onCreatePromoCode = onCreatePromoCode,
+                            onTogglePromoActive = onTogglePromoActive,
+                            onDeletePromoCode = onDeletePromoCode,
+                            onLaunchBonusDrop = onLaunchBonusDrop,
+                            onCloseBonusDrop = onCloseBonusDrop,
+                            onDeleteBonusDrop = onDeleteBonusDrop,
+                            onLaunchCommunityPoll = onLaunchCommunityPoll,
+                            onCloseCommunityPoll = onCloseCommunityPoll,
+                            onDeleteCommunityPoll = onDeleteCommunityPoll,
+                            onBroadcastMatchToChat = onBroadcastMatchToChat
+                        )
+                    }
+                }
+                12 -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    item {
+                        OwnerCommandAndPromoSection(
+                            appCustomization = appCustomization,
+                            matches = matches,
+                            strictRules = strictRules,
+                            auditSummaryText = auditSummaryText,
+                            onRefreshCloudState = onRefreshCloudState,
+                            onUpdateAppBranding = onUpdateAppBranding,
+                            onUpdateFinancialSettings = onUpdateFinancialSettings,
+                            onToggleMaintenanceMode = onToggleMaintenanceMode,
+                            onUpdateExistingMatch = onUpdateExistingMatch,
+                            onDeleteMatch = onDeleteMatch,
+                            onAddStrictRule = onAddStrictRule,
+                            onDeleteStrictRule = onDeleteStrictRule,
+                            onResetDefaultRules = onResetDefaultRules
+                        )
+                    }
+                }
             }
         }
     }

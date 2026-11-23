@@ -317,6 +317,72 @@ service cloud.firestore {
         isValidTimestamp(data.createdAt);
     }
 
+    function isValidPromoCode(data) {
+      return data.keys().hasAll([
+          'code', 'title', 'rewardAmount', 'maxUses', 'usedCount',
+          'claimedByUids', 'claimedByKeys', 'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code', 'title', 'rewardAmount', 'maxUses', 'usedCount',
+          'claimedByUids', 'claimedByKeys', 'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.code is string && data.code.size() >= 3 && data.code.size() <= 30 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+        data.rewardAmount is int && data.rewardAmount >= 1 && data.rewardAmount <= 500 &&
+        data.maxUses is int && data.maxUses >= 1 && data.maxUses <= 1000 &&
+        data.usedCount is int && data.usedCount >= 0 && data.usedCount <= data.maxUses &&
+        data.claimedByUids is list && data.claimedByUids.size() <= 1000 &&
+        data.claimedByKeys is list && data.claimedByKeys.size() <= 1000 &&
+        data.active is bool &&
+        data.createdBy is string && data.createdBy.size() <= 60 &&
+        data.createdAtMillis is int && data.createdAtMillis >= 0 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBonusDrop(data) {
+      return data.keys().hasAll([
+          'title', 'subtitle', 'amountPerClaim', 'totalBoxes', 'claimedCount',
+          'claimedByUids', 'claimedByKeys', 'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'subtitle', 'amountPerClaim', 'totalBoxes', 'claimedCount',
+          'claimedByUids', 'claimedByKeys', 'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+        data.subtitle is string && data.subtitle.size() <= 160 &&
+        data.amountPerClaim is int && data.amountPerClaim >= 1 && data.amountPerClaim <= 200 &&
+        data.totalBoxes is int && data.totalBoxes >= 1 && data.totalBoxes <= 500 &&
+        data.claimedCount is int && data.claimedCount >= 0 && data.claimedCount <= data.totalBoxes &&
+        data.claimedByUids is list && data.claimedByUids.size() <= 500 &&
+        data.claimedByKeys is list && data.claimedByKeys.size() <= 500 &&
+        data.active is bool &&
+        data.createdBy is string && data.createdBy.size() <= 60 &&
+        data.createdAtMillis is int && data.createdAtMillis >= 0 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCommunityPoll(data) {
+      return data.keys().hasAll([
+          'question', 'options', 'votedByUids', 'votedByKeys',
+          'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'question', 'options', 'votedByUids', 'votedByKeys',
+          'active', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.question is string && data.question.size() >= 2 && data.question.size() <= 180 &&
+        data.options is list && data.options.size() >= 2 && data.options.size() <= 6 &&
+        data.votedByUids is list && data.votedByUids.size() <= 1000 &&
+        data.votedByKeys is list && data.votedByKeys.size() <= 1000 &&
+        data.active is bool &&
+        data.createdBy is string && data.createdBy.size() <= 60 &&
+        data.createdAtMillis is int && data.createdAtMillis >= 0 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
     // 1. Admins registry
     match /admins/{uid} {
       allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
@@ -500,6 +566,67 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidId(logId) && isValidModerationLog(incoming());
       allow update: if false;
       allow delete: if isAdmin() && isValidId(logId);
+    }
+
+    // 12. Promo Redeem Codes
+    match /promo_codes/{codeId} {
+      allow get: if isSignedIn() && isValidId(codeId);
+      allow list: if isSignedIn() && existing().createdAtMillis >= 0;
+      allow create: if isAdmin() && isValidId(codeId) && isValidPromoCode(incoming());
+      allow update: if isSignedIn() && isValidId(codeId) && isValidPromoCode(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().active == true &&
+            existing().usedCount < existing().maxUses &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['usedCount', 'claimedByUids', 'claimedByKeys', 'updatedAt']) &&
+            incoming().usedCount == existing().usedCount + 1 &&
+            !(request.auth.uid in existing().claimedByUids) &&
+            request.auth.uid in incoming().claimedByUids
+          )
+        );
+      allow delete: if isAdmin() && isValidId(codeId);
+    }
+
+    // 13. Live Bonus Gift Drops
+    match /bonus_drops/{dropId} {
+      allow get: if isSignedIn() && isValidId(dropId);
+      allow list: if isSignedIn() && existing().createdAtMillis >= 0;
+      allow create: if isAdmin() && isValidId(dropId) && isValidBonusDrop(incoming());
+      allow update: if isSignedIn() && isValidId(dropId) && isValidBonusDrop(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().active == true &&
+            existing().claimedCount < existing().totalBoxes &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['claimedCount', 'claimedByUids', 'claimedByKeys', 'updatedAt']) &&
+            incoming().claimedCount == existing().claimedCount + 1 &&
+            !(request.auth.uid in existing().claimedByUids) &&
+            request.auth.uid in incoming().claimedByUids
+          )
+        );
+      allow delete: if isAdmin() && isValidId(dropId);
+    }
+
+    // 14. Live Community Polls
+    match /community_polls/{pollId} {
+      allow get: if isSignedIn() && isValidId(pollId);
+      allow list: if isSignedIn() && existing().createdAtMillis >= 0;
+      allow create: if isAdmin() && isValidId(pollId) && isValidCommunityPoll(incoming());
+      allow update: if isSignedIn() && isValidId(pollId) && isValidCommunityPoll(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().active == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['options', 'votedByUids', 'votedByKeys', 'updatedAt']) &&
+            !(request.auth.uid in existing().votedByUids) &&
+            request.auth.uid in incoming().votedByUids
+          )
+        );
+      allow delete: if isAdmin() && isValidId(pollId);
     }
   }
 }

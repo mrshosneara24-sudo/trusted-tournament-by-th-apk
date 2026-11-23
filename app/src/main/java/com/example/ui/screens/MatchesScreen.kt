@@ -49,14 +49,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AppCustomization
+import com.example.model.BonusGiftDrop
 import com.example.model.DailyGamerMission
+import com.example.model.DailyTriviaProgress
 import com.example.model.GameCategory
+import com.example.model.LiveCommunityPoll
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
+import com.example.ui.components.DailyTriviaChallengeCard
+import com.example.ui.components.LiveBonusDropBannerCard
+import com.example.ui.components.LiveCommunityPollCard
 import com.example.ui.components.MatchCard
 import com.example.ui.components.SensitivityProDialog
 import com.example.ui.components.TournamentHeader
-import com.example.model.AppCustomization
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
@@ -89,6 +95,13 @@ fun MatchesScreen(
     dailyMissions: List<DailyGamerMission> = emptyList(),
     onClaimMission: (String) -> Unit = {},
     appCustomization: AppCustomization = AppCustomization(),
+    bonusDrops: List<BonusGiftDrop> = emptyList(),
+    communityPolls: List<LiveCommunityPoll> = emptyList(),
+    triviaProgress: DailyTriviaProgress = DailyTriviaProgress(),
+    currentActorKeys: Set<String> = emptySet(),
+    onClaimBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
+    onVoteCommunityPoll: (String, String) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onAnswerTrivia: (Int) -> Pair<Boolean, String> = { false to "" },
     modifier: Modifier = Modifier
 ) {
     val bookedMatchIds = remember(myBookings) { myBookings.map { it.matchId }.toSet() }
@@ -443,6 +456,40 @@ fun MatchesScreen(
                     }
                 }
             }
+        }
+
+        // Live Bonus Gift Drops (বোনাস রেইন)
+        val activeDrops = bonusDrops.filter { it.active }
+        if (activeDrops.isNotEmpty()) {
+            items(activeDrops, key = { "drop_${it.id}" }) { drop ->
+                val hasClaimed = currentActorKeys.any { it in drop.claimedByKeys }
+                LiveBonusDropBannerCard(
+                    drop = drop,
+                    hasClaimed = hasClaimed,
+                    onClaimClick = onClaimBonusDrop
+                )
+            }
+        }
+
+        // Live Community Polls
+        val activePolls = communityPolls.filter { it.active }
+        if (activePolls.isNotEmpty()) {
+            items(activePolls, key = { "poll_${it.id}" }) { poll ->
+                val hasVoted = currentActorKeys.any { it in poll.votedByKeys }
+                LiveCommunityPollCard(
+                    poll = poll,
+                    hasVoted = hasVoted,
+                    onVote = onVoteCommunityPoll
+                )
+            }
+        }
+
+        // Daily Free Fire Trivia Challenge
+        item {
+            DailyTriviaChallengeCard(
+                progress = triviaProgress,
+                onAnswerQuestion = onAnswerTrivia
+            )
         }
 
         // Search Bar
