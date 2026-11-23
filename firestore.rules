@@ -383,6 +383,34 @@ service cloud.firestore {
         isValidTimestamp(data.updatedAt);
     }
 
+    function isValidGiveaway(data) {
+      return data.keys().hasAll([
+          'title', 'description', 'prizeType', 'prizeLabel', 'cashAmountPerWinner',
+          'winnersCount', 'maxEntries', 'entries', 'winners', 'joinedAuthUids',
+          'status', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'description', 'prizeType', 'prizeLabel', 'cashAmountPerWinner',
+          'winnersCount', 'maxEntries', 'entries', 'winners', 'joinedAuthUids',
+          'status', 'createdBy', 'createdAtMillis', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+        data.description is string && data.description.size() <= 240 &&
+        data.prizeType in ['CASH_TAKA', 'FF_DIAMONDS', 'WEEKLY_PASS'] &&
+        data.prizeLabel is string && data.prizeLabel.size() >= 1 && data.prizeLabel.size() <= 60 &&
+        data.cashAmountPerWinner is int && data.cashAmountPerWinner >= 0 && data.cashAmountPerWinner <= 5000 &&
+        data.winnersCount is int && data.winnersCount >= 1 && data.winnersCount <= 20 &&
+        data.maxEntries is int && data.maxEntries >= 2 && data.maxEntries <= 500 &&
+        data.entries is list && data.entries.size() <= data.maxEntries &&
+        data.winners is list && data.winners.size() <= 20 &&
+        data.joinedAuthUids is list && data.joinedAuthUids.size() <= data.maxEntries &&
+        data.status in ['LIVE', 'DRAWN', 'CLOSED'] &&
+        data.createdBy is string && data.createdBy.size() <= 60 &&
+        data.createdAtMillis is int && data.createdAtMillis >= 0 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
     // 1. Admins registry
     match /admins/{uid} {
       allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
@@ -627,6 +655,28 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(pollId);
+    }
+
+    // 15. Live Mega Giveaways
+    match /giveaways/{giveawayId} {
+      allow get: if isSignedIn() && isValidId(giveawayId);
+      allow list: if isSignedIn() && existing().createdAtMillis >= 0;
+      allow create: if isAdmin() && isValidId(giveawayId) && isValidGiveaway(incoming());
+      allow update: if isSignedIn() && isValidId(giveawayId) && isValidGiveaway(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().status == 'LIVE' &&
+            existing().entries.size() < existing().maxEntries &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['entries', 'joinedAuthUids', 'updatedAt']) &&
+            incoming().entries.size() == existing().entries.size() + 1 &&
+            !(request.auth.uid in existing().joinedAuthUids) &&
+            request.auth.uid in incoming().joinedAuthUids &&
+            incoming().joinedAuthUids.size() == existing().joinedAuthUids.size() + 1
+          )
+        );
+      allow delete: if isAdmin() && isValidId(giveawayId);
     }
   }
 }

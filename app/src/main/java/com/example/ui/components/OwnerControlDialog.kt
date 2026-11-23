@@ -111,6 +111,8 @@ import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
 import com.example.model.LiveCommunityPoll
 import com.example.model.MatchResult
 import com.example.model.ModerationLogEntry
@@ -218,7 +220,12 @@ fun OwnerControlDialog(
     onAddStrictRule: (String, String, String, String) -> Boolean = { _, _, _, _ -> false },
     onDeleteStrictRule: (String) -> Boolean = { false },
     onResetDefaultRules: () -> Unit = {},
-    onResetAppForFreshDownload: () -> Unit = {}
+    onResetAppForFreshDownload: () -> Unit = {},
+    giveaways: List<GiveawayEvent> = emptyList(),
+    onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
+    onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
+    onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
 ) {
     val context = LocalContext.current
     var isUnlocked by remember { mutableStateOf(userProfile.role == UserRole.OWNER) }
@@ -339,7 +346,12 @@ fun OwnerControlDialog(
                     onAddStrictRule = onAddStrictRule,
                     onDeleteStrictRule = onDeleteStrictRule,
                     onResetDefaultRules = onResetDefaultRules,
-                    onResetAppForFreshDownload = onResetAppForFreshDownload
+                    onResetAppForFreshDownload = onResetAppForFreshDownload,
+                    giveaways = giveaways,
+                    onCreateGiveaway = onCreateGiveaway,
+                    onDrawGiveawayWinners = onDrawGiveawayWinners,
+                    onCloseGiveaway = onCloseGiveaway,
+                    onDeleteGiveaway = onDeleteGiveaway
                 )
             }
         }
@@ -565,7 +577,12 @@ private fun OwnerDashboardContent(
     onAddStrictRule: (String, String, String, String) -> Boolean = { _, _, _, _ -> false },
     onDeleteStrictRule: (String) -> Boolean = { false },
     onResetDefaultRules: () -> Unit = {},
-    onResetAppForFreshDownload: () -> Unit = {}
+    onResetAppForFreshDownload: () -> Unit = {},
+    giveaways: List<GiveawayEvent> = emptyList(),
+    onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
+    onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
+    onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
@@ -588,7 +605,7 @@ private fun OwnerDashboardContent(
         "📢 ঘোষণা",
         "📖 ওনার গাইড",
         "⚙️ সেটিংস",
-        "🎁 ড্রপ ও পোল",
+        "🎉 গিভওয়ে ও পোল",
         "🎛️ অ্যাপ স্টুডিও"
     )
     val tabTags = listOf(
@@ -907,7 +924,12 @@ private fun OwnerDashboardContent(
                             onLaunchCommunityPoll = onLaunchCommunityPoll,
                             onCloseCommunityPoll = onCloseCommunityPoll,
                             onDeleteCommunityPoll = onDeleteCommunityPoll,
-                            onBroadcastMatchToChat = onBroadcastMatchToChat
+                            onBroadcastMatchToChat = onBroadcastMatchToChat,
+                            giveaways = giveaways,
+                            onCreateGiveaway = onCreateGiveaway,
+                            onDrawGiveawayWinners = onDrawGiveawayWinners,
+                            onCloseGiveaway = onCloseGiveaway,
+                            onDeleteGiveaway = onDeleteGiveaway
                         )
                     }
                 }

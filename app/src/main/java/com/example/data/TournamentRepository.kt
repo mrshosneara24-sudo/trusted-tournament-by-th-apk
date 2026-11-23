@@ -39,11 +39,17 @@ import com.example.model.AppLogoOption
 import com.example.model.BonusGiftDrop
 import com.example.model.DailyTriviaProgress
 import com.example.model.FreeFireTriviaBank
+import com.example.model.GiveawayEntry
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
+import com.example.model.GiveawayStatus
+import com.example.model.GiveawayWinner
 import com.example.model.LiveCommunityPoll
 import com.example.model.ModerationActionType
 import com.example.model.ModerationLogEntry
 import com.example.model.PollOptionItem
 import com.example.model.PromoCodeItem
+import com.example.model.ReflexGameStats
 import com.example.model.TournamentRuleItem
 import com.example.model.UserPreferences
 
@@ -452,6 +458,12 @@ class TournamentRepository(
     private val _triviaProgress = MutableStateFlow(DailyTriviaProgress())
     val triviaProgress: StateFlow<DailyTriviaProgress> = _triviaProgress.asStateFlow()
 
+    private val _giveaways = MutableStateFlow<List<GiveawayEvent>>(emptyList())
+    val giveaways: StateFlow<List<GiveawayEvent>> = _giveaways.asStateFlow()
+
+    private val _reflexStats = MutableStateFlow(ReflexGameStats())
+    val reflexStats: StateFlow<ReflexGameStats> = _reflexStats.asStateFlow()
+
     init {
         persistenceStore?.loadState()?.let { saved ->
             _isLoggedIn.value = saved.isLoggedIn
@@ -494,6 +506,8 @@ class TournamentRepository(
             _bonusDrops.value = saved.bonusDrops
             _communityPolls.value = saved.communityPolls
             _triviaProgress.value = saved.triviaProgress
+            _giveaways.value = saved.giveaways
+            _reflexStats.value = saved.reflexStats
             // Sanitize legacy Owner clutter (e.g., level 68 / নতুন যোদ্ধা / demo loadout)
             _registeredUsers.value = _registeredUsers.value.map { user ->
                 if (user.role == UserRole.OWNER) {
@@ -703,6 +717,10 @@ class TournamentRepository(
                     _communityPolls.value = cloudPolls
                     saveState()
                 },
+                onGiveawaysSynced = { cloudGiveaways ->
+                    _giveaways.value = cloudGiveaways
+                    saveState()
+                },
                 onSyncStateChanged = { connected, email, statusText ->
                     _isCloudConnected.value = connected
                     _cloudUserEmail.value = email
@@ -840,7 +858,9 @@ class TournamentRepository(
                 promoCodes = _promoCodes.value,
                 bonusDrops = _bonusDrops.value,
                 communityPolls = _communityPolls.value,
-                triviaProgress = _triviaProgress.value
+                triviaProgress = _triviaProgress.value,
+                giveaways = _giveaways.value,
+                reflexStats = _reflexStats.value
             )
         )
     }
@@ -4179,6 +4199,8 @@ class TournamentRepository(
         _bonusDrops.value = emptyList()
         _communityPolls.value = emptyList()
         _triviaProgress.value = DailyTriviaProgress()
+        _giveaways.value = emptyList()
+        _reflexStats.value = ReflexGameStats()
         resetAiChat()
         _isLoggedIn.value = false
         cloudSync?.resetCloudCollectionForFreshDownload(
@@ -4629,8 +4651,258 @@ class TournamentRepository(
             appendLine("📤 অ্যাপ্রুভড উইথড্র: ৳$totalWithdrawsApproved (পেন্ডিং: $pendingWdrs টি)")
             appendLine("🏅 পেন্ডিং ব্যাজ আপিল: $pendingAppeals টি")
             appendLine("🎟️ প্রোমো ক্লেইম: $promoClaims বার | 🎁 বোনাস ড্রপ ক্লেইম: $dropClaims বার")
+            appendLine("🎉 লাইভ গিভওয়ে: ${_giveaways.value.count { it.status == GiveawayStatus.LIVE }} টি | মোট গিভওয়ে: ${_giveaways.value.size} টি")
             append("🌐 ক্লাউড সিঙ্ক: ${if (_isCloudConnected.value) "চালু (${_cloudUserEmail.value})" else "অফলাইন/বন্ধ"}")
         }
+    }
+
+    // ==================== UPGRADED LIVE MEGA GIVEAWAY SYSTEM ====================
+
+    fun createGiveaway(
+        title: String,
+        description: String,
+        prizeType: GiveawayPrizeType,
+        prizeLabel: String,
+        cashAmountPerWinner: Int = 0,
+        winnersCount: Int = 1,
+        maxEntries: Int = 50,
+        announceInChat: Boolean = true
+    ): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন গিভওয়ে চালু করতে পারবেন!"
+        }
+        val cleanTitle = title.trim()
+        if (cleanTitle.length < 3) {
+            return false to "❌ গিভওয়ের সুন্দর একটি শিরোনাম লিখুন!"
+        }
+        val cleanPrizeLabel = prizeLabel.trim().ifBlank {
+            when (prizeType) {
+                GiveawayPrizeType.CASH_TAKA -> "৳${cashAmountPerWinner.coerceAtLeast(10)} নগদ"
+                GiveawayPrizeType.FF_DIAMONDS -> "১০০ ডায়মন্ড"
+                GiveawayPrizeType.WEEKLY_PASS -> "উইকলি মেম্বারশিপ"
+            }
+        }
+        val cashAmt = if (prizeType == GiveawayPrizeType.CASH_TAKA) {
+            if (cashAmountPerWinner !in 5..5000) {
+                return false to "❌ নগদ পুরস্কার ৳৫ থেকে ৳৫০০০-এর মধ্যে হতে হবে!"
+            }
+            cashAmountPerWinner
+        } else 0
+        if (winnersCount !in 1..20) {
+            return false to "❌ বিজয়ী সংখ্যা ১ থেকে ২০ জনের মধ্যে দিন!"
+        }
+        if (maxEntries !in 2..500) {
+            return false to "❌ সর্বোচ্চ টিকিট সংখ্যা ২ থেকে ৫০০-এর মধ্যে দিন!"
+        }
+
+        val giveaway = GiveawayEvent(
+            id = "gw_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(4)}",
+            title = cleanTitle.take(100),
+            description = description.trim().ifBlank { "ফ্রি টিকিট নিয়ে মেগা গিভওয়েতে অংশগ্রহণ করুন!" }.take(240),
+            prizeType = prizeType,
+            prizeLabel = cleanPrizeLabel.take(60),
+            cashAmountPerWinner = cashAmt,
+            winnersCount = winnersCount,
+            maxEntries = maxEntries,
+            entries = emptyList(),
+            winners = emptyList(),
+            status = GiveawayStatus.LIVE,
+            createdBy = currentStaffLabel(),
+            createdAtMillis = System.currentTimeMillis()
+        )
+        _giveaways.value = listOf(giveaway) + _giveaways.value
+        saveState()
+        cloudSync?.pushGiveaway(giveaway)
+
+        if (announceInChat) {
+            sendGlobalChatMessage(
+                text = "🎉 [লাইভ মেগা গিভওয়ে] ${giveaway.title}\n${giveaway.prizeType.emoji} পুরস্কার: ${giveaway.prizeLabel} (${giveaway.winnersCount} জন বিজয়ী)\n🎟️ মোট টিকিট: ${giveaway.maxEntries} টি — ম্যাচ স্ক্রিন থেকে এখনই ফ্রি জয়েন করুন!",
+                replyToId = null,
+                pinAnnouncement = true
+            )
+        }
+        return true to "🎉 মেগা গিভওয়ে সফলভাবে সবার কাছে লাইভ করা হয়েছে!"
+    }
+
+    fun joinGiveaway(giveawayId: String): Pair<Boolean, String> {
+        checkAndClearExpiredModeration()
+        val profile = _userProfile.value
+        if (!profile.isLoggedIn) return false to "❌ গিভওয়েতে জয়েন করতে আগে লগইন করুন!"
+        if (profile.isBanned) return false to "🚫 ব্যানকৃত অ্যাকাউন্ট গিভওয়েতে অংশ নিতে পারবে না!"
+        if (profile.isRewardBlocked) return false to "⛔ রিওয়ার্ড ব্লক থাকায় অংশগ্রহণ করা যাচ্ছে না।"
+
+        val giveaway = _giveaways.value.firstOrNull { it.id == giveawayId }
+            ?: return false to "❌ গিভওয়েটি খুঁজে পাওয়া যায়নি!"
+        if (giveaway.status != GiveawayStatus.LIVE) {
+            return false to "⏸️ এই গিভওয়েতে জয়েন করার সময় শেষ হয়ে গেছে!"
+        }
+        if (giveaway.isFull) {
+            return false to "😅 দুঃখিত! সবগুলো টিকিট (${giveaway.maxEntries}/${giveaway.maxEntries}) পূর্ণ হয়ে গেছে।"
+        }
+
+        val actorKey = currentActorKey()
+        val alreadyJoined = giveaway.entries.any { entry ->
+            entry.actorKey == actorKey ||
+                (profile.uid.isNotBlank() && entry.uid == profile.uid)
+        }
+        if (alreadyJoined) {
+            return false to "✅ আপনি ইতিমধ্যেই এই গিভওয়েতে ফ্রি টিকিট নিয়েছেন!"
+        }
+
+        val newEntry = GiveawayEntry(
+            actorKey = actorKey,
+            authUid = cloudSync?.currentCloudUid().orEmpty(),
+            ign = profile.ign.ifBlank { profile.accountName.ifBlank { "Player" } },
+            uid = profile.uid.ifBlank { "N/A" },
+            joinedAtMillis = System.currentTimeMillis()
+        )
+        val updated = giveaway.copy(entries = giveaway.entries + newEntry)
+        _giveaways.value = _giveaways.value.map { if (it.id == giveawayId) updated else it }
+        saveState()
+        cloudSync?.joinGiveawayCloud(giveawayId, newEntry)
+        return true to "🎟️ অভিনন্দন! গিভওয়ে টিকিট কনফার্ম হয়েছে (${updated.entries.size}/${updated.maxEntries})!"
+    }
+
+    fun drawGiveawayWinners(giveawayId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন গিভওয়ে লটারি ড্র করতে পারবেন!"
+        }
+        val giveaway = _giveaways.value.firstOrNull { it.id == giveawayId }
+            ?: return false to "❌ গিভওয়েটি পাওয়া যায়নি!"
+        if (giveaway.status == GiveawayStatus.DRAWN) {
+            return false to "🏆 এই গিভওয়ের বিজয়ী ইতিমধ্যেই নির্বাচিত হয়েছে!"
+        }
+        if (giveaway.entries.isEmpty()) {
+            return false to "⚠️ এখনো কেউ এই গিভওয়েতে জয়েন করেনি — কমপক্ষে ১ জন জয়েন হলে ড্র করুন!"
+        }
+
+        val selectedEntries = giveaway.entries.shuffled().take(giveaway.winnersCount.coerceAtLeast(1))
+        val winners = selectedEntries.map { entry ->
+            GiveawayWinner(
+                actorKey = entry.actorKey,
+                ign = entry.ign,
+                uid = entry.uid,
+                prizeLabel = giveaway.prizeLabel
+            )
+        }
+
+        // Auto-credit wallet only when prizeType is CASH_TAKA
+        if (giveaway.prizeType == GiveawayPrizeType.CASH_TAKA && giveaway.cashAmountPerWinner > 0) {
+            val activeKey = currentActorKey()
+            val newWinnerTxs = mutableListOf<WalletTransaction>()
+            winners.forEach { winner ->
+                var matchedWinnerPhone = ""
+                _registeredUsers.value = _registeredUsers.value.map { u ->
+                    val isWinnerUser = u.id == winner.actorKey ||
+                        u.phone == winner.actorKey ||
+                        (winner.uid.isNotBlank() && winner.uid != "N/A" && u.uid == winner.uid)
+                    if (isWinnerUser) {
+                        val updatedUser = u.copy(
+                            walletBalance = u.walletBalance + giveaway.cashAmountPerWinner,
+                            totalEarnings = u.totalEarnings + giveaway.cashAmountPerWinner
+                        )
+                        matchedWinnerPhone = updatedUser.phone
+                        cloudSync?.pushUser(updatedUser)
+                        updatedUser
+                    } else u
+                }
+                val isCurrentUser = winner.actorKey == activeKey ||
+                    (_userProfile.value.uid.isNotBlank() && winner.uid == _userProfile.value.uid)
+                if (isCurrentUser) {
+                    _walletBalance.value += giveaway.cashAmountPerWinner
+                    _userProfile.value = _userProfile.value.copy(
+                        totalEarnings = _userProfile.value.totalEarnings + giveaway.cashAmountPerWinner
+                    )
+                    if (matchedWinnerPhone.isBlank()) matchedWinnerPhone = _userProfile.value.phone
+                }
+                val tx = WalletTransaction(
+                    id = "tx_gw_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(4)}",
+                    title = "🎉 গিভওয়ে জয় (${giveaway.title})",
+                    amount = giveaway.cashAmountPerWinner,
+                    isCredit = true,
+                    timeAgo = "এইমাত্র",
+                    statusText = "লাইভ লটারি বিজয়ী পুরস্কার (+৳${giveaway.cashAmountPerWinner})",
+                    paymentMethod = "Mega Giveaway",
+                    category = TransactionCategory.PRIZE_WIN,
+                    userPhone = matchedWinnerPhone
+                )
+                newWinnerTxs += tx
+            }
+            if (newWinnerTxs.isNotEmpty()) {
+                _transactions.value = newWinnerTxs + _transactions.value
+            }
+            rebuildLiveLeaderboard()
+        }
+
+        val updatedGiveaway = giveaway.copy(
+            winners = winners,
+            status = GiveawayStatus.DRAWN
+        )
+        _giveaways.value = _giveaways.value.map { if (it.id == giveawayId) updatedGiveaway else it }
+        saveState()
+        cloudSync?.pushGiveaway(updatedGiveaway)
+
+        val winnerNames = winners.joinToString(", ") { "🏆 ${it.ign} (UID: ${it.uid})" }
+        sendGlobalChatMessage(
+            text = "🎊 [গিভওয়ে রেজাল্ট] \"${giveaway.title}\" এর লাইভ লটারি ড্র সম্পন্ন!\nপুরস্কার (${giveaway.prizeLabel}) জিতেছেন:\n$winnerNames\nঅভিনন্দন বিজয়ীদের! 🔥",
+            replyToId = null,
+            pinAnnouncement = true
+        )
+
+        return true to "🎉 লাইভ ড্র সম্পন্ন! বিজয়ী: ${winners.joinToString(", ") { it.ign }}"
+    }
+
+    fun closeGiveaway(giveawayId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন গিভওয়ে বন্ধ করতে পারবেন!"
+        }
+        var closed: GiveawayEvent? = null
+        _giveaways.value = _giveaways.value.map { g ->
+            if (g.id == giveawayId) g.copy(status = GiveawayStatus.CLOSED).also { closed = it } else g
+        }
+        val target = closed ?: return false to "❌ গিভওয়েটি পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.pushGiveaway(target)
+        return true to "⏸️ গিভওয়েটি বন্ধ করা হয়েছে।"
+    }
+
+    fun deleteGiveaway(giveawayId: String): Pair<Boolean, String> {
+        val role = _userProfile.value.role
+        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
+            return false to "⛔ কেবল ওনার বা অ্যাডমিন গিভওয়ে মুছতে পারবেন!"
+        }
+        _giveaways.value = _giveaways.value.filter { it.id != giveawayId }
+        saveState()
+        cloudSync?.deleteGiveawayCloud(giveawayId)
+        return true to "🗑️ গিভওয়েটি মুছে ফেলা হয়েছে।"
+    }
+
+    // ==================== ADDICTIVE FF ONE-TAP REFLEX MINI-GAME (NO MONEY) ====================
+
+    fun recordReflexGameResult(
+        score: Int,
+        bestReactionMs: Int,
+        maxCombo: Int
+    ): ReflexGameStats {
+        val prev = _reflexStats.value
+        val validMs = bestReactionMs.coerceAtLeast(0)
+        val newBestMs = when {
+            validMs == 0 -> prev.bestReactionMs
+            prev.bestReactionMs == 0 -> validMs
+            else -> minOf(prev.bestReactionMs, validMs)
+        }
+        val updated = ReflexGameStats(
+            bestScore = maxOf(prev.bestScore, score.coerceAtLeast(0)),
+            bestReactionMs = newBestMs,
+            gamesPlayed = prev.gamesPlayed + 1,
+            bestCombo = maxOf(prev.bestCombo, maxCombo.coerceAtLeast(0))
+        )
+        _reflexStats.value = updated
+        saveState()
+        return updated
     }
 }
 

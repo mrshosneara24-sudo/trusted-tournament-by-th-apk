@@ -13,6 +13,11 @@ import com.example.model.BadgeType
 import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.GiveawayEntry
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
+import com.example.model.GiveawayStatus
+import com.example.model.GiveawayWinner
 import com.example.model.GlobalChatMessage
 import com.example.model.LiveCommunityPoll
 import com.example.model.MatchStatus
@@ -70,6 +75,7 @@ class CloudTournamentSync(private val context: Context) {
         private const val COL_PROMO_CODES = "promo_codes"
         private const val COL_BONUS_DROPS = "bonus_drops"
         private const val COL_COMMUNITY_POLLS = "community_polls"
+        private const val COL_GIVEAWAYS = "giveaways"
     }
 
     data class SyncCallbacks(
@@ -86,6 +92,7 @@ class CloudTournamentSync(private val context: Context) {
         val onPromoCodesSynced: (List<PromoCodeItem>) -> Unit = {},
         val onBonusDropsSynced: (List<BonusGiftDrop>) -> Unit = {},
         val onCommunityPollsSynced: (List<LiveCommunityPoll>) -> Unit = {},
+        val onGiveawaysSynced: (List<GiveawayEvent>) -> Unit = {},
         val onSyncStateChanged: (connected: Boolean, email: String, statusText: String) -> Unit
     )
 
@@ -362,6 +369,21 @@ class CloudTournamentSync(private val context: Context) {
                         val list = snaps.documents.mapNotNull { parseCommunityPoll(it) }
                             .sortedByDescending { it.createdAtMillis }
                         callbacks?.onCommunityPollsSynced(list)
+                    }
+                }
+
+            // 14. Live Mega Giveaways
+            registrations += db.collection(COL_GIVEAWAYS)
+                .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                .addSnapshotListener { snaps, err ->
+                    if (err != null) {
+                        handleFirestoreError(err, "LIST", COL_GIVEAWAYS)
+                        return@addSnapshotListener
+                    }
+                    if (snaps != null) {
+                        val list = snaps.documents.mapNotNull { parseGiveaway(it) }
+                            .sortedByDescending { it.createdAtMillis }
+                        callbacks?.onGiveawaysSynced(list)
                     }
                 }
         }
@@ -944,6 +966,13 @@ class CloudTournamentSync(private val context: Context) {
                         .await()
                     oldPolls.documents.forEach { it.reference.delete().await() }
                 }
+                runCatching {
+                    val oldGiveaways = db.collection(COL_GIVEAWAYS)
+                        .whereGreaterThanOrEqualTo("createdAtMillis", 0L)
+                        .get()
+                        .await()
+                    oldGiveaways.documents.forEach { it.reference.delete().await() }
+                }
 
                 pushUser(ownerUser, user.uid)
             } catch (e: Exception) {
@@ -1183,6 +1212,112 @@ class CloudTournamentSync(private val context: Context) {
                 db.collection(COL_COMMUNITY_POLLS).document(safeId).delete().await()
             } catch (e: Exception) {
                 handleFirestoreError(e, "DELETE", "$COL_COMMUNITY_POLLS/$safeId")
+            }
+        }
+    }
+
+    fun pushGiveaway(giveaway: GiveawayEvent) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(giveaway.id)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                val docRef = db.collection(COL_GIVEAWAYS).document(safeId)
+                val existingSnap = docRef.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val existingAuthUids = (existingSnap.get("joinedAuthUids") as? List<String>) ?: emptyList()
+                val mergedAuthUids = (existingAuthUids + giveaway.entries.mapNotNull { it.authUid.takeIf(String::isNotBlank) })
+                    .distinct()
+                    .take(giveaway.maxEntries.coerceIn(2, 500))
+                val fields = hashMapOf<String, Any>(
+                    "title" to giveaway.title.take(100),
+                    "description" to giveaway.description.take(240),
+                    "prizeType" to giveaway.prizeType.name,
+                    "prizeLabel" to giveaway.prizeLabel.take(60),
+                    "cashAmountPerWinner" to giveaway.cashAmountPerWinner.coerceIn(0, 5000),
+                    "winnersCount" to giveaway.winnersCount.coerceIn(1, 20),
+                    "maxEntries" to giveaway.maxEntries.coerceIn(2, 500),
+                    "entries" to giveaway.entries.take(500).map { e ->
+                        mapOf(
+                            "actorKey" to e.actorKey,
+                            "authUid" to e.authUid,
+                            "ign" to e.ign.take(50),
+                            "uid" to e.uid.take(40),
+                            "joinedAtMillis" to e.joinedAtMillis.coerceAtLeast(0L)
+                        )
+                    },
+                    "winners" to giveaway.winners.take(20).map { w ->
+                        mapOf(
+                            "actorKey" to w.actorKey,
+                            "ign" to w.ign.take(50),
+                            "uid" to w.uid.take(40),
+                            "prizeLabel" to w.prizeLabel.take(60)
+                        )
+                    },
+                    "joinedAuthUids" to mergedAuthUids,
+                    "status" to giveaway.status.name,
+                    "createdBy" to giveaway.createdBy.take(60),
+                    "createdAtMillis" to giveaway.createdAtMillis.coerceAtLeast(0L)
+                )
+                upsertWithTimestamps(docRef, fields)
+            } catch (e: Exception) {
+                handleFirestoreError(e, "WRITE", "$COL_GIVEAWAYS/$safeId")
+            }
+        }
+    }
+
+    fun joinGiveawayCloud(giveawayId: String, entry: GiveawayEntry) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(giveawayId)
+        scope.launch {
+            try {
+                val docRef = db.collection(COL_GIVEAWAYS).document(safeId)
+                val snap = docRef.get().await()
+                if (!snap.exists()) return@launch
+                if (snap.getString("status") != GiveawayStatus.LIVE.name) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val authUids = ((snap.get("joinedAuthUids") as? List<String>) ?: emptyList()).toMutableList()
+                if (user.uid in authUids) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val entries = ((snap.get("entries") as? List<Map<String, Any?>>) ?: emptyList()).toMutableList()
+                val maxEntries = (snap.get("maxEntries") as? Number)?.toInt() ?: 50
+                if (entries.size >= maxEntries) return@launch
+
+                entries.add(
+                    mapOf(
+                        "actorKey" to entry.actorKey,
+                        "authUid" to user.uid,
+                        "ign" to entry.ign.take(50),
+                        "uid" to entry.uid.take(40),
+                        "joinedAtMillis" to entry.joinedAtMillis
+                    )
+                )
+                authUids.add(user.uid)
+                docRef.update(
+                    mapOf(
+                        "entries" to entries,
+                        "joinedAuthUids" to authUids,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "UPDATE", "$COL_GIVEAWAYS/$safeId")
+            }
+        }
+    }
+
+    fun deleteGiveawayCloud(giveawayId: String) {
+        val db = firestoreOrNull() ?: return
+        val user = currentUser() ?: return
+        val safeId = sanitizeDocId(giveawayId)
+        scope.launch {
+            try {
+                if (!isCloudStaff(db, user)) return@launch
+                db.collection(COL_GIVEAWAYS).document(safeId).delete().await()
+            } catch (e: Exception) {
+                handleFirestoreError(e, "DELETE", "$COL_GIVEAWAYS/$safeId")
             }
         }
     }
@@ -1591,6 +1726,54 @@ class CloudTournamentSync(private val context: Context) {
                 options = options,
                 votedByKeys = votedKeys,
                 active = snap.getBoolean("active") ?: true,
+                createdBy = snap.getString("createdBy") ?: "👑 ওনার",
+                createdAtMillis = (snap.get("createdAtMillis") as? Number)?.toLong() ?: 0L
+            )
+        }.getOrNull()
+    }
+
+    private fun parseGiveaway(snap: DocumentSnapshot): GiveawayEvent? {
+        return runCatching {
+            val title = snap.getString("title") ?: return@runCatching null
+            val prizeType = GiveawayPrizeType.entries.firstOrNull { it.name == snap.getString("prizeType") }
+                ?: GiveawayPrizeType.FF_DIAMONDS
+            val status = GiveawayStatus.entries.firstOrNull { it.name == snap.getString("status") }
+                ?: GiveawayStatus.LIVE
+            @Suppress("UNCHECKED_CAST")
+            val rawEntries = snap.get("entries") as? List<Map<String, Any?>> ?: emptyList()
+            val entries = rawEntries.mapNotNull { m ->
+                val ign = m["ign"] as? String ?: return@mapNotNull null
+                GiveawayEntry(
+                    actorKey = (m["actorKey"] as? String).orEmpty(),
+                    authUid = (m["authUid"] as? String).orEmpty(),
+                    ign = ign,
+                    uid = (m["uid"] as? String).orEmpty(),
+                    joinedAtMillis = (m["joinedAtMillis"] as? Number)?.toLong() ?: 0L
+                )
+            }
+            @Suppress("UNCHECKED_CAST")
+            val rawWinners = snap.get("winners") as? List<Map<String, Any?>> ?: emptyList()
+            val winners = rawWinners.mapNotNull { m ->
+                val ign = m["ign"] as? String ?: return@mapNotNull null
+                GiveawayWinner(
+                    actorKey = (m["actorKey"] as? String).orEmpty(),
+                    ign = ign,
+                    uid = (m["uid"] as? String).orEmpty(),
+                    prizeLabel = (m["prizeLabel"] as? String).orEmpty()
+                )
+            }
+            GiveawayEvent(
+                id = snap.id,
+                title = title,
+                description = snap.getString("description") ?: "",
+                prizeType = prizeType,
+                prizeLabel = snap.getString("prizeLabel") ?: "১০০ ডায়মন্ড",
+                cashAmountPerWinner = (snap.get("cashAmountPerWinner") as? Number)?.toInt() ?: 0,
+                winnersCount = (snap.get("winnersCount") as? Number)?.toInt() ?: 1,
+                maxEntries = (snap.get("maxEntries") as? Number)?.toInt() ?: 50,
+                entries = entries,
+                winners = winners,
+                status = status,
                 createdBy = snap.getString("createdBy") ?: "👑 ওনার",
                 createdAtMillis = (snap.get("createdAtMillis") as? Number)?.toLong() ?: 0L
             )

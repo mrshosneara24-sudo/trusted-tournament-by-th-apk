@@ -794,4 +794,67 @@ object FreeFireTriviaBank {
     }
 }
 
+enum class GiveawayPrizeType(val banglaTitle: String, val emoji: String) {
+    CASH_TAKA("নগদ টাকা", "৳"),
+    FF_DIAMONDS("ফ্রি ফায়ার ডায়মন্ড", "💎"),
+    WEEKLY_PASS("VIP / গিফট পাস", "👑")
+}
+
+enum class GiveawayStatus(val banglaLabel: String) {
+    LIVE("লাইভ চলছে"),
+    DRAWN("বিজেতা ঘোষিত"),
+    CLOSED("বন্ধ")
+}
+
+data class GiveawayEntry(
+    val actorKey: String,
+    val authUid: String = "",
+    val ign: String,
+    val uid: String,
+    val joinedAtMillis: Long = System.currentTimeMillis()
+)
+
+data class GiveawayWinner(
+    val actorKey: String,
+    val ign: String,
+    val uid: String,
+    val prizeLabel: String
+)
+
+data class GiveawayEvent(
+    val id: String,
+    val title: String,
+    val description: String = "ফ্রি টিকিট নিয়ে মেগা গিভওয়েতে অংশগ্রহণ করুন!",
+    val prizeType: GiveawayPrizeType = GiveawayPrizeType.FF_DIAMONDS,
+    val prizeLabel: String = "১০০ ডায়মন্ড",
+    val cashAmountPerWinner: Int = 0,
+    val winnersCount: Int = 1,
+    val maxEntries: Int = 50,
+    val entries: List<GiveawayEntry> = emptyList(),
+    val winners: List<GiveawayWinner> = emptyList(),
+    val status: GiveawayStatus = GiveawayStatus.LIVE,
+    val createdBy: String = "👑 ওনার",
+    val createdAtMillis: Long = System.currentTimeMillis()
+) {
+    val spotsRemaining: Int get() = (maxEntries - entries.size).coerceAtLeast(0)
+    val isFull: Boolean get() = entries.size >= maxEntries
+}
+
+data class ReflexGameStats(
+    val bestScore: Int = 0,
+    val bestReactionMs: Int = 0,
+    val gamesPlayed: Int = 0,
+    val bestCombo: Int = 0
+) {
+    val speedRankTitle: String
+        get() = when {
+            gamesPlayed == 0 -> "নতুন চ্যালেঞ্জার 🎯"
+            bestScore >= 300 || (bestReactionMs in 1..250) -> "⚡ Raistar স্পিড গড"
+            bestScore >= 180 || (bestReactionMs in 1..350) -> "🔥 প্রো ওয়ান-ট্যাপার"
+            bestScore >= 90 -> "🎯 শার্প শুটার"
+            else -> "🏃 ওয়ার্ম-আপ রাশার"
+        }
+}
+
+
 

@@ -15,6 +15,11 @@ import com.example.model.DailyStreakInfo
 import com.example.model.DailyTriviaProgress
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.GiveawayEntry
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
+import com.example.model.GiveawayStatus
+import com.example.model.GiveawayWinner
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.LiveCommunityPoll
@@ -26,6 +31,7 @@ import com.example.model.ModerationLogEntry
 import com.example.model.PollOptionItem
 import com.example.model.ProfileBannerColor
 import com.example.model.PromoCodeItem
+import com.example.model.ReflexGameStats
 import com.example.model.RequestStatus
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
@@ -69,7 +75,9 @@ data class PersistedAppState(
     val promoCodes: List<PromoCodeItem> = emptyList(),
     val bonusDrops: List<BonusGiftDrop> = emptyList(),
     val communityPolls: List<LiveCommunityPoll> = emptyList(),
-    val triviaProgress: DailyTriviaProgress = DailyTriviaProgress()
+    val triviaProgress: DailyTriviaProgress = DailyTriviaProgress(),
+    val giveaways: List<GiveawayEvent> = emptyList(),
+    val reflexStats: ReflexGameStats = ReflexGameStats()
 )
 
 class AppPersistenceStore(context: Context) {
@@ -112,6 +120,8 @@ class AppPersistenceStore(context: Context) {
                 put("bonusDrops", JSONArray().apply { state.bonusDrops.forEach { put(encodeBonusDrop(it)) } })
                 put("communityPolls", JSONArray().apply { state.communityPolls.forEach { put(encodeCommunityPoll(it)) } })
                 put("triviaProgress", encodeTriviaProgress(state.triviaProgress))
+                put("giveaways", JSONArray().apply { state.giveaways.forEach { put(encodeGiveaway(it)) } })
+                put("reflexStats", encodeReflexStats(state.reflexStats))
             }
             prefs.edit().putString(KEY_STATE_JSON, root.toString()).apply()
         }
@@ -149,7 +159,9 @@ class AppPersistenceStore(context: Context) {
                 promoCodes = decodeList(root.optJSONArray("promoCodes"), ::decodePromoCode),
                 bonusDrops = decodeList(root.optJSONArray("bonusDrops"), ::decodeBonusDrop),
                 communityPolls = decodeList(root.optJSONArray("communityPolls"), ::decodeCommunityPoll),
-                triviaProgress = root.optJSONObject("triviaProgress")?.let(::decodeTriviaProgress) ?: DailyTriviaProgress()
+                triviaProgress = root.optJSONObject("triviaProgress")?.let(::decodeTriviaProgress) ?: DailyTriviaProgress(),
+                giveaways = decodeList(root.optJSONArray("giveaways"), ::decodeGiveaway),
+                reflexStats = root.optJSONObject("reflexStats")?.let(::decodeReflexStats) ?: ReflexGameStats()
             )
         }.getOrNull()
     }
@@ -1055,5 +1067,103 @@ class AppPersistenceStore(context: Context) {
         lastSelectedOption = o.optInt("lastSelectedOption", -1),
         totalCorrectCount = o.optInt("totalCorrectCount", 0),
         currentQuestionIndex = o.optInt("currentQuestionIndex", 0)
+    )
+
+    private fun encodeGiveaway(g: GiveawayEvent) = JSONObject().apply {
+        put("id", g.id)
+        put("title", g.title)
+        put("description", g.description)
+        put("prizeType", g.prizeType.name)
+        put("prizeLabel", g.prizeLabel)
+        put("cashAmountPerWinner", g.cashAmountPerWinner)
+        put("winnersCount", g.winnersCount)
+        put("maxEntries", g.maxEntries)
+        put("entries", JSONArray().apply {
+            g.entries.forEach { e ->
+                put(JSONObject().apply {
+                    put("actorKey", e.actorKey)
+                    put("authUid", e.authUid)
+                    put("ign", e.ign)
+                    put("uid", e.uid)
+                    put("joinedAtMillis", e.joinedAtMillis)
+                })
+            }
+        })
+        put("winners", JSONArray().apply {
+            g.winners.forEach { w ->
+                put(JSONObject().apply {
+                    put("actorKey", w.actorKey)
+                    put("ign", w.ign)
+                    put("uid", w.uid)
+                    put("prizeLabel", w.prizeLabel)
+                })
+            }
+        })
+        put("status", g.status.name)
+        put("createdBy", g.createdBy)
+        put("createdAtMillis", g.createdAtMillis)
+    }
+
+    private fun decodeGiveaway(o: JSONObject): GiveawayEvent {
+        val entriesArr = o.optJSONArray("entries")
+        val entries = mutableListOf<GiveawayEntry>()
+        if (entriesArr != null) {
+            for (i in 0 until entriesArr.length()) {
+                val e = entriesArr.optJSONObject(i) ?: continue
+                entries.add(
+                    GiveawayEntry(
+                        actorKey = e.optString("actorKey", ""),
+                        authUid = e.optString("authUid", ""),
+                        ign = e.optString("ign", "Player"),
+                        uid = e.optString("uid", ""),
+                        joinedAtMillis = e.optLong("joinedAtMillis", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+        val winnersArr = o.optJSONArray("winners")
+        val winners = mutableListOf<GiveawayWinner>()
+        if (winnersArr != null) {
+            for (i in 0 until winnersArr.length()) {
+                val w = winnersArr.optJSONObject(i) ?: continue
+                winners.add(
+                    GiveawayWinner(
+                        actorKey = w.optString("actorKey", ""),
+                        ign = w.optString("ign", "Player"),
+                        uid = w.optString("uid", ""),
+                        prizeLabel = w.optString("prizeLabel", "")
+                    )
+                )
+            }
+        }
+        return GiveawayEvent(
+            id = o.optString("id", ""),
+            title = o.optString("title", "🎁 মেগা গিভওয়ে"),
+            description = o.optString("description", "ফ্রি টিকিট নিয়ে মেগা গিভওয়েতে অংশগ্রহণ করুন!"),
+            prizeType = enumValueOrDefault(o.optString("prizeType"), GiveawayPrizeType.FF_DIAMONDS),
+            prizeLabel = o.optString("prizeLabel", "১০০ ডায়মন্ড"),
+            cashAmountPerWinner = o.optInt("cashAmountPerWinner", 0),
+            winnersCount = o.optInt("winnersCount", 1),
+            maxEntries = o.optInt("maxEntries", 50),
+            entries = entries,
+            winners = winners,
+            status = enumValueOrDefault(o.optString("status"), GiveawayStatus.LIVE),
+            createdBy = o.optString("createdBy", "👑 ওনার"),
+            createdAtMillis = o.optLong("createdAtMillis", System.currentTimeMillis())
+        )
+    }
+
+    private fun encodeReflexStats(s: ReflexGameStats) = JSONObject().apply {
+        put("bestScore", s.bestScore)
+        put("bestReactionMs", s.bestReactionMs)
+        put("gamesPlayed", s.gamesPlayed)
+        put("bestCombo", s.bestCombo)
+    }
+
+    private fun decodeReflexStats(o: JSONObject) = ReflexGameStats(
+        bestScore = o.optInt("bestScore", 0),
+        bestReactionMs = o.optInt("bestReactionMs", 0),
+        gamesPlayed = o.optInt("gamesPlayed", 0),
+        bestCombo = o.optInt("bestCombo", 0)
     )
 }

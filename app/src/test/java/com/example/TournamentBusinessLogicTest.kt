@@ -1440,6 +1440,121 @@ class TournamentBusinessLogicTest {
         assertTrue(repository.communityPolls.value.isEmpty())
         assertEquals("", repository.triviaProgress.value.lastAttemptDateKey)
     }
+
+    @Test
+    fun testGiveawayLifecycleWinnerDrawAndReflexStats() {
+        // 1. Register regular players -> non-staff cannot create giveaway or draw winners
+        val p1 = "01770001111"
+        val p2 = "01770002222"
+        val p3 = "01770003333"
+        assertTrue(repository.register("PlayerOne", "TH_GW1", "70001111", p1, p1, password = "pass123"))
+        assertFalse(
+            "Regular player must not create giveaways",
+            repository.createGiveaway(
+                title = "Fake GW",
+                description = "Nope",
+                prizeType = com.example.model.GiveawayPrizeType.CASH_TAKA,
+                prizeLabel = "৳50",
+                cashAmountPerWinner = 50,
+                winnersCount = 1,
+                maxEntries = 10
+            ).first
+        )
+
+        // 2. Owner launches CASH_TAKA giveaway (maxEntries=2) and FF_DIAMONDS giveaway
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val cashGwRes = repository.createGiveaway(
+            title = "৳৭৫ মেগা ক্যাশ গিভওয়ে",
+            description = "২ জন টিকিট নিতে পারবেন",
+            prizeType = com.example.model.GiveawayPrizeType.CASH_TAKA,
+            prizeLabel = "৳৭৫ নগদ",
+            cashAmountPerWinner = 75,
+            winnersCount = 1,
+            maxEntries = 2,
+            announceInChat = true
+        )
+        assertTrue(cashGwRes.first)
+        val cashGwId = repository.giveaways.value.first().id
+
+        val diamondGwRes = repository.createGiveaway(
+            title = "১০০ ডায়মন্ড গিভওয়ে",
+            description = "ফ্রি ফায়ার ডায়মন্ড",
+            prizeType = com.example.model.GiveawayPrizeType.FF_DIAMONDS,
+            prizeLabel = "১০০ ডায়মন্ড",
+            cashAmountPerWinner = 0,
+            winnersCount = 1,
+            maxEntries = 10,
+            announceInChat = false
+        )
+        assertTrue(diamondGwRes.first)
+        val diamondGwId = repository.giveaways.value.first { it.id != cashGwId }.id
+
+        // 3. PlayerOne joins both giveaways once; duplicate join rejected; PlayerTwo fills maxEntries=2; PlayerThree rejected when full
+        assertTrue(repository.login(p1, "pass123"))
+        val p1InitialWallet = repository.walletBalance.value
+        assertTrue(repository.joinGiveaway(cashGwId).first)
+        assertFalse("Duplicate ticket must be rejected", repository.joinGiveaway(cashGwId).first)
+        assertTrue(repository.joinGiveaway(diamondGwId).first)
+
+        // Non-staff cannot draw winners
+        assertFalse("Non-staff must not draw winners", repository.drawGiveawayWinners(cashGwId).first)
+
+        assertTrue(repository.register("PlayerTwo", "TH_GW2", "70002222", p2, p2, password = "pass123"))
+        assertTrue(repository.joinGiveaway(cashGwId).first)
+        assertTrue(repository.giveaways.value.first { it.id == cashGwId }.isFull)
+
+        assertTrue(repository.register("PlayerThree", "TH_GW3", "70003333", p3, p3, password = "pass123"))
+        assertFalse("Full giveaway must reject extra entries", repository.joinGiveaway(cashGwId).first)
+
+        // 4. Owner draws winners for CASH_TAKA giveaway -> real winner chosen, pinned to Global Chat, & wallet credited ONLY for CASH_TAKA
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val drawCashRes = repository.drawGiveawayWinners(cashGwId)
+        assertTrue(drawCashRes.first)
+        val drawnCashGw = repository.giveaways.value.first { it.id == cashGwId }
+        assertEquals(com.example.model.GiveawayStatus.DRAWN, drawnCashGw.status)
+        assertEquals(1, drawnCashGw.winners.size)
+        val cashWinner = drawnCashGw.winners.first()
+        assertTrue(cashWinner.uid in setOf("70001111", "70002222"))
+        assertTrue(repository.globalChatMessages.value.any { it.isPinnedAnnouncement && it.text.contains(cashWinner.ign) })
+
+        val cashWinnerUser = repository.registeredUsers.value.first { it.uid == cashWinner.uid }
+        assertEquals(p1InitialWallet + 75, cashWinnerUser.walletBalance)
+        assertEquals(75, cashWinnerUser.totalEarnings)
+
+        // Draw FF_DIAMONDS giveaway -> winner picked, NO wallet cash added to winner
+        val p1WalletBeforeDiamond = repository.registeredUsers.value.first { it.uid == "70001111" }.walletBalance
+        val drawDiamondRes = repository.drawGiveawayWinners(diamondGwId)
+        assertTrue(drawDiamondRes.first)
+        val p1WalletAfterDiamond = repository.registeredUsers.value.first { it.uid == "70001111" }.walletBalance
+        assertEquals("FF_DIAMONDS giveaway must NOT add cash taka", p1WalletBeforeDiamond, p1WalletAfterDiamond)
+
+        // 5. Addictive FF One-Tap Reflex Speed Lab tracks bestScore, min reaction ms, bestCombo, gamesPlayed, and adds 0 Taka
+        assertTrue(repository.login(p1, "pass123"))
+        val walletBeforeReflex = repository.walletBalance.value
+        val s1 = repository.recordReflexGameResult(score = 180, bestReactionMs = 420, maxCombo = 4)
+        assertEquals(180, s1.bestScore)
+        assertEquals(420, s1.bestReactionMs)
+        assertEquals(1, s1.gamesPlayed)
+        assertEquals(4, s1.bestCombo)
+
+        val s2 = repository.recordReflexGameResult(score = 520, bestReactionMs = 260, maxCombo = 12)
+        assertEquals(520, s2.bestScore)
+        assertEquals(260, s2.bestReactionMs)
+        assertEquals(2, s2.gamesPlayed)
+        assertEquals(12, s2.bestCombo)
+        assertEquals(walletBeforeReflex, repository.walletBalance.value)
+
+        // 6. Close / Delete giveaway & fresh download reset wipes giveaways and reflexStats
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.deleteGiveaway(diamondGwId).first)
+        assertFalse(repository.giveaways.value.any { it.id == diamondGwId })
+
+        repository.resetAppForFreshDownload()
+        assertTrue(repository.giveaways.value.isEmpty())
+        assertEquals(0, repository.reflexStats.value.gamesPlayed)
+        assertEquals(0, repository.reflexStats.value.bestScore)
+        assertEquals(0, repository.reflexStats.value.bestReactionMs)
+    }
 }
 
 

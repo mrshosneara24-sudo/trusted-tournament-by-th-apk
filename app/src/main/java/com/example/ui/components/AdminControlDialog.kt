@@ -72,6 +72,8 @@ import com.example.model.AppUser
 import com.example.model.BonusGiftDrop
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
 import com.example.model.LiveCommunityPoll
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
@@ -154,7 +156,12 @@ fun AdminControlDialog(
     onLaunchCommunityPoll: (String, List<String>) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onCloseCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
     onDeleteCommunityPoll: (String) -> Pair<Boolean, String> = { false to "" },
-    onBroadcastMatchToChat: (String) -> Pair<Boolean, String> = { false to "" }
+    onBroadcastMatchToChat: (String) -> Pair<Boolean, String> = { false to "" },
+    giveaways: List<GiveawayEvent> = emptyList(),
+    onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
+    onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
+    onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -347,7 +354,7 @@ fun AdminControlDialog(
                         modifier = Modifier.testTag("admin_tab_fun_controls"),
                         text = {
                             Text(
-                                text = "🎁 ড্রপ/পোল/প্রোমো",
+                                text = "🎉 গিভওয়ে/ড্রপ/পোল",
                                 fontSize = 12.sp,
                                 fontWeight = if (selectedTab == 8) FontWeight.Bold else FontWeight.Normal,
                                 color = if (selectedTab == 8) VictoryGreen else Color.White
@@ -449,7 +456,12 @@ fun AdminControlDialog(
                             onLaunchCommunityPoll = onLaunchCommunityPoll,
                             onCloseCommunityPoll = onCloseCommunityPoll,
                             onDeleteCommunityPoll = onDeleteCommunityPoll,
-                            onBroadcastMatchToChat = onBroadcastMatchToChat
+                            onBroadcastMatchToChat = onBroadcastMatchToChat,
+                            giveaways = giveaways,
+                            onCreateGiveaway = onCreateGiveaway,
+                            onDrawGiveawayWinners = onDrawGiveawayWinners,
+                            onCloseGiveaway = onCloseGiveaway,
+                            onDeleteGiveaway = onDeleteGiveaway
                         )
                     }
                 }

@@ -211,6 +211,8 @@ fun MainTournamentApp(
     val bonusDrops by viewModel.bonusDrops.collectAsStateWithLifecycle()
     val communityPolls by viewModel.communityPolls.collectAsStateWithLifecycle()
     val triviaProgress by viewModel.triviaProgress.collectAsStateWithLifecycle()
+    val giveaways by viewModel.giveaways.collectAsStateWithLifecycle()
+    val reflexStats by viewModel.reflexStats.collectAsStateWithLifecycle()
 
     val currentActorKeys = remember(userProfile, registeredUsers) {
         val matched = registeredUsers.firstOrNull {
@@ -1002,7 +1004,11 @@ fun MainTournamentApp(
                                 currentActorKeys = currentActorKeys,
                                 onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
                                 onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
-                                onAnswerTrivia = { idx -> viewModel.answerDailyTrivia(idx) }
+                                onAnswerTrivia = { idx -> viewModel.answerDailyTrivia(idx) },
+                                giveaways = giveaways,
+                                reflexStats = reflexStats,
+                                onJoinGiveaway = { gwId -> viewModel.joinGiveaway(gwId) },
+                                onRecordReflexResult = { s, ms, combo -> viewModel.recordReflexGameResult(s, ms, combo) }
                             )
                         }
 
@@ -1065,7 +1071,9 @@ fun MainTournamentApp(
                                 communityPolls = communityPolls,
                                 currentActorKeys = currentActorKeys,
                                 onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
-                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) }
+                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
+                                giveaways = giveaways,
+                                onJoinGiveaway = { gwId -> viewModel.joinGiveaway(gwId) }
                             )
                         }
 
@@ -1344,7 +1352,14 @@ fun MainTournamentApp(
             onLaunchCommunityPoll = { q, opts -> viewModel.launchCommunityPoll(q, opts) },
             onCloseCommunityPoll = { pollId -> viewModel.closeCommunityPoll(pollId) },
             onDeleteCommunityPoll = { pollId -> viewModel.deleteCommunityPoll(pollId) },
-            onBroadcastMatchToChat = { matchId -> viewModel.broadcastMatchToGlobalChat(matchId) }
+            onBroadcastMatchToChat = { matchId -> viewModel.broadcastMatchToGlobalChat(matchId) },
+            giveaways = giveaways,
+            onCreateGiveaway = { title, desc, prizeType, prizeLabel, cash, winners, maxEntries, announce ->
+                viewModel.createGiveaway(title, desc, prizeType, prizeLabel, cash, winners, maxEntries, announce)
+            },
+            onDrawGiveawayWinners = { gwId -> viewModel.drawGiveawayWinners(gwId) },
+            onCloseGiveaway = { gwId -> viewModel.closeGiveaway(gwId) },
+            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) }
         )
     }
 
@@ -1484,7 +1499,14 @@ fun MainTournamentApp(
             onAddStrictRule = { title, desc, penalty, emoji -> viewModel.addStrictRule(title, desc, penalty, emoji) },
             onDeleteStrictRule = { ruleId -> viewModel.deleteStrictRule(ruleId) },
             onResetDefaultRules = { viewModel.resetDefaultRules() },
-            onResetAppForFreshDownload = { viewModel.resetAppForFreshDownload() }
+            onResetAppForFreshDownload = { viewModel.resetAppForFreshDownload() },
+            giveaways = giveaways,
+            onCreateGiveaway = { title, desc, prizeType, prizeLabel, cash, winners, maxEntries, announce ->
+                viewModel.createGiveaway(title, desc, prizeType, prizeLabel, cash, winners, maxEntries, announce)
+            },
+            onDrawGiveawayWinners = { gwId -> viewModel.drawGiveawayWinners(gwId) },
+            onCloseGiveaway = { gwId -> viewModel.closeGiveaway(gwId) },
+            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) }
         )
     }
 

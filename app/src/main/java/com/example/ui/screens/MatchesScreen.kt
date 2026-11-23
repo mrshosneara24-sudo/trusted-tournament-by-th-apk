@@ -54,13 +54,19 @@ import com.example.model.BonusGiftDrop
 import com.example.model.DailyGamerMission
 import com.example.model.DailyTriviaProgress
 import com.example.model.GameCategory
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayStatus
 import com.example.model.LiveCommunityPoll
+import com.example.model.ReflexGameStats
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
 import com.example.ui.components.DailyTriviaChallengeCard
 import com.example.ui.components.LiveBonusDropBannerCard
 import com.example.ui.components.LiveCommunityPollCard
+import com.example.ui.components.LiveMegaGiveawayCard
 import com.example.ui.components.MatchCard
+import com.example.ui.components.ReflexSpeedEntryCard
+import com.example.ui.components.ReflexTapChallengeDialog
 import com.example.ui.components.SensitivityProDialog
 import com.example.ui.components.TournamentHeader
 import com.example.ui.theme.BkashPink
@@ -102,10 +108,15 @@ fun MatchesScreen(
     onClaimBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
     onVoteCommunityPoll: (String, String) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onAnswerTrivia: (Int) -> Pair<Boolean, String> = { false to "" },
+    giveaways: List<GiveawayEvent> = emptyList(),
+    reflexStats: ReflexGameStats = ReflexGameStats(),
+    onJoinGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onRecordReflexResult: (Int, Int, Int) -> ReflexGameStats = { _, _, _ -> reflexStats },
     modifier: Modifier = Modifier
 ) {
     val bookedMatchIds = remember(myBookings) { myBookings.map { it.matchId }.toSet() }
     var showSensitivityLab by remember { mutableStateOf(false) }
+    var showReflexChallenge by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
@@ -458,6 +469,26 @@ fun MatchesScreen(
             }
         }
 
+        // Live Mega Giveaways & Lottery Draw Events
+        val visibleGiveaways = giveaways.filter { it.status == GiveawayStatus.LIVE || it.status == GiveawayStatus.DRAWN }
+        if (visibleGiveaways.isNotEmpty()) {
+            items(visibleGiveaways, key = { "gw_${it.id}" }) { gw ->
+                LiveMegaGiveawayCard(
+                    giveaway = gw,
+                    currentActorKeys = currentActorKeys,
+                    onJoinGiveaway = onJoinGiveaway
+                )
+            }
+        }
+
+        // FF One-Tap Reflex Speed Lab Mini-Game (Fun/Skill Only - No Wallet Cash)
+        item {
+            ReflexSpeedEntryCard(
+                stats = reflexStats,
+                onPlayClick = { showReflexChallenge = true }
+            )
+        }
+
         // Live Bonus Gift Drops (বোনাস রেইন)
         val activeDrops = bonusDrops.filter { it.active }
         if (activeDrops.isNotEmpty()) {
@@ -650,5 +681,13 @@ fun MatchesScreen(
 
     if (showSensitivityLab) {
         SensitivityProDialog(onDismiss = { showSensitivityLab = false })
+    }
+
+    if (showReflexChallenge) {
+        ReflexTapChallengeDialog(
+            stats = reflexStats,
+            onRecordResult = onRecordReflexResult,
+            onDismiss = { showReflexChallenge = false }
+        )
     }
 }

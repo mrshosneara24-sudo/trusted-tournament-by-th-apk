@@ -17,6 +17,8 @@ import com.example.model.DailyStreakInfo
 import com.example.model.DailyTriviaProgress
 import com.example.model.DepositRequest
 import com.example.model.GameCategory
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.LiveCommunityPoll
@@ -24,6 +26,7 @@ import com.example.model.MatchResult
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
 import com.example.model.PromoCodeItem
+import com.example.model.ReflexGameStats
 import com.example.model.SlotBooking
 import com.example.model.SpinHistoryRecord
 import com.example.model.TournamentMatch
@@ -115,6 +118,8 @@ class TournamentViewModel(
     val bonusDrops: StateFlow<List<BonusGiftDrop>> = repository.bonusDrops
     val communityPolls: StateFlow<List<LiveCommunityPoll>> = repository.communityPolls
     val triviaProgress: StateFlow<DailyTriviaProgress> = repository.triviaProgress
+    val giveaways: StateFlow<List<GiveawayEvent>> = repository.giveaways
+    val reflexStats: StateFlow<ReflexGameStats> = repository.reflexStats
 
     // Dialog States (updated synchronously on open/close and kept reactively synced with repository.matches)
     private val _bookingMatchId = MutableStateFlow<String?>(null)
@@ -1281,5 +1286,57 @@ class TournamentViewModel(
     }
 
     fun buildOwnerAuditSummaryText(): String = repository.buildOwnerAuditSummaryText()
+
+    fun createGiveaway(
+        title: String,
+        description: String,
+        prizeType: GiveawayPrizeType,
+        prizeLabel: String,
+        cashAmountPerWinner: Int = 0,
+        winnersCount: Int = 1,
+        maxEntries: Int = 50,
+        announceInChat: Boolean = true
+    ): Pair<Boolean, String> {
+        val res = repository.createGiveaway(
+            title = title,
+            description = description,
+            prizeType = prizeType,
+            prizeLabel = prizeLabel,
+            cashAmountPerWinner = cashAmountPerWinner,
+            winnersCount = winnersCount,
+            maxEntries = maxEntries,
+            announceInChat = announceInChat
+        )
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun joinGiveaway(giveawayId: String): Pair<Boolean, String> {
+        val res = repository.joinGiveaway(giveawayId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun drawGiveawayWinners(giveawayId: String): Pair<Boolean, String> {
+        val res = repository.drawGiveawayWinners(giveawayId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun closeGiveaway(giveawayId: String): Pair<Boolean, String> {
+        val res = repository.closeGiveaway(giveawayId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deleteGiveaway(giveawayId: String): Pair<Boolean, String> {
+        val res = repository.deleteGiveaway(giveawayId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun recordReflexGameResult(score: Int, bestReactionMs: Int, maxCombo: Int): ReflexGameStats {
+        return repository.recordReflexGameResult(score, bestReactionMs, maxCombo)
+    }
 }
 

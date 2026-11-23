@@ -536,4 +536,93 @@ test("Promo codes, bonus gift drops, and live community polls enforce staff crea
   );
 });
 
+test("Giveaways enforce staff creation/draw, single-ticket player join, and anti-tampering", async () => {
+  const past = new Date(Date.now() - 2000);
+  const nowUpdate = new Date(Date.now() - 500);
+
+  // Regular player cannot create a giveaway
+  await assertFails(
+    bobDb().collection("giveaways").doc("gw_fake").set({
+      title: "Fake Giveaway",
+      description: "Free",
+      prizeType: "FF_DIAMONDS",
+      prizeLabel: "100 Diamonds",
+      cashAmountPerWinner: 0,
+      winnersCount: 1,
+      maxEntries: 50,
+      entries: [],
+      winners: [],
+      joinedAuthUids: [],
+      status: "LIVE",
+      createdBy: "Bob",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Owner launches live diamond giveaway
+  await assertSucceeds(
+    ownerDb().collection("giveaways").doc("gw_1").set({
+      title: "💎 ১০০ ডায়মন্ড মেগা গিভওয়ে",
+      description: "ফ্রি টিকিট নিন!",
+      prizeType: "FF_DIAMONDS",
+      prizeLabel: "১০০ ডায়মন্ড",
+      cashAmountPerWinner: 0,
+      winnersCount: 1,
+      maxEntries: 20,
+      entries: [],
+      winners: [],
+      joinedAuthUids: [],
+      status: "LIVE",
+      createdBy: "👑 ওনার",
+      createdAtMillis: Date.now(),
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Bob joins giveaway once with 1 ticket
+  const bobEntry = {
+    actorKey: "u_bob",
+    authUid: BOB_UID,
+    ign: "BOB_PRO",
+    uid: "99887766",
+    joinedAtMillis: Date.now(),
+  };
+  await assertSucceeds(
+    bobDb().collection("giveaways").doc("gw_1").update({
+      entries: [bobEntry],
+      joinedAuthUids: [BOB_UID],
+      updatedAt: nowUpdate,
+    })
+  );
+
+  // Bob CANNOT double-join or declare himself winner
+  await assertFails(
+    bobDb().collection("giveaways").doc("gw_1").update({
+      entries: [bobEntry, bobEntry],
+      joinedAuthUids: [BOB_UID, BOB_UID],
+      updatedAt: new Date(Date.now() - 200),
+    })
+  );
+  await assertFails(
+    bobDb().collection("giveaways").doc("gw_1").update({
+      winners: [{ actorKey: "u_bob", ign: "BOB_PRO", uid: "99887766", prizeLabel: "১০০ ডায়মন্ড" }],
+      status: "DRAWN",
+      updatedAt: new Date(Date.now() - 200),
+    })
+  );
+
+  // Owner draws winner cleanly
+  await assertSucceeds(
+    ownerDb().collection("giveaways").doc("gw_1").update({
+      winners: [{ actorKey: "u_bob", ign: "BOB_PRO", uid: "99887766", prizeLabel: "১০০ ডায়মন্ড" }],
+      status: "DRAWN",
+      updatedAt: new Date(Date.now() - 100),
+    })
+  );
+});
+
+
 

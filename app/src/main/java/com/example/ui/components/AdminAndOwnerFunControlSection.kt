@@ -49,6 +49,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.BonusGiftDrop
+import com.example.model.GiveawayEvent
+import com.example.model.GiveawayPrizeType
 import com.example.model.LiveCommunityPoll
 import com.example.model.PromoCodeItem
 import com.example.model.TournamentMatch
@@ -79,7 +81,12 @@ fun AdminAndOwnerFunControlSection(
     onLaunchCommunityPoll: (question: String, options: List<String>) -> Pair<Boolean, String>,
     onCloseCommunityPoll: (pollId: String) -> Pair<Boolean, String>,
     onDeleteCommunityPoll: (pollId: String) -> Pair<Boolean, String>,
-    onBroadcastMatchToChat: (matchId: String) -> Pair<Boolean, String>
+    onBroadcastMatchToChat: (matchId: String) -> Pair<Boolean, String>,
+    giveaways: List<GiveawayEvent> = emptyList(),
+    onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
+    onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
+    onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
 ) {
     var statusBanner by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
@@ -122,6 +129,15 @@ fun AdminAndOwnerFunControlSection(
                 )
             }
         }
+
+        // 0. Live Mega Giveaway & Lottery System
+        GiveawayAdminControlCard(
+            giveaways = giveaways,
+            onCreateGiveaway = onCreateGiveaway,
+            onDrawWinners = onDrawGiveawayWinners,
+            onCloseGiveaway = onCloseGiveaway,
+            onDeleteGiveaway = onDeleteGiveaway
+        )
 
         // 1. Live Bonus Gift Drop (বোনাস রেইন)
         Surface(

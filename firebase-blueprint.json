@@ -333,6 +333,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["question", "options", "votedByUids", "votedByKeys", "active", "createdBy", "createdAtMillis", "createdAt", "updatedAt"]
+    },
+    "GiveawayEvent": {
+      "title": "GiveawayEvent",
+      "description": "Live prize giveaway event with participant tickets and random winner draw.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "prizeType": { "type": "string", "enum": ["CASH_TAKA", "FF_DIAMONDS", "WEEKLY_PASS"] },
+        "prizeLabel": { "type": "string" },
+        "cashAmountPerWinner": { "type": "integer" },
+        "winnersCount": { "type": "integer" },
+        "maxEntries": { "type": "integer" },
+        "entries": { "type": "array" },
+        "winners": { "type": "array" },
+        "joinedAuthUids": { "type": "array" },
+        "status": { "type": "string", "enum": ["LIVE", "DRAWN", "CLOSED"] },
+        "createdBy": { "type": "string" },
+        "createdAtMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "prizeType", "prizeLabel", "cashAmountPerWinner", "winnersCount", "maxEntries", "entries", "winners", "joinedAuthUids", "status", "createdBy", "createdAtMillis", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -391,6 +414,10 @@
     "/community_polls/{pollId}": {
       "schema": { "$ref": "#/entities/LiveCommunityPoll" },
       "description": "Live interactive community voting polls."
+    },
+    "/giveaways/{giveawayId}": {
+      "schema": { "$ref": "#/entities/GiveawayEvent" },
+      "description": "Live mega giveaway events with free ticket entries and drawn winners."
     }
   }
 }
