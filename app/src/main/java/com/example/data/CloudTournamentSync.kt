@@ -140,7 +140,7 @@ class CloudTournamentSync(private val context: Context) {
         val user = currentUser()
         val db = firestoreOrNull()
         if (user == null || db == null) {
-            syncCallbacks.onSyncStateChanged(false, "", "ক্লাউড সিঙ্ক বন্ধ (Google সাইন-ইন প্রয়োজন)")
+            syncCallbacks.onSyncStateChanged(false, "", "অফলাইন / লোকাল মোড সক্রিয়")
             return
         }
         if (attachedUid == user.uid && registrations.isNotEmpty()) {
@@ -397,7 +397,9 @@ class CloudTournamentSync(private val context: Context) {
 
     suspend fun safeSignOutCloud() = withContext(NonCancellable) {
         detachListeners()
-        GoogleAuthHelper.signOutFirebase(context)
+        if (isFirebaseReady()) {
+            runCatching { FirebaseAuth.getInstance().signOut() }
+        }
         callbacks?.onSyncStateChanged(false, "", "ক্লাউড সিঙ্ক সংযোগ বিচ্ছিন্ন")
     }
 

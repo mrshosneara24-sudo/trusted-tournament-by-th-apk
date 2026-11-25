@@ -472,6 +472,7 @@ data class AppUser(
     val id: String,
     val name: String,
     val phone: String,
+    val email: String = "",
     val ign: String,
     val uid: String,
     val bkashNumber: String,

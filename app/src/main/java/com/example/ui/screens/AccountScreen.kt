@@ -1902,29 +1902,31 @@ private fun LoginFormCard(
                 color = Color.White
             )
             Text(
-                text = "আপনার মোবাইল নম্বর বা ইমেইল দিয়ে লগইন করুন",
+                text = "আপনার ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Phone or Email Field
+            // Email Field
             OutlinedTextField(
                 value = phoneOrEmail,
                 onValueChange = {
                     phoneOrEmail = it
                     errorMessage = null
                 },
-                label = { Text("মোবাইল নম্বর অথবা ইমেইল") },
+                label = { Text("ইমেইল (Email)") },
+                placeholder = { Text("example@gmail.com") },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Filled.Phone,
+                        imageVector = Icons.Filled.Email,
                         contentDescription = null,
                         tint = FlameYellow
                     )
                 },
-                modifier = Modifier.fillMaxWidth().testTag("login_phone_input"),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier.fillMaxWidth().testTag("login_email_input"),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = FlameYellow,
@@ -2005,17 +2007,18 @@ private fun LoginFormCard(
             // Login Button
             Button(
                 onClick = {
-                    if (phoneOrEmail.isBlank()) {
-                        errorMessage = "মোবাইল নম্বর বা ইমেইল লিখুন"
+                    val trimmedEmail = phoneOrEmail.trim()
+                    if (trimmedEmail.isBlank() || !trimmedEmail.contains("@")) {
+                        errorMessage = "আপনার নিবন্ধিত ইমেইল লিখুন"
                         return@Button
                     }
                     if (password.isBlank()) {
                         errorMessage = "আপনার পাসওয়ার্ড লিখুন"
                         return@Button
                     }
-                    val ok = onLogin(phoneOrEmail, password)
+                    val ok = onLogin(trimmedEmail, password)
                     if (!ok) {
-                        errorMessage = "ভুল নম্বর/UID অথবা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password এ চাপুন।"
+                        errorMessage = "ভুল ইমেইল অথবা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password এ চাপুন।"
                     }
                 },
                 modifier = Modifier

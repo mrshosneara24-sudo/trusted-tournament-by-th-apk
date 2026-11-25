@@ -111,11 +111,11 @@ dependencies {
   // implementation(libs.firebase.ai)
   implementation(libs.firebase.firestore)
 
-  // Firebase Auth and Google Sign-In via Credential Manager:
+  // Firebase Auth (Google Sign-In / Credential Manager dependencies removed):
   implementation(libs.firebase.auth)
-  implementation(libs.androidx.credentials)
-  implementation(libs.androidx.credentials.play.services)
-  implementation(libs.googleid)
+  // implementation(libs.androidx.credentials)
+  // implementation(libs.androidx.credentials.play.services)
+  // implementation(libs.googleid)
   // implementation(libs.firebase.appcheck.recaptcha)
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)

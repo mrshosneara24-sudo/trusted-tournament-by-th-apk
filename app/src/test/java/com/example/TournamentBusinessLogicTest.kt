@@ -1703,5 +1703,58 @@ class TournamentBusinessLogicTest {
         assertEquals(expectedUrl, repository.appCustomization.value.officialWhatsAppUrl)
         assertEquals(expectedUrl, repository.officialWhatsAppGroupUrl.value)
     }
+
+    @Test
+    fun testEmailAndPasswordOnlyLoginAndRegistration() {
+        val playerEmail = "raistar.ff@gmail.com"
+        val playerPhone = "01712345678"
+        val registered = repository.register(
+            accountName = "Raistar",
+            ign = "TH_Raistar",
+            uid = "5544332211",
+            phone = playerPhone,
+            bkash = playerPhone,
+            password = "pass1234",
+            email = playerEmail
+        )
+        assertTrue("Registration with email must succeed", registered)
+        assertEquals(playerEmail, repository.userProfile.value.email)
+        assertEquals(playerEmail, repository.registeredUsers.value.first { it.phone == playerPhone }.email)
+
+        // Duplicate email registration must be blocked
+        assertFalse(
+            "Duplicate email registration must fail",
+            repository.register(
+                accountName = "Other",
+                ign = "TH_Other",
+                uid = "9988776655",
+                phone = "01799998888",
+                bkash = "01799998888",
+                password = "pass1234",
+                email = "RAISTAR.FF@gmail.com"
+            )
+        )
+
+        // Logout then log in strictly with Email + Password
+        repository.logout()
+        assertFalse(repository.isLoggedIn.value)
+        assertFalse("Wrong password must fail", repository.login(playerEmail, "wrongpass"))
+        assertTrue("Valid email + password must log in", repository.login(playerEmail, "pass1234"))
+        assertTrue(repository.isLoggedIn.value)
+        assertEquals(playerEmail, repository.userProfile.value.email)
+
+        // Email-based password reset works cleanly
+        val otpRes = repository.requestPasswordResetOtp(playerEmail)
+        assertTrue(otpRes.first)
+        assertTrue(repository.verifyPasswordResetOtp(playerEmail, otpRes.second))
+        assertTrue(repository.resetPassword(playerEmail, "newpass99"))
+        repository.logout()
+        assertTrue(repository.login(playerEmail, "newpass99"))
+
+        // Owner can also sign in using owner@trustedth.com + 7788
+        repository.logout()
+        assertTrue(repository.login("owner@trustedth.com", "7788"))
+        assertEquals(UserRole.OWNER, repository.userProfile.value.role)
+    }
 }
 

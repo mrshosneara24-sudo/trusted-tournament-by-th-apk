@@ -181,12 +181,6 @@ class TournamentViewModel(
     val matchPresets: StateFlow<List<MatchPresetTemplate>> = repository.matchPresets
     val registeredUsers: StateFlow<List<AppUser>> = repository.registeredUsers
 
-    fun onGoogleSignInSuccess(firebaseUid: String, email: String, displayName: String): Pair<Boolean, String> {
-        val result = repository.onGoogleSignInCompleted(firebaseUid, email, displayName)
-        _snackbarMessage.value = result.second
-        return result
-    }
-
     fun signOutCloud() {
         viewModelScope.launch {
             repository.signOutCloud()
@@ -624,7 +618,7 @@ class TournamentViewModel(
         if (success) {
             _snackbarMessage.value = "সফলভাবে লগইন হয়েছে! স্বাগতম ${userProfile.value.accountName}"
         } else {
-            _snackbarMessage.value = "❌ ভুল নম্বর/UID বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password ব্যবহার করুন।"
+            _snackbarMessage.value = "❌ ভুল ইমেইল বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password ব্যবহার করুন।"
         }
         return success
     }
@@ -636,13 +630,14 @@ class TournamentViewModel(
         phone: String,
         bkash: String,
         avatarId: String,
-        password: String = "123456"
+        password: String = "123456",
+        email: String = ""
     ): Boolean {
-        val success = repository.register(accountName, ign, uid, phone, bkash, avatarId, password = password)
+        val success = repository.register(accountName, ign, uid, phone, bkash, avatarId, password = password, email = email)
         if (success) {
             _snackbarMessage.value = "🎉 একাউন্ট সফলভাবে তৈরি হয়েছে! ফ্রি ৳${TournamentRepository.SIGNUP_WELCOME_BONUS} ওয়েলকাম বোনাস ওয়ালেটে যুক্ত হয়েছে।"
         } else {
-            _snackbarMessage.value = "নিবন্ধন ব্যর্থ হয়েছে! এই নম্বরটি ইতিমধ্যেই নিবন্ধিত অথবা তথ্য অসম্পূর্ণ।"
+            _snackbarMessage.value = "নিবন্ধন ব্যর্থ হয়েছে! এই ইমেইল বা নম্বরটি ইতিমধ্যেই নিবন্ধিত অথবা তথ্য অসম্পূর্ণ।"
         }
         return success
     }

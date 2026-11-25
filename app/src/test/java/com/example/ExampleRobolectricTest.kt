@@ -1061,8 +1061,9 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Logged out screen shows Fire-and-Water Google Cloud Sync button
-        composeTestRule.onNodeWithTag("google_signin_btn").performScrollTo().assertIsDisplayed()
+        // Logged out screen must NOT show Google Sign-In button
+        composeTestRule.onNodeWithTag("google_signin_btn").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("auth_submit_btn").performScrollTo().assertIsDisplayed()
 
         // Owner logs in
         assertTrue(viewModel.login("01861583924", "7788"))

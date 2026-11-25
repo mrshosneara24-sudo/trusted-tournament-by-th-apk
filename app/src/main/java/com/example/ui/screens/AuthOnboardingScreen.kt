@@ -51,19 +51,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.example.ui.components.ForgotPasswordDialog
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material3.CircularProgressIndicator
-import com.example.data.GoogleAuthHelper
-import com.example.data.GoogleSignInOutcome
-import com.example.ui.theme.FireWaterBorderGradient
-import com.example.ui.theme.FireWaterButtonGradient
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -144,32 +137,29 @@ private fun generateNewCaptcha(): CaptchaChallenge {
 
 @Composable
 fun AuthOnboardingScreen(
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> Boolean,
-    onLogin: (phoneOrEmail: String, pass: String) -> Boolean,
+    onRegister: (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> Boolean,
+    onLogin: (email: String, pass: String) -> Boolean,
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
-    onGoogleSignInSuccess: (firebaseUid: String, email: String, displayName: String) -> Pair<Boolean, String> = { _, _, _ -> false to "" },
     appCustomization: AppCustomization = AppCustomization(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Create Account, 1 = Sign In
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
-    var isGoogleLoading by remember { mutableStateOf(false) }
-    var cloudAuthBanner by remember { mutableStateOf<String?>(null) }
 
     // Registration States
     var regName by remember { mutableStateOf("") }
+    var regEmail by remember { mutableStateOf("") }
     var regPhone by remember { mutableStateOf("") }
     var regIgn by remember { mutableStateOf("") }
     var regUid by remember { mutableStateOf("") }
     var regPassword by remember { mutableStateOf("") }
     var regPasswordVisible by remember { mutableStateOf(false) }
 
-    // Login States
-    var loginPhone by remember { mutableStateOf("") }
+    // Login States (Email + Password only)
+    var loginEmail by remember { mutableStateOf("") }
     var loginPassword by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
     var loginError by remember { mutableStateOf<String?>(null) }
@@ -454,6 +444,28 @@ fun AuthOnboardingScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // Email
+                        OutlinedTextField(
+                            value = regEmail,
+                            onValueChange = { regEmail = it },
+                            label = { Text("ইমেইল (Email)") },
+                            placeholder = { Text("example@gmail.com") },
+                            leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = FlameCyan) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reg_email_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = FlameCyan,
+                                unfocusedBorderColor = DarkBorder,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Phone Number
                         OutlinedTextField(
                             value = regPhone,
@@ -550,34 +562,37 @@ fun AuthOnboardingScreen(
                         )
 
                     } else {
-                        // Sign In Form
+                        // Sign In Form (Email + Password only)
                         Text(
                             text = "আপনার অ্যাকাউন্টে সাইন ইন করুন",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
                         Text(
-                            text = "মোবাইল নম্বর ও পাসওয়ার্ড দিয়ে টুর্নামেন্টে প্রবেশ করুন",
+                            text = "ইমেইল ও পাসওয়ার্ড দিয়ে টুর্নামেন্টে প্রবেশ করুন",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.7f)
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Login Phone
+                        // Login Email
                         OutlinedTextField(
-                            value = loginPhone,
-                            onValueChange = { loginPhone = it },
-                            label = { Text("মোবাইল / বিকাশ নম্বর") },
-                            placeholder = { Text("018XXXXXXXX বা ইমেইল") },
-                            leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null, tint = BkashPink) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            value = loginEmail,
+                            onValueChange = {
+                                loginEmail = it
+                                loginError = null
+                            },
+                            label = { Text("ইমেইল (Email)") },
+                            placeholder = { Text("example@gmail.com") },
+                            leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = FlameCyan) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("login_phone_input"),
+                                .testTag("login_email_input"),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = BkashPink,
+                                focusedBorderColor = FlameCyan,
                                 unfocusedBorderColor = DarkBorder,
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
@@ -809,8 +824,13 @@ fun AuthOnboardingScreen(
 
                             if (selectedTab == 0) {
                                 // Register
-                                if (regName.isBlank() || regPhone.isBlank() || regIgn.isBlank()) {
-                                    Toast.makeText(context, "সকল তথ্য পূরণ করুন!", Toast.LENGTH_SHORT).show()
+                                val trimmedEmail = regEmail.trim()
+                                if (regName.isBlank() || trimmedEmail.isBlank() || regPhone.isBlank() || regIgn.isBlank()) {
+                                    Toast.makeText(context, "নাম, ইমেইল, নম্বর ও IGN পূরণ করুন!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                if (!trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+                                    Toast.makeText(context, "সঠিক ইমেইল অ্যাড্রেস লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 if (regPassword.trim().length < 4) {
@@ -819,6 +839,7 @@ fun AuthOnboardingScreen(
                                 }
                                 val ok = onRegister(
                                     regName.trim(),
+                                    trimmedEmail,
                                     regIgn.trim(),
                                     regUid.trim().ifEmpty { "1002345" },
                                     regPhone.trim(),
@@ -828,22 +849,28 @@ fun AuthOnboardingScreen(
                                 if (ok) {
                                     Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! ফ্রি ৳৫ ওয়েলকাম বোনাস যুক্ত হয়েছে। স্বাগতম $regName", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "❌ এই মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে বা তথ্য অসম্পূর্ণ!", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "❌ এই ইমেইল বা মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে বা তথ্য অসম্পূর্ণ!", Toast.LENGTH_LONG).show()
                                 }
                             } else {
-                                // Login
-                                if (loginPhone.isBlank()) {
-                                    loginError = "দয়া করে মোবাইল নম্বর বা UID লিখুন!"
-                                    Toast.makeText(context, "মোবাইল নম্বর লিখুন!", Toast.LENGTH_SHORT).show()
+                                // Email + Password Login ONLY
+                                val trimmedEmail = loginEmail.trim()
+                                if (trimmedEmail.isBlank() || !trimmedEmail.contains("@")) {
+                                    loginError = "দয়া করে আপনার নিবন্ধিত ইমেইল অ্যাড্রেস লিখুন!"
+                                    Toast.makeText(context, "সঠিক ইমেইল লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val ok = onLogin(loginPhone.trim(), loginPassword.trim())
+                                if (loginPassword.isBlank()) {
+                                    loginError = "দয়া করে পাসওয়ার্ড লিখুন!"
+                                    Toast.makeText(context, "পাসওয়ার্ড লিখুন!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                val ok = onLogin(trimmedEmail, loginPassword.trim())
                                 if (ok) {
                                     loginError = null
                                     Toast.makeText(context, "সফলভাবে লগইন হয়েছে!", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    loginError = "❌ ভুল নম্বর বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে উপরে 'পাসওয়ার্ড ভুলে গেছেন?' এ ক্লিক করে রিসেট করুন।"
-                                    Toast.makeText(context, "ভুল নম্বর বা পাসওয়ার্ড!", Toast.LENGTH_SHORT).show()
+                                    loginError = "❌ ভুল ইমেইল বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে উপরে 'পাসওয়ার্ড ভুলে গেছেন?' এ ক্লিক করে রিসেট করুন।"
+                                    Toast.makeText(context, "ভুল ইমেইল বা পাসওয়ার্ড!", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -862,132 +889,6 @@ fun AuthOnboardingScreen(
                             fontSize = 14.sp,
                             color = Color.Black
                         )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(1.dp)
-                                .background(DarkBorder)
-                        )
-                        Text(
-                            text = "অথবা লাইভ ক্লাউড সিঙ্ক",
-                            fontSize = 11.sp,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(1.dp)
-                                .background(DarkBorder)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.Transparent,
-                        border = androidx.compose.foundation.BorderStroke(1.5.dp, FireWaterBorderGradient),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(FireWaterButtonGradient)
-                            .clickable(enabled = !isGoogleLoading) {
-                                isGoogleLoading = true
-                                cloudAuthBanner = null
-                                coroutineScope.launch {
-                                    when (val outcome = GoogleAuthHelper.signInInteractive(context)) {
-                                        is GoogleSignInOutcome.Success -> {
-                                            val (ok, msg) = onGoogleSignInSuccess(
-                                                outcome.firebaseUid,
-                                                outcome.email,
-                                                outcome.displayName
-                                            )
-                                            cloudAuthBanner = msg
-                                            if (ok) {
-                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                        is GoogleSignInOutcome.Cancelled -> {
-                                            cloudAuthBanner = outcome.message
-                                            Toast.makeText(context, outcome.message, Toast.LENGTH_SHORT).show()
-                                        }
-                                        is GoogleSignInOutcome.Error -> {
-                                            cloudAuthBanner = outcome.message
-                                            Toast.makeText(context, outcome.message, Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                    isGoogleLoading = false
-                                }
-                            }
-                            .testTag("google_signin_btn")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            if (isGoogleLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Google সিঙ্ক হচ্ছে...",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = Color.White
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.CloudSync,
-                                    contentDescription = "Google Sign In",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "🌐 Google দিয়ে সাইন ইন ও লাইভ সিঙ্ক",
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 13.sp,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-
-                    cloudAuthBanner?.let { banner ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF0E1D2F),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.55f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("google_signin_feedback_banner")
-                        ) {
-                            Text(
-                                text = banner,
-                                fontSize = 11.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
                     }
                 }
             }
@@ -1008,13 +909,13 @@ fun AuthOnboardingScreen(
         // Forgot Password Dialog
         if (showForgotPasswordDialog) {
             ForgotPasswordDialog(
-                initialPhoneOrUid = loginPhone,
+                initialPhoneOrUid = loginEmail,
                 onDismiss = { showForgotPasswordDialog = false },
                 onRequestOtp = onRequestOtp,
                 onVerifyOtp = onVerifyOtp,
                 onResetPassword = onResetPassword,
-                onPasswordResetSuccess = { resetPhone, resetPass ->
-                    loginPhone = resetPhone
+                onPasswordResetSuccess = { resetIdentifier, resetPass ->
+                    loginEmail = resetIdentifier
                     loginPassword = resetPass
                     loginError = null
                     showForgotPasswordDialog = false

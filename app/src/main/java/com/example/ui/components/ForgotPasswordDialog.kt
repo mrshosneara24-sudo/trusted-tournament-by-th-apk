@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
@@ -206,13 +207,13 @@ fun ForgotPasswordDialog(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "আপনার নিবন্ধিত মোবাইল নম্বর বা FF UID দিন:",
+                                text = "আপনার নিবন্ধিত ইমেইল বা মোবাইল নম্বর দিন:",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "যে মোবাইল নম্বর বা ফ্রি ফায়ার UID দিয়ে আপনি একাউন্ট খুলেছিলেন সেটি লিখুন।",
+                                text = "যে ইমেইল, মোবাইল নম্বর বা ফ্রি ফায়ার UID দিয়ে আপনি একাউন্ট খুলেছিলেন সেটি লিখুন।",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -225,11 +226,11 @@ fun ForgotPasswordDialog(
                                     phoneOrUid = it
                                     errorMessage = null
                                 },
-                                label = { Text("মোবাইল নম্বর / Free Fire UID") },
-                                placeholder = { Text("যেমন: 01861583924 অথবা 11410365896") },
-                                leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null, tint = BkashPink) },
+                                label = { Text("ইমেইল / মোবাইল নম্বর / FF UID") },
+                                placeholder = { Text("যেমন: player@gmail.com বা 01861583924") },
+                                leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = FlameCyan) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("forgot_phone_or_uid_input"),
@@ -249,7 +250,7 @@ fun ForgotPasswordDialog(
                         onClick = {
                             val trimmed = phoneOrUid.trim()
                             if (trimmed.isBlank()) {
-                                errorMessage = "দয়া করে মোবাইল নম্বর বা UID প্রদান করুন!"
+                                errorMessage = "দয়া করে ইমেইল, মোবাইল নম্বর বা UID প্রদান করুন!"
                                 return@Button
                             }
 

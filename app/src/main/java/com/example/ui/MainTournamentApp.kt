@@ -100,8 +100,6 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.data.GoogleAuthHelper
-import com.example.data.GoogleSignInOutcome
 import com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
 import com.example.model.RequestStatus
 import com.example.model.UserRole
@@ -261,23 +259,14 @@ fun MainTournamentApp(
         }
     }
 
-    LaunchedEffect(Unit) {
-        when (val restored = GoogleAuthHelper.trySilentRestore(appContext)) {
-            is GoogleSignInOutcome.Success -> {
-                viewModel.onGoogleSignInSuccess(restored.firebaseUid, restored.email, restored.displayName)
-            }
-            else -> Unit
-        }
-    }
-
     // Esports Onboarding & Captcha Screen for new downloads / logged-out users
     if (!isLoggedIn) {
         AuthOnboardingScreen(
-            onRegister = { name, ign, uid, phone, bkash, pass ->
-                viewModel.register(name, ign, uid, phone, bkash, "avatar_1", pass)
+            onRegister = { name, email, ign, uid, phone, bkash, pass ->
+                viewModel.register(name, ign, uid, phone, bkash, "avatar_1", pass, email)
             },
-            onLogin = { phoneOrEmail, pass ->
-                viewModel.login(phoneOrEmail, pass)
+            onLogin = { email, pass ->
+                viewModel.login(email, pass)
             },
             onRequestOtp = { phoneOrUid ->
                 viewModel.requestPasswordResetOtp(phoneOrUid)
@@ -287,9 +276,6 @@ fun MainTournamentApp(
             },
             onResetPassword = { phoneOrUid, newPass ->
                 viewModel.resetPassword(phoneOrUid, newPass)
-            },
-            onGoogleSignInSuccess = { firebaseUid, email, displayName ->
-                viewModel.onGoogleSignInSuccess(firebaseUid, email, displayName)
             },
             appCustomization = appCustomization
         )
@@ -560,7 +546,7 @@ fun MainTournamentApp(
                             }
                         }
 
-                        // Live Cloud Sync Pill (Multi-device sync via Google)
+                        // Live Data & Sync Refresh Pill
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = if (isCloudConnected) Color(0xFF0A2721) else Color(0xFF0B1F34),
@@ -571,31 +557,7 @@ fun MainTournamentApp(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    if (!isCloudConnected) {
-                                        appCoroutineScope.launch {
-                                            when (val outcome = GoogleAuthHelper.signInInteractive(appContext)) {
-                                                is GoogleSignInOutcome.Success -> {
-                                                    viewModel.onGoogleSignInSuccess(
-                                                        outcome.firebaseUid,
-                                                        outcome.email,
-                                                        outcome.displayName
-                                                    )
-                                                }
-                                                is GoogleSignInOutcome.Cancelled -> {
-                                                    snackbarHostState.showSnackbar(outcome.message)
-                                                }
-                                                is GoogleSignInOutcome.Error -> {
-                                                    snackbarHostState.showSnackbar(outcome.message)
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        appCoroutineScope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                "☁️ লাইভ ক্লাউড সিঙ্ক সক্রিয় (${cloudUserEmail.ifBlank { "Connected" }})"
-                                            )
-                                        }
-                                    }
+                                    viewModel.refreshAppAndCloudState()
                                 }
                                 .testTag("appbar_cloud_sync_pill")
                         ) {
@@ -605,13 +567,13 @@ fun MainTournamentApp(
                             ) {
                                 Icon(
                                     imageVector = if (isCloudConnected) Icons.Filled.CloudDone else Icons.Filled.CloudSync,
-                                    contentDescription = "Cloud Sync",
+                                    contentDescription = "Data Refresh",
                                     tint = if (isCloudConnected) VictoryGreen else WaterCyan,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isCloudConnected) "লাইভ সিঙ্ক" else "সিঙ্ক অন",
+                                    text = if (isCloudConnected) "লাইভ সিঙ্ক" else "রিফ্রেশ",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isCloudConnected) VictoryGreen else WaterCyan

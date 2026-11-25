@@ -93,7 +93,7 @@ class TournamentRepository(
         if (cloudSync?.isSignedInCloud() == true) {
             "লাইভ ক্লাউড সিঙ্ক চালু (${cloudSync.currentCloudEmail()})"
         } else {
-            "সব বন্ধুর সাথে লাইভ সিঙ্ক করতে Google সাইন-ইন করুন"
+            "ইমেইল ও পাসওয়ার্ড লগইন সক্রিয়"
         }
     )
     val cloudStatusMessage: StateFlow<String> = _cloudStatusMessage.asStateFlow()
@@ -246,6 +246,7 @@ class TournamentRepository(
                 id = "u_owner",
                 name = "তানভির হাসান (ওনার)",
                 phone = "01861583924",
+                email = "owner@trustedth.com",
                 ign = "TH★DEVIL⚡",
                 uid = "11410365896",
                 bkashNumber = "01861583924",
@@ -765,69 +766,6 @@ class TournamentRepository(
         )
     }
 
-    fun onGoogleSignInCompleted(firebaseUid: String, email: String, displayName: String): Pair<Boolean, String> {
-        val isBootstrappedOwner = email.equals("mrshosneara24@gmail.com", ignoreCase = true)
-        if (!_isLoggedIn.value) {
-            if (isBootstrappedOwner) {
-                login(masterOwnerPhone, masterOwnerPin)
-            } else {
-                val safeName = displayName.trim().ifBlank { email.substringBefore("@").ifBlank { "FF Player" } }
-                val cleanIgn = safeName.take(18).ifBlank { "TH_Player" }
-                val existing = _registeredUsers.value.firstOrNull {
-                    it.id == "u_g_$firebaseUid" ||
-                        (email.isNotBlank() && it.name.equals(safeName, ignoreCase = true))
-                }
-                if (existing != null) {
-                    login(existing.phone.ifBlank { existing.uid }, existing.password)
-                } else {
-                    val generatedUid = (10000000L + (firebaseUid.hashCode().toLong() and 0x7FFFFFFFL) % 89999999L).toString()
-                    val generatedPhone = "019" + ((10000000L + (firebaseUid.hashCode().toLong() and 0x7FFFFFFFL) % 89999999L).toString())
-                    val newUser = AppUser(
-                        id = "u_g_$firebaseUid",
-                        name = safeName,
-                        phone = generatedPhone,
-                        ign = cleanIgn,
-                        uid = generatedUid,
-                        bkashNumber = generatedPhone,
-                        role = UserRole.PLAYER,
-                        joinedDate = "আজ",
-                        walletBalance = SIGNUP_WELCOME_BONUS,
-                        avatarId = "th_logo",
-                        battleTagline = "TRUSTED TOURNAMENT এ Google ভেরিফাইড যোদ্ধা! 🎯",
-                        guildName = "TRUSTED TH"
-                    )
-                    _registeredUsers.value = listOf(newUser) + _registeredUsers.value
-                    _walletBalance.value = SIGNUP_WELCOME_BONUS
-                    _userProfile.value = UserProfile(
-                        accountName = newUser.name,
-                        phone = newUser.phone,
-                        email = email,
-                        ign = newUser.ign,
-                        uid = newUser.uid,
-                        bkashNumber = newUser.bkashNumber,
-                        avatarId = newUser.avatarId,
-                        joinedDate = newUser.joinedDate,
-                        isLoggedIn = true,
-                        role = UserRole.PLAYER,
-                        guildName = "TRUSTED TH",
-                        battleTagline = newUser.battleTagline
-                    )
-                    _isLoggedIn.value = true
-                    saveState()
-                }
-            }
-        } else if (isBootstrappedOwner && _userProfile.value.role != UserRole.OWNER) {
-            login(masterOwnerPhone, masterOwnerPin)
-        } else if (email.isNotBlank()) {
-            _userProfile.value = _userProfile.value.copy(email = email)
-            saveState()
-        }
-
-        startCloudSync()
-        pushActiveUserToCloud()
-        return true to "🌐 লাইভ ক্লাউড সিঙ্ক চালু হয়েছে ($email)!"
-    }
-
     suspend fun signOutCloud() {
         cloudSync?.safeSignOutCloud()
         _isCloudConnected.value = false
@@ -1097,11 +1035,16 @@ class TournamentRepository(
         val trimmed = phoneOrEmail.trim()
         val passTrimmed = password.trim()
         val existingUser = _registeredUsers.value.find {
-            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+            (it.email.isNotBlank() && it.email.equals(trimmed, ignoreCase = true)) ||
+                it.phone == trimmed ||
+                it.uid == trimmed ||
+                it.bkashNumber == trimmed
         }
 
-        // Owner automatic sign-in via 01861583924 + code 7788 (or master passkey)
+        // Owner sign-in via owner email / 01861583924 + code 7788 (or master passkey)
         val isOwnerPhoneOrKey = trimmed == masterOwnerPhone ||
+                trimmed.equals("owner@trustedth.com", ignoreCase = true) ||
+                trimmed.equals("mrshosneara24@gmail.com", ignoreCase = true) ||
                 trimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
                 existingUser?.role == UserRole.OWNER
         val isOwnerMasterKey = isOwnerPhoneOrKey && (
@@ -1130,6 +1073,8 @@ class TournamentRepository(
         val syncedBalance = existingUser?.walletBalance ?: if (isSameAccount) _walletBalance.value else 0
         _walletBalance.value = syncedBalance
         val existingBadges = existingUser?.effectiveBadges ?: current.earnedBadges
+        val resolvedEmail = existingUser?.email?.takeIf { it.isNotBlank() }
+            ?: if (trimmed.contains("@")) trimmed else current.email
         _userProfile.value = if (role == UserRole.OWNER) {
             current.copy(
                 isLoggedIn = true,
@@ -1138,7 +1083,7 @@ class TournamentRepository(
                 uid = existingUser?.uid ?: "11410365896",
                 phone = existingUser?.phone ?: masterOwnerPhone,
                 bkashNumber = existingUser?.bkashNumber ?: masterOwnerPhone,
-                email = if (!trimmed.startsWith("01")) trimmed else "owner@trustedth.com",
+                email = resolvedEmail.ifBlank { "owner@trustedth.com" },
                 avatarId = existingUser?.avatarId ?: current.avatarId,
                 customPfpUri = sanitizePfpForRole(UserRole.OWNER, existingUser?.customPfpUri ?: current.customPfpUri),
                 customBannerUri = sanitizeBannerForAccount(UserRole.OWNER, existingBadges, existingUser?.customBannerUri ?: current.customBannerUri),
@@ -1172,6 +1117,7 @@ class TournamentRepository(
                 uid = existingUser?.uid ?: current.uid,
                 phone = existingUser?.phone ?: current.phone,
                 bkashNumber = existingUser?.bkashNumber ?: current.bkashNumber,
+                email = resolvedEmail,
                 avatarId = existingUser?.avatarId ?: current.avatarId,
                 customPfpUri = sanitizePfpForRole(role, existingUser?.customPfpUri ?: current.customPfpUri),
                 customBannerUri = sanitizeBannerForAccount(role, existingBadges, existingUser?.customBannerUri ?: current.customBannerUri),
@@ -1216,7 +1162,7 @@ class TournamentRepository(
                 uid = existingUser?.uid ?: "",
                 phone = existingUser?.phone ?: trimmed,
                 bkashNumber = existingUser?.bkashNumber ?: trimmed,
-                email = if (!trimmed.startsWith("01")) trimmed else "",
+                email = resolvedEmail,
                 avatarId = existingUser?.avatarId ?: "avatar_wolf",
                 customPfpUri = sanitizePfpForRole(role, existingUser?.customPfpUri),
                 customBannerUri = sanitizeBannerForAccount(role, targetBadges, existingUser?.customBannerUri),
@@ -1270,7 +1216,10 @@ class TournamentRepository(
         val trimmed = phoneOrUid.trim()
         if (trimmed.isBlank()) return null
         return _registeredUsers.value.find {
-            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+            (it.email.isNotBlank() && it.email.equals(trimmed, ignoreCase = true)) ||
+                it.phone == trimmed ||
+                it.uid == trimmed ||
+                it.bkashNumber == trimmed
         }
     }
 
@@ -1278,7 +1227,7 @@ class TournamentRepository(
         val trimmed = phoneOrUid.trim()
         val user = findUserForPasswordReset(trimmed)
         if (user == null) {
-            return Pair(false, "এই ফোন নম্বর বা UID দিয়ে কোনো অ্যাকাউন্ট খুঁজে পাওয়া যায়নি!")
+            return Pair(false, "এই ইমেইল, ফোন নম্বর বা UID দিয়ে কোনো অ্যাকাউন্ট খুঁজে পাওয়া যায়নি!")
         }
         val otp = (1000..9999).random().toString()
         activeResetSession = PasswordResetSession(phoneOrUid = trimmed, otp = otp)
@@ -1301,7 +1250,10 @@ class TournamentRepository(
 
         val list = _registeredUsers.value.toMutableList()
         val index = list.indexOfFirst {
-            it.phone == trimmed || it.uid == trimmed || it.bkashNumber == trimmed
+            (it.email.isNotBlank() && it.email.equals(trimmed, ignoreCase = true)) ||
+                it.phone == trimmed ||
+                it.uid == trimmed ||
+                it.bkashNumber == trimmed
         }
 
         if (index != -1) {
@@ -1323,7 +1275,8 @@ class TournamentRepository(
         bkash: String,
         avatarId: String = "th_logo",
         secretCode: String = "",
-        password: String = "123456"
+        password: String = "123456",
+        email: String = ""
     ): Boolean {
         val trimmedName = accountName.trim()
         val trimmedIgn = ign.trim()
@@ -1331,6 +1284,7 @@ class TournamentRepository(
         val trimmedPhone = phone.trim()
         val trimmedBkash = bkash.trim().ifBlank { trimmedPhone }
         val trimmedPassword = password.trim()
+        val trimmedEmail = email.trim()
 
         if (trimmedName.isBlank() || trimmedIgn.isBlank() || trimmedUid.isBlank() || trimmedPhone.isBlank()) {
             return false
@@ -1338,7 +1292,10 @@ class TournamentRepository(
         if (trimmedPassword.length < 4) {
             return false
         }
-        val alreadyExists = _registeredUsers.value.any { it.phone == trimmedPhone }
+        val alreadyExists = _registeredUsers.value.any {
+            it.phone == trimmedPhone ||
+                (trimmedEmail.isNotBlank() && it.email.equals(trimmedEmail, ignoreCase = true))
+        }
         if (alreadyExists) {
             return false
         }
@@ -1351,6 +1308,7 @@ class TournamentRepository(
             id = "u_${System.currentTimeMillis()}",
             name = trimmedName,
             phone = trimmedPhone,
+            email = trimmedEmail,
             ign = trimmedIgn,
             uid = trimmedUid,
             bkashNumber = trimmedBkash,
@@ -1370,6 +1328,7 @@ class TournamentRepository(
             ign = trimmedIgn,
             uid = trimmedUid,
             phone = trimmedPhone,
+            email = trimmedEmail,
             bkashNumber = trimmedBkash,
             avatarId = avatarId,
             level = 1,
@@ -4307,6 +4266,7 @@ class TournamentRepository(
             id = "u_owner",
             name = "তানভির হাসান (ওনার)",
             phone = "01861583924",
+            email = "owner@trustedth.com",
             ign = "TH★DEVIL⚡",
             uid = "11410365896",
             bkashNumber = "01861583924",

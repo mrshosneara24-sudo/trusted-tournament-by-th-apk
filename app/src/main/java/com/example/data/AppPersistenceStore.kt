@@ -320,6 +320,7 @@ class AppPersistenceStore(context: Context) {
         put("id", u.id)
         put("name", u.name)
         put("phone", u.phone)
+        put("email", u.email)
         put("ign", u.ign)
         put("uid", u.uid)
         put("bkashNumber", u.bkashNumber)
@@ -375,6 +376,7 @@ class AppPersistenceStore(context: Context) {
         id = o.getString("id"),
         name = o.getString("name"),
         phone = o.getString("phone"),
+        email = o.optString("email", ""),
         ign = o.getString("ign"),
         uid = o.getString("uid"),
         bkashNumber = o.getString("bkashNumber"),
