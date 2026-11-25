@@ -511,6 +511,7 @@ class CloudTournamentSync(private val context: Context) {
                     "mapName" to match.mapName.take(60),
                     "matchDateTime" to match.matchDateTime.take(80),
                     "startsInMinutes" to match.startsInMinutes.coerceIn(0, 100000),
+                    "scheduledStartAtMillis" to match.effectiveStartMillis().coerceIn(0L, 9999999999999L),
                     "entryFee" to match.entryFee.coerceIn(0, 50000),
                     "totalPrize" to match.totalPrize.coerceIn(0, 500000),
                     "perKillPrize" to match.perKillPrize.coerceIn(0, 50000),
@@ -1394,6 +1395,14 @@ class CloudTournamentSync(private val context: Context) {
                 ?: MatchType.SOLO
             val status = MatchStatus.entries.firstOrNull { it.name == snap.getString("status") }
                 ?: MatchStatus.UPCOMING
+            val startsInMinutes = (snap.get("startsInMinutes") as? Number)?.toInt() ?: 30
+            val rawScheduled = (snap.get("scheduledStartAtMillis") as? Number)?.toLong() ?: 0L
+            val fallbackBase = snap.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
+            val effectiveScheduled = if (rawScheduled > 0L) {
+                rawScheduled
+            } else {
+                fallbackBase + startsInMinutes.coerceAtLeast(0) * 60_000L
+            }
             TournamentMatch(
                 id = snap.id,
                 title = title,
@@ -1401,7 +1410,7 @@ class CloudTournamentSync(private val context: Context) {
                 matchType = mType,
                 mapName = snap.getString("mapName") ?: "বারমুডা",
                 matchDateTime = snap.getString("matchDateTime") ?: "আজ",
-                startsInMinutes = (snap.get("startsInMinutes") as? Number)?.toInt() ?: 30,
+                startsInMinutes = startsInMinutes,
                 entryFee = (snap.get("entryFee") as? Number)?.toInt() ?: 20,
                 totalPrize = (snap.get("totalPrize") as? Number)?.toInt() ?: 300,
                 perKillPrize = (snap.get("perKillPrize") as? Number)?.toInt() ?: 10,
@@ -1411,7 +1420,8 @@ class CloudTournamentSync(private val context: Context) {
                 status = status,
                 roomId = snap.getString("roomId"),
                 roomPassword = snap.getString("roomPassword"),
-                version = snap.getString("version") ?: "মোবাইল অনলি (No Emulator)"
+                version = snap.getString("version") ?: "মোবাইল অনলি (No Emulator)",
+                scheduledStartAtMillis = effectiveScheduled
             )
         }.getOrNull()
     }

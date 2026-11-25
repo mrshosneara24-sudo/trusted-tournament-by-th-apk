@@ -83,6 +83,7 @@ fun MatchCard(
     onBookClick: () -> Unit,
     onViewRoomClick: () -> Unit,
     onViewSlotGridClick: () -> Unit,
+    nowMillis: Long = System.currentTimeMillis(),
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -248,17 +249,27 @@ fun MatchCard(
                         )
                     }
 
+                    val remainingMs = match.remainingMillis(nowMillis)
+                    val countdownBadgeColor = when {
+                        match.status == MatchStatus.ONGOING -> FireOrange
+                        match.status == MatchStatus.ROOM_OPEN -> VictoryGreen
+                        match.status == MatchStatus.UPCOMING && remainingMs <= 5 * 60_000L -> FireRed
+                        else -> FlameYellow
+                    }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = FlameYellow.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f))
+                        color = countdownBadgeColor.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, countdownBadgeColor.copy(alpha = 0.55f))
                     ) {
                         Text(
-                            text = "⏱️ ${match.startsInMinutes} মিনিট বাকি",
+                            text = match.liveCountdownText(nowMillis),
+                            fontFamily = MonoFontFamily,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = FlameYellow,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            color = countdownBadgeColor,
+                            modifier = Modifier
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .testTag("match_countdown_${match.id}")
                         )
                     }
                 }

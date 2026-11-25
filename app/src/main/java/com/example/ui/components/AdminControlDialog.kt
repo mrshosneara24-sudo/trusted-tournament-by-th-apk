@@ -1,9 +1,11 @@
 package com.example.ui.components
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,22 +25,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
@@ -75,6 +82,7 @@ import com.example.model.GameCategory
 import com.example.model.GiveawayEvent
 import com.example.model.GiveawayPrizeType
 import com.example.model.LiveCommunityPoll
+import com.example.model.MatchPresetTemplate
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
 import com.example.model.PromoCodeItem
@@ -84,13 +92,18 @@ import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.UserRole
 import com.example.model.WithdrawRequest
+import com.example.model.formatMatchClockTimeLabel
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.FireRed
 import com.example.ui.theme.FireWaterBorderGradient
 import com.example.ui.theme.FlameCyan
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
+import com.example.ui.theme.MonoFontFamily
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VictoryGreen
 
 @Composable
@@ -113,7 +126,8 @@ fun AdminControlDialog(
         totalPrize: Int,
         perKill: Int,
         booyahPrize: Int,
-        totalSlots: Int
+        totalSlots: Int,
+        startsInMinutes: Int
     ) -> Unit,
     onAdjustUserBalance: (target: String, amount: Int, isAdd: Boolean, reason: String) -> Boolean = { _, _, _, _ -> false },
     onIncrementUserMatchesPlayed: (target: String, delta: Int) -> Boolean = { _, _ -> false },
@@ -161,7 +175,12 @@ fun AdminControlDialog(
     onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
     onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
     onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
-    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    matchPresets: List<MatchPresetTemplate> = emptyList(),
+    onLaunchMatchPreset: (presetId: String, overrideStartsInMinutes: Int?) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onSaveMatchPreset: (MatchPresetTemplate) -> Pair<Boolean, String> = { false to "" },
+    onDeleteMatchPreset: (presetId: String) -> Pair<Boolean, String> = { false to "" },
+    onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String> = { false to "" }
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -382,7 +401,12 @@ fun AdminControlDialog(
                     }
                     2 -> {
                         CreateMatchSection(
-                            onCreateMatch = onCreateNewMatch
+                            matchPresets = matchPresets,
+                            onCreateMatch = onCreateNewMatch,
+                            onLaunchPreset = onLaunchMatchPreset,
+                            onSavePreset = onSaveMatchPreset,
+                            onDeletePreset = onDeleteMatchPreset,
+                            onHoldBrAndCsForLoneWolf = onHoldBrAndCsForLoneWolf
                         )
                     }
                     3 -> {
@@ -736,6 +760,7 @@ private fun WhatsAppGroupSection(
 
 @Composable
 private fun CreateMatchSection(
+    matchPresets: List<MatchPresetTemplate>,
     onCreateMatch: (
         title: String,
         category: GameCategory,
@@ -746,27 +771,183 @@ private fun CreateMatchSection(
         totalPrize: Int,
         perKill: Int,
         booyahPrize: Int,
-        totalSlots: Int
-    ) -> Unit
+        totalSlots: Int,
+        startsInMinutes: Int
+    ) -> Unit,
+    onLaunchPreset: (presetId: String, overrideStartsInMinutes: Int?) -> Pair<Boolean, String>,
+    onSavePreset: (MatchPresetTemplate) -> Pair<Boolean, String>,
+    onDeletePreset: (presetId: String) -> Pair<Boolean, String>,
+    onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String>
 ) {
-    var title by remember { mutableStateOf("বিআর র‍্যাঙ্ক - বারমুডা সোলো #০২") }
-    var selectedCategory by remember { mutableStateOf(GameCategory.BR_RANK) }
+    val context = LocalContext.current
+    var title by remember { mutableStateOf("লোন উলফ - ১ বনাম ১ কিং ডুয়েল") }
+    var selectedCategory by remember { mutableStateOf(GameCategory.LONE_WOLF) }
     var matchType by remember { mutableStateOf(MatchType.SOLO) }
-    var mapName by remember { mutableStateOf("বারমুডা (Bermuda)") }
-    var matchDateTime by remember { mutableStateOf("আজ রাত ৯:৪৫ PM") }
+    var mapName by remember { mutableStateOf("আয়রন কেজ (Iron Cage)") }
+    var startsInMinutesInput by remember { mutableStateOf("15") }
+    var matchDateTime by remember {
+        mutableStateOf(formatMatchClockTimeLabel(System.currentTimeMillis() + 15 * 60_000L))
+    }
     var entryFee by remember { mutableStateOf("10") }
-    var totalPrize by remember { mutableStateOf("80") }
-    var perKill by remember { mutableStateOf("1") }
-    var booyahPrize by remember { mutableStateOf("30") }
-    var totalSlots by remember { mutableStateOf("48") }
+    var totalPrize by remember { mutableStateOf("15") }
+    var perKill by remember { mutableStateOf("0") }
+    var booyahPrize by remember { mutableStateOf("15") }
+    var totalSlots by remember { mutableStateOf("2") }
 
-    Column {
+    val applyMinutesToClock: (Int) -> Unit = { mins ->
+        val safe = mins.coerceIn(1, 100000)
+        startsInMinutesInput = safe.toString()
+        matchDateTime = formatMatchClockTimeLabel(System.currentTimeMillis() + safe * 60_000L)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Saved BR & CS Preset Slots Card + Lone Wolf Hold Action
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = DarkCard,
+            border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("admin_presets_panel")
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "💾 সেভড BR ও CS প্রিসেট স্লট প্যানেল",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                        color = FlameCyan
+                    )
+                }
+                Text(
+                    text = "বারমুডা (BR Rank) ও ক্ল্যাশ স্কোয়াড (CS Rank) এখানে সেভ করা আছে — এখন শুধু Lone Wolf চালু রেখে পরে ১-ট্যাপে লাইভ করতে পারবেন।",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = TextSecondary
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        val res = onHoldBrAndCsForLoneWolf()
+                        Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("admin_hold_br_cs_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.7f))
+                ) {
+                    Text(
+                        text = "🐺 BR/CS হোল্ড রাখুন — শুধু Lone Wolf সক্রিয় করুন",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FlameYellow
+                    )
+                }
+
+                matchPresets.forEach { preset ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = DarkSurface,
+                        border = BorderStroke(1.dp, preset.category.accentColor.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = preset.presetName,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "${preset.totalSlots} স্লট • ${preset.mapName} • এন্ট্রি ৳${preset.entryFee} • প্রাইজ ৳${preset.totalPrize} • ⏱️ ${preset.defaultStartsInMinutes}মি.",
+                                        fontSize = 10.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                                if (!preset.isDefaultSaved) {
+                                    IconButton(
+                                        onClick = {
+                                            val res = onDeletePreset(preset.id)
+                                            Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = "Delete Preset",
+                                            tint = FireRed
+                                        )
+                                    }
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = {
+                                        selectedCategory = preset.category
+                                        matchType = preset.matchType
+                                        title = preset.matchTitle
+                                        mapName = preset.mapName
+                                        entryFee = preset.entryFee.toString()
+                                        totalPrize = preset.totalPrize.toString()
+                                        perKill = preset.perKillPrize.toString()
+                                        booyahPrize = preset.booyahPrize.toString()
+                                        totalSlots = preset.totalSlots.toString()
+                                        applyMinutesToClock(preset.defaultStartsInMinutes)
+                                        Toast.makeText(context, "ফর্মে লোড হয়েছে!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("admin_load_preset_${preset.id}"),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("ফর্মে লোড", fontSize = 11.sp, color = FlameCyan, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    onClick = {
+                                        val overrideMins = startsInMinutesInput.toIntOrNull()?.coerceIn(1, 100000)
+                                        val res = onLaunchPreset(preset.id, overrideMins)
+                                        Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1.2f)
+                                        .height(48.dp)
+                                        .testTag("admin_launch_preset_${preset.id}"),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen)
+                                ) {
+                                    Text("🚀 লাইভ করুন", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = DarkBorder)
+
         Text(
-            text = "নতুন টুর্নামেন্ট ম্যাচ তৈরি করুন:",
+            text = "নতুন টুর্নামেন্ট ম্যাচ ও লাইভ টাইমার তৈরি:",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = FlameYellow
         )
-        Spacer(modifier = Modifier.height(10.dp))
 
         // Match Title
         OutlinedTextField(
@@ -784,14 +965,12 @@ private fun CreateMatchSection(
             singleLine = true
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
-
         // Category Selection
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf(GameCategory.BR_RANK, GameCategory.LONE_WOLF, GameCategory.CS_RANK).forEach { cat ->
+            listOf(GameCategory.LONE_WOLF, GameCategory.BR_RANK, GameCategory.CS_RANK).forEach { cat ->
                 val isSelected = cat == selectedCategory
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -801,22 +980,25 @@ private fun CreateMatchSection(
                         .clickable {
                             selectedCategory = cat
                             if (cat == GameCategory.LONE_WOLF) {
+                                matchType = MatchType.SOLO
                                 totalSlots = "2"
-                                title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #১০"
+                                title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল"
                                 mapName = "আয়রন কেজ (Iron Cage)"
                                 totalPrize = "15"
                                 perKill = "0"
                                 booyahPrize = "15"
                             } else if (cat == GameCategory.CS_RANK) {
+                                matchType = MatchType.SQUAD
                                 totalSlots = "8"
-                                title = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ ক্ল্যাশ স্কোয়াড #১৩"
-                                mapName = "ক্লক টাওয়ার"
+                                title = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ ক্ল্যাশ স্কোয়াড"
+                                mapName = "ক্লক টাওয়ার (Clock Tower)"
                                 totalPrize = "40"
                                 perKill = "0"
                                 booyahPrize = "40"
                             } else {
+                                matchType = MatchType.SOLO
                                 totalSlots = "48"
-                                title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০২"
+                                title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো এক্সপ্রেস"
                                 mapName = "বারমুডা (Bermuda)"
                                 totalPrize = "80"
                                 perKill = "1"
@@ -835,18 +1017,64 @@ private fun CreateMatchSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // Live Countdown Quick Chips
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Schedule, contentDescription = null, tint = FlameYellow, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "⏱️ কত মিনিট পর ম্যাচ শুরু হবে (রিয়েল-টাইম):",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = FlameYellow
+            )
+        }
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(7, 10, 15, 20, 30, 45, 60).forEach { mins ->
+                val isSelected = startsInMinutesInput.toIntOrNull() == mins
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { applyMinutesToClock(mins) },
+                    label = { Text("${mins}মি.", fontFamily = MonoFontFamily, fontSize = 11.sp) }
+                )
+            }
+        }
 
-        // Time and Entry Fee
+        // Countdown minutes & Clock Time & Entry Fee
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            OutlinedTextField(
+                value = startsInMinutesInput,
+                onValueChange = { raw ->
+                    val digits = raw.filter { it.isDigit() }
+                    startsInMinutesInput = digits
+                    digits.toIntOrNull()?.takeIf { it > 0 }?.let { m ->
+                        matchDateTime = formatMatchClockTimeLabel(System.currentTimeMillis() + m * 60_000L)
+                    }
+                },
+                label = { Text("বাকি (মিনিট)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier
+                    .weight(0.9f)
+                    .testTag("admin_starts_in_minutes_input"),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
             OutlinedTextField(
                 value = matchDateTime,
                 onValueChange = { matchDateTime = it },
                 label = { Text("ম্যাচের সময়") },
-                modifier = Modifier.weight(1.5f),
+                modifier = Modifier.weight(1.3f),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = FlameYellow,
@@ -858,10 +1086,10 @@ private fun CreateMatchSection(
             )
             OutlinedTextField(
                 value = entryFee,
-                onValueChange = { entryFee = it },
-                label = { Text("এন্ট্রি ফি ৳") },
+                onValueChange = { entryFee = it.filter { ch -> ch.isDigit() } },
+                label = { Text("ফি ৳") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.8f),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = FlameYellow,
@@ -873,16 +1101,14 @@ private fun CreateMatchSection(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Prize and Slots
+        // Prize, PerKill, Booyah, Slots
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedTextField(
                 value = totalPrize,
-                onValueChange = { totalPrize = it },
+                onValueChange = { totalPrize = it.filter { ch -> ch.isDigit() } },
                 label = { Text("মোট প্রাইজ ৳") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
@@ -896,9 +1122,9 @@ private fun CreateMatchSection(
                 singleLine = true
             )
             OutlinedTextField(
-                value = totalSlots,
-                onValueChange = { totalSlots = it },
-                label = { Text("মোট স্লট") },
+                value = perKill,
+                onValueChange = { perKill = it.filter { ch -> ch.isDigit() } },
+                label = { Text("প্রতি কিল ৳") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
@@ -910,23 +1136,55 @@ private fun CreateMatchSection(
                 ),
                 singleLine = true
             )
+            OutlinedTextField(
+                value = booyahPrize,
+                onValueChange = { booyahPrize = it.filter { ch -> ch.isDigit() } },
+                label = { Text("বুইয়া ৳") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = totalSlots,
+                onValueChange = { totalSlots = it.filter { ch -> ch.isDigit() } },
+                label = { Text("স্লট") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(0.9f),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Button(
             onClick = {
+                val mins = (startsInMinutesInput.toIntOrNull() ?: 15).coerceIn(1, 100000)
                 onCreateMatch(
-                    title,
+                    title.ifBlank { "${selectedCategory.banglaTitle} ম্যাচ" },
                     selectedCategory,
                     matchType,
                     mapName,
                     matchDateTime,
                     entryFee.toIntOrNull() ?: 10,
-                    totalPrize.toIntOrNull() ?: 200,
+                    totalPrize.toIntOrNull() ?: 15,
                     perKill.toIntOrNull() ?: 0,
-                    booyahPrize.toIntOrNull() ?: 50,
-                    totalSlots.toIntOrNull() ?: 48
+                    booyahPrize.toIntOrNull() ?: 15,
+                    (totalSlots.toIntOrNull() ?: 2).coerceIn(2, 100),
+                    mins
                 )
             },
             modifier = Modifier
@@ -939,9 +1197,49 @@ private fun CreateMatchSection(
             Icon(imageVector = Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "ম্যাচ পাবলিশ করুন (Publish Match)",
+                text = "ম্যাচ পাবলিশ করুন (Live Countdown সহ)",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
+            )
+        }
+
+        OutlinedButton(
+            onClick = {
+                val mins = (startsInMinutesInput.toIntOrNull() ?: 15).coerceIn(1, 100000)
+                val cleanTitle = title.trim().ifBlank { "${selectedCategory.banglaTitle} প্রিসেট" }
+                val res = onSavePreset(
+                    MatchPresetTemplate(
+                        id = "preset_custom_${System.currentTimeMillis()}",
+                        presetName = "${selectedCategory.iconEmoji} $cleanTitle",
+                        matchTitle = cleanTitle,
+                        category = selectedCategory,
+                        matchType = matchType,
+                        mapName = mapName,
+                        defaultStartsInMinutes = mins,
+                        entryFee = entryFee.toIntOrNull() ?: 10,
+                        totalPrize = totalPrize.toIntOrNull() ?: 15,
+                        perKillPrize = perKill.toIntOrNull() ?: 0,
+                        booyahPrize = booyahPrize.toIntOrNull() ?: 15,
+                        totalSlots = (totalSlots.toIntOrNull() ?: 2).coerceIn(2, 100),
+                        isDefaultSaved = false
+                    )
+                )
+                Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .testTag("admin_save_preset_btn"),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.7f))
+        ) {
+            Icon(imageVector = Icons.Filled.BookmarkAdded, contentDescription = null, tint = FlameCyan, modifier = Modifier.size(17.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "💾 প্যানেলে প্রিসেট স্লট হিসেবে সেভ রাখুন",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = FlameCyan
             )
         }
     }

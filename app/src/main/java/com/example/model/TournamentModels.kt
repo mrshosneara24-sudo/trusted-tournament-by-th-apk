@@ -34,7 +34,7 @@ data class TournamentMatch(
     val matchType: MatchType,
     val mapName: String, // বারমুডা, কালাহারি, পারগেটরী, আয়রন কেজ
     val matchDateTime: String,
-    val startsInMinutes: Int, // কাউন্টডাউন টাইমারের জন্য
+    val startsInMinutes: Int, // প্রাথমিক/এডিটেবল মিনিট
     val entryFee: Int, // টাকা ৳
     val totalPrize: Int, // মোট পুরস্কার ৳
     val perKillPrize: Int, // প্রতি কিল ৳
@@ -44,11 +44,75 @@ data class TournamentMatch(
     val status: MatchStatus,
     val roomId: String? = null,
     val roomPassword: String? = null,
-    val version: String = "মোবাইল অনলি (No Emulator)"
+    val version: String = "মোবাইল অনলি (No Emulator)",
+    val scheduledStartAtMillis: Long = 0L
 ) {
     val isFull: Boolean get() = bookedSlots >= totalSlots
     val availableSlots: Int get() = (totalSlots - bookedSlots).coerceAtLeast(0)
+
+    fun effectiveStartMillis(fallbackNowMillis: Long = System.currentTimeMillis()): Long {
+        return if (scheduledStartAtMillis > 0L) {
+            scheduledStartAtMillis
+        } else {
+            fallbackNowMillis + startsInMinutes.coerceAtLeast(0) * 60_000L
+        }
+    }
+
+    fun remainingMillis(nowMillis: Long = System.currentTimeMillis()): Long {
+        return if (scheduledStartAtMillis > 0L) {
+            (scheduledStartAtMillis - nowMillis).coerceAtLeast(0L)
+        } else {
+            startsInMinutes.coerceAtLeast(0) * 60_000L
+        }
+    }
+
+    fun liveCountdownText(nowMillis: Long = System.currentTimeMillis()): String {
+        return when (status) {
+            MatchStatus.FINISHED -> "🏁 ম্যাচ সমাপ্ত"
+            MatchStatus.CANCELLED -> "❌ ম্যাচ বাতিল"
+            MatchStatus.ONGOING -> "🔴 লাইভ চলছে!"
+            MatchStatus.UPCOMING, MatchStatus.ROOM_OPEN -> {
+                val remMillis = remainingMillis(nowMillis)
+                if (remMillis <= 0L) {
+                    if (status == MatchStatus.ROOM_OPEN) "🔓 রুম ওপেন — জয়েন করুন"
+                    else "🔥 এখনই শুরু হচ্ছে!"
+                } else {
+                    val totalSeconds = (remMillis + 999L) / 1000L
+                    val hours = totalSeconds / 3600L
+                    val mins = (totalSeconds % 3600L) / 60L
+                    val secs = totalSeconds % 60L
+                    if (hours > 0L) {
+                        String.format(java.util.Locale.US, "⏱️ %02d:%02d:%02d বাকি", hours, mins, secs)
+                    } else {
+                        String.format(java.util.Locale.US, "⏱️ %02d:%02d বাকি", mins, secs)
+                    }
+                }
+            }
+        }
+    }
 }
+
+fun formatMatchClockTimeLabel(targetMillis: Long): String {
+    val formatter = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US)
+    return "আজ ${formatter.format(java.util.Date(targetMillis))}"
+}
+
+data class MatchPresetTemplate(
+    val id: String,
+    val presetName: String,
+    val matchTitle: String,
+    val category: GameCategory,
+    val matchType: MatchType,
+    val mapName: String,
+    val defaultStartsInMinutes: Int,
+    val entryFee: Int,
+    val totalPrize: Int,
+    val perKillPrize: Int,
+    val booyahPrize: Int,
+    val totalSlots: Int,
+    val version: String = "মোবাইল অনলি (No Emulator)",
+    val isDefaultSaved: Boolean = true
+)
 
 data class SlotBooking(
     val bookingId: String,
@@ -648,20 +712,25 @@ enum class AppLogoOption(val id: String, val title: String, val iconEmoji: Strin
     PRO_GAMER("avatar_cyber", "প্রো নিয়ন গেমার", "🎮")
 }
 
+const val OFFICIAL_WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029VbDHKuMJ3jv3KJk2nI3e"
+const val LEGACY_WHATSAPP_GROUP_URL = "https://chat.whatsapp.com/G8TrustedTHTournament"
+const val OFFICIAL_UPDATE_ANNOUNCEMENT = "অ্যাপে প্রতিনিয়ত আপডেট আসবে, তাই নতুন ভার্সনে থাকার জন্য এখনি জয়েন করুন আমাদের হোয়াটসঅ্যাপ গ্রুপে!"
+const val LEGACY_DEFAULT_ANNOUNCEMENT = "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!"
+
 data class AppCustomization(
     val appName: String = "TRUSTED TOURNAMENT BY TH",
     val appTagline: String = "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট",
     val selectedLogo: AppLogoOption = AppLogoOption.TH_LOGO,
     val noticeTickerText: String = "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!",
-    val activeAnnouncement: String = "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!",
-    val announcementTitle: String = "অফিসিয়াল ঘোষণা",
+    val activeAnnouncement: String = OFFICIAL_UPDATE_ANNOUNCEMENT,
+    val announcementTitle: String = "📢 অফিসিয়াল ঘোষণা",
     val announcementAuthor: String = "👑 TH ওনার",
     val announcementUpdatedAtMillis: Long = 0L,
     val isAnnouncementUrgent: Boolean = false,
     val isAnnouncementEnabled: Boolean = true,
     val officialBkashNumber: String = "01861583924",
     val officialNagadNumber: String = "01861583924",
-    val officialWhatsAppUrl: String = "https://chat.whatsapp.com/G8TrustedTHTournament",
+    val officialWhatsAppUrl: String = OFFICIAL_WHATSAPP_CHANNEL_URL,
     val minWithdraw: Int = 50,
     val maxWithdraw: Int = 200,
     val isMaintenanceMode: Boolean = false,

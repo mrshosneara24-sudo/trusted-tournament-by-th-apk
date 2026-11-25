@@ -37,7 +37,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -117,6 +119,14 @@ fun MatchesScreen(
     val bookedMatchIds = remember(myBookings) { myBookings.map { it.matchId }.toSet() }
     var showSensitivityLab by remember { mutableStateOf(false) }
     var showReflexChallenge by remember { mutableStateOf(false) }
+    var liveNowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            liveNowMillis = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -644,25 +654,52 @@ fun MatchesScreen(
         // Match Items
         if (matches.isEmpty()) {
             item {
+                val isHeldCategory = selectedCategory == GameCategory.BR_RANK || selectedCategory == GameCategory.CS_RANK
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(40.dp),
+                        .padding(vertical = 28.dp, horizontal = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Filled.SportsEsports,
                             contentDescription = "Empty",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isHeldCategory) FlameYellow else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "কোন ম্যাচ পাওয়া যায়নি",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (isHeldCategory) {
+                                "⏳ ${selectedCategory.banglaTitle} এখন হোল্ডে রাখা হয়েছে"
+                            } else {
+                                "কোন ম্যাচ পাওয়া যায়নি"
+                            },
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isHeldCategory) FlameYellow else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (isHeldCategory) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "আপাতত শুধু Lone Wolf (লোন উলফ) ম্যাচ দিয়ে টুর্নামেন্ট যাত্রা শুরু হয়েছে 🐺। অ্যাডমিন/ওনার প্যানেল থেকে সেভড প্রিসেট দিয়ে যেকোনো সময় চালু করা যাবে!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = { onCategorySelected(GameCategory.LONE_WOLF) },
+                                colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("empty_go_lone_wolf_btn")
+                            ) {
+                                Text(
+                                    text = "🐺 Lone Wolf ম্যাচ দেখুন",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -673,7 +710,8 @@ fun MatchesScreen(
                     isAlreadyBooked = bookedMatchIds.contains(match.id),
                     onBookClick = { onBookSlotClick(match) },
                     onViewRoomClick = { onViewRoomClick(match) },
-                    onViewSlotGridClick = { onViewSlotGridClick(match) }
+                    onViewSlotGridClick = { onViewSlotGridClick(match) },
+                    nowMillis = liveNowMillis
                 )
             }
         }

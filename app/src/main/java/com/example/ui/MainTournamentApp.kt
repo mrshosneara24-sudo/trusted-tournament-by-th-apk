@@ -1,5 +1,8 @@
 package com.example.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -53,6 +56,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -78,10 +82,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,6 +102,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.GoogleAuthHelper
 import com.example.data.GoogleSignInOutcome
+import com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
 import com.example.model.RequestStatus
 import com.example.model.UserRole
 import com.example.ui.components.AddMoneyDialog
@@ -175,6 +182,7 @@ fun MainTournamentApp(
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val officialWhatsAppUrl by viewModel.officialWhatsAppGroupUrl.collectAsStateWithLifecycle()
     val allMatches by viewModel.allMatches.collectAsStateWithLifecycle()
+    val matchPresets by viewModel.matchPresets.collectAsStateWithLifecycle()
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
     val appCustomization by viewModel.appCustomization.collectAsStateWithLifecycle()
     val strictRules by viewModel.strictRules.collectAsStateWithLifecycle()
@@ -839,6 +847,23 @@ fun MainTournamentApp(
 
             if (isAnnouncementActive) {
                 val urgent = appCustomization.isAnnouncementUrgent
+                val announcementClipboard = LocalClipboardManager.current
+                val openOfficialWhatsApp: () -> Unit = {
+                    val targetUrl = OFFICIAL_WHATSAPP_CHANNEL_URL
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        appContext.startActivity(intent)
+                    } catch (_: Exception) {
+                        announcementClipboard.setText(AnnotatedString(targetUrl))
+                        Toast.makeText(
+                            appContext,
+                            "WhatsApp লিঙ্ক কপি হয়েছে: $targetUrl",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
                 Surface(
                     color = DarkCard,
                     border = BorderStroke(
@@ -863,7 +888,7 @@ fun MainTournamentApp(
                                     )
                                 )
                             )
-                            .clickable { isAnnouncementMinimized = !isAnnouncementMinimized }
+                            .clickable { openOfficialWhatsApp() }
                             .padding(horizontal = 12.dp, vertical = 9.dp)
                     ) {
                         Row(
@@ -922,14 +947,19 @@ fun MainTournamentApp(
                                 }
                             }
 
-                            Icon(
-                                imageVector = if (isAnnouncementMinimized) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
-                                contentDescription = if (isAnnouncementMinimized) "Expand Announcement" else "Minimize Announcement",
-                                tint = FlameCyan,
+                            IconButton(
+                                onClick = { isAnnouncementMinimized = !isAnnouncementMinimized },
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(48.dp)
                                     .testTag("live_announcement_toggle_btn")
-                            )
+                            ) {
+                                Icon(
+                                    imageVector = if (isAnnouncementMinimized) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                                    contentDescription = if (isAnnouncementMinimized) "Expand Announcement" else "Minimize Announcement",
+                                    tint = FlameCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
 
                         if (!isAnnouncementMinimized) {
@@ -942,13 +972,38 @@ fun MainTournamentApp(
                                 ),
                                 color = TextPrimary
                             )
-                            if (appCustomization.announcementAuthor.isNotBlank()) {
-                                Spacer(modifier = Modifier.padding(top = 3.dp))
-                                Text(
-                                    text = "প্রেরক: ${appCustomization.announcementAuthor}",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                    color = FlameCyan
-                                )
+                            Spacer(modifier = Modifier.padding(top = 6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (appCustomization.announcementAuthor.isNotBlank()) {
+                                    Text(
+                                        text = "প্রেরক: ${appCustomization.announcementAuthor}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = FlameCyan
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.width(1.dp))
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = VictoryGreen.copy(alpha = 0.18f),
+                                    border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.7f)),
+                                    modifier = Modifier.testTag("announcement_whatsapp_join_pill")
+                                ) {
+                                    Text(
+                                        text = "📲 হোয়াটসঅ্যাপে জয়েন করুন →",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        ),
+                                        color = VictoryGreen,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1301,10 +1356,11 @@ fun MainTournamentApp(
             onUpdateWhatsAppUrl = { url ->
                 viewModel.updateWhatsAppGroupUrl(url)
             },
-            onCreateNewMatch = { title, category, matchType, mapName, matchDateTime, entryFee, totalPrize, perKill, booyahPrize, totalSlots ->
+            onCreateNewMatch = { title, category, matchType, mapName, matchDateTime, entryFee, totalPrize, perKill, booyahPrize, totalSlots, startsInMinutes ->
                 viewModel.createNewMatch(
                     title, category, matchType, mapName, matchDateTime,
-                    entryFee, totalPrize, perKill, booyahPrize, totalSlots
+                    entryFee, totalPrize, perKill, booyahPrize, totalSlots,
+                    startsInMinutes = startsInMinutes
                 )
             },
             onAdjustUserBalance = { target, amount, isAdd, reason ->
@@ -1359,7 +1415,12 @@ fun MainTournamentApp(
             },
             onDrawGiveawayWinners = { gwId -> viewModel.drawGiveawayWinners(gwId) },
             onCloseGiveaway = { gwId -> viewModel.closeGiveaway(gwId) },
-            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) }
+            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) },
+            matchPresets = matchPresets,
+            onLaunchMatchPreset = { presetId, mins -> viewModel.launchMatchFromPreset(presetId, mins) },
+            onSaveMatchPreset = { preset -> viewModel.saveOrUpdateMatchPreset(preset) },
+            onDeleteMatchPreset = { presetId -> viewModel.deleteMatchPreset(presetId) },
+            onHoldBrAndCsForLoneWolf = { viewModel.holdBrAndCsMatchesForLoneWolf() }
         )
     }
 
@@ -1506,7 +1567,12 @@ fun MainTournamentApp(
             },
             onDrawGiveawayWinners = { gwId -> viewModel.drawGiveawayWinners(gwId) },
             onCloseGiveaway = { gwId -> viewModel.closeGiveaway(gwId) },
-            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) }
+            onDeleteGiveaway = { gwId -> viewModel.deleteGiveaway(gwId) },
+            matchPresets = matchPresets,
+            onLaunchMatchPreset = { presetId, mins -> viewModel.launchMatchFromPreset(presetId, mins) },
+            onDeleteMatchPreset = { presetId -> viewModel.deleteMatchPreset(presetId) },
+            onHoldBrAndCsForLoneWolf = { viewModel.holdBrAndCsMatchesForLoneWolf() },
+            onRescheduleMatchMinutes = { matchId, mins -> viewModel.rescheduleMatchStartMinutes(matchId, mins) }
         )
     }
 

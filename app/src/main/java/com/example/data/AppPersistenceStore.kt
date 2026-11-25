@@ -23,6 +23,7 @@ import com.example.model.GiveawayWinner
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.LiveCommunityPoll
+import com.example.model.MatchPresetTemplate
 import com.example.model.MatchResult
 import com.example.model.MatchStatus
 import com.example.model.MatchType
@@ -77,7 +78,8 @@ data class PersistedAppState(
     val communityPolls: List<LiveCommunityPoll> = emptyList(),
     val triviaProgress: DailyTriviaProgress = DailyTriviaProgress(),
     val giveaways: List<GiveawayEvent> = emptyList(),
-    val reflexStats: ReflexGameStats = ReflexGameStats()
+    val reflexStats: ReflexGameStats = ReflexGameStats(),
+    val matchPresets: List<MatchPresetTemplate> = emptyList()
 )
 
 class AppPersistenceStore(context: Context) {
@@ -122,6 +124,7 @@ class AppPersistenceStore(context: Context) {
                 put("triviaProgress", encodeTriviaProgress(state.triviaProgress))
                 put("giveaways", JSONArray().apply { state.giveaways.forEach { put(encodeGiveaway(it)) } })
                 put("reflexStats", encodeReflexStats(state.reflexStats))
+                put("matchPresets", JSONArray().apply { state.matchPresets.forEach { put(encodeMatchPreset(it)) } })
             }
             prefs.edit().putString(KEY_STATE_JSON, root.toString()).apply()
         }
@@ -149,7 +152,9 @@ class AppPersistenceStore(context: Context) {
                 dailyMissions = decodeList(root.optJSONArray("dailyMissions"), ::decodeMission),
                 appCustomization = decodeCustomization(root.getJSONObject("appCustomization")),
                 strictRules = decodeList(root.optJSONArray("strictRules"), ::decodeRule),
-                officialWhatsAppUrl = root.optString("officialWhatsAppUrl", "https://chat.whatsapp.com/G8TrustedTHTournament"),
+                officialWhatsAppUrl = root.optString("officialWhatsAppUrl", com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL).let { url ->
+                    if (url.isBlank() || url == com.example.model.LEGACY_WHATSAPP_GROUP_URL) com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL else url
+                },
                 chatMessages = decodeList(root.optJSONArray("chatMessages"), ::decodeChat),
                 masterOwnerPin = root.optString("masterOwnerPin", "7788"),
                 badgeAppeals = decodeList(root.optJSONArray("badgeAppeals"), ::decodeBadgeAppeal),
@@ -161,7 +166,8 @@ class AppPersistenceStore(context: Context) {
                 communityPolls = decodeList(root.optJSONArray("communityPolls"), ::decodeCommunityPoll),
                 triviaProgress = root.optJSONObject("triviaProgress")?.let(::decodeTriviaProgress) ?: DailyTriviaProgress(),
                 giveaways = decodeList(root.optJSONArray("giveaways"), ::decodeGiveaway),
-                reflexStats = root.optJSONObject("reflexStats")?.let(::decodeReflexStats) ?: ReflexGameStats()
+                reflexStats = root.optJSONObject("reflexStats")?.let(::decodeReflexStats) ?: ReflexGameStats(),
+                matchPresets = decodeList(root.optJSONArray("matchPresets"), ::decodeMatchPreset)
             )
         }.getOrNull()
     }
@@ -438,27 +444,38 @@ class AppPersistenceStore(context: Context) {
         put("roomId", m.roomId)
         put("roomPassword", m.roomPassword)
         put("version", m.version)
+        put("scheduledStartAtMillis", m.scheduledStartAtMillis)
     }
 
-    private fun decodeMatch(o: JSONObject) = TournamentMatch(
-        id = o.getString("id"),
-        title = o.getString("title"),
-        category = enumValueOrDefault(o.optString("category"), GameCategory.BR_RANK),
-        matchType = enumValueOrDefault(o.optString("matchType"), MatchType.SOLO),
-        mapName = o.getString("mapName"),
-        matchDateTime = o.getString("matchDateTime"),
-        startsInMinutes = o.optInt("startsInMinutes", 30),
-        entryFee = o.optInt("entryFee", 10),
-        totalPrize = o.optInt("totalPrize", 100),
-        perKillPrize = o.optInt("perKillPrize", 0),
-        booyahPrize = o.optInt("booyahPrize", 50),
-        totalSlots = o.optInt("totalSlots", 48),
-        bookedSlots = o.optInt("bookedSlots", 0),
-        status = enumValueOrDefault(o.optString("status"), MatchStatus.UPCOMING),
-        roomId = o.optNullableString("roomId"),
-        roomPassword = o.optNullableString("roomPassword"),
-        version = o.optString("version", "মোবাইল অনলি")
-    )
+    private fun decodeMatch(o: JSONObject): TournamentMatch {
+        val startsInMinutes = o.optInt("startsInMinutes", 30)
+        val rawScheduled = o.optLong("scheduledStartAtMillis", 0L)
+        val effectiveScheduled = if (rawScheduled > 0L) {
+            rawScheduled
+        } else {
+            System.currentTimeMillis() + startsInMinutes.coerceAtLeast(0) * 60_000L
+        }
+        return TournamentMatch(
+            id = o.getString("id"),
+            title = o.getString("title"),
+            category = enumValueOrDefault(o.optString("category"), GameCategory.LONE_WOLF),
+            matchType = enumValueOrDefault(o.optString("matchType"), MatchType.SOLO),
+            mapName = o.getString("mapName"),
+            matchDateTime = o.getString("matchDateTime"),
+            startsInMinutes = startsInMinutes,
+            entryFee = o.optInt("entryFee", 10),
+            totalPrize = o.optInt("totalPrize", 100),
+            perKillPrize = o.optInt("perKillPrize", 0),
+            booyahPrize = o.optInt("booyahPrize", 50),
+            totalSlots = o.optInt("totalSlots", 2),
+            bookedSlots = o.optInt("bookedSlots", 0),
+            status = enumValueOrDefault(o.optString("status"), MatchStatus.UPCOMING),
+            roomId = o.optNullableString("roomId"),
+            roomPassword = o.optNullableString("roomPassword"),
+            version = o.optString("version", "মোবাইল অনলি"),
+            scheduledStartAtMillis = effectiveScheduled
+        )
+    }
 
     private fun encodeBooking(b: SlotBooking) = JSONObject().apply {
         put("bookingId", b.bookingId)
@@ -711,25 +728,35 @@ class AppPersistenceStore(context: Context) {
         put("maintenanceMessage", c.maintenanceMessage)
     }
 
-    private fun decodeCustomization(o: JSONObject) = AppCustomization(
-        appName = o.optString("appName", "TRUSTED TOURNAMENT BY TH"),
-        appTagline = o.optString("appTagline", "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট"),
-        selectedLogo = enumValueOrDefault(o.optString("selectedLogo"), AppLogoOption.TH_LOGO),
-        noticeTickerText = o.optString("noticeTickerText", "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!"),
-        activeAnnouncement = o.optString("activeAnnouncement", "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!"),
-        announcementTitle = o.optString("announcementTitle", "অফিসিয়াল ঘোষণা"),
-        announcementAuthor = o.optString("announcementAuthor", "👑 TH ওনার"),
-        announcementUpdatedAtMillis = o.optLong("announcementUpdatedAtMillis", 0L),
-        isAnnouncementUrgent = o.optBoolean("isAnnouncementUrgent", false),
-        isAnnouncementEnabled = o.optBoolean("isAnnouncementEnabled", true),
-        officialBkashNumber = o.optString("officialBkashNumber", "01861583924"),
-        officialNagadNumber = o.optString("officialNagadNumber", "01861583924"),
-        officialWhatsAppUrl = o.optString("officialWhatsAppUrl", "https://chat.whatsapp.com/G8TrustedTHTournament"),
-        minWithdraw = o.optInt("minWithdraw", 50),
-        maxWithdraw = o.optInt("maxWithdraw", 200),
-        isMaintenanceMode = o.optBoolean("isMaintenanceMode", false),
-        maintenanceMessage = o.optString("maintenanceMessage", "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট রুম উন্মুক্ত করা হবে।")
-    )
+    private fun decodeCustomization(o: JSONObject): AppCustomization {
+        val rawAnnouncement = o.optString("activeAnnouncement", com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT)
+        val normalizedAnnouncement = if (rawAnnouncement == com.example.model.LEGACY_DEFAULT_ANNOUNCEMENT) {
+            com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT
+        } else rawAnnouncement
+        val rawWhatsApp = o.optString("officialWhatsAppUrl", com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL)
+        val normalizedWhatsApp = if (rawWhatsApp.isBlank() || rawWhatsApp == com.example.model.LEGACY_WHATSAPP_GROUP_URL) {
+            com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
+        } else rawWhatsApp
+        return AppCustomization(
+            appName = o.optString("appName", "TRUSTED TOURNAMENT BY TH"),
+            appTagline = o.optString("appTagline", "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট"),
+            selectedLogo = enumValueOrDefault(o.optString("selectedLogo"), AppLogoOption.TH_LOGO),
+            noticeTickerText = o.optString("noticeTickerText", "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!"),
+            activeAnnouncement = normalizedAnnouncement,
+            announcementTitle = o.optString("announcementTitle", "📢 অফিসিয়াল ঘোষণা"),
+            announcementAuthor = o.optString("announcementAuthor", "👑 TH ওনার"),
+            announcementUpdatedAtMillis = o.optLong("announcementUpdatedAtMillis", 0L),
+            isAnnouncementUrgent = o.optBoolean("isAnnouncementUrgent", false),
+            isAnnouncementEnabled = o.optBoolean("isAnnouncementEnabled", true),
+            officialBkashNumber = o.optString("officialBkashNumber", "01861583924"),
+            officialNagadNumber = o.optString("officialNagadNumber", "01861583924"),
+            officialWhatsAppUrl = normalizedWhatsApp,
+            minWithdraw = o.optInt("minWithdraw", 50),
+            maxWithdraw = o.optInt("maxWithdraw", 200),
+            isMaintenanceMode = o.optBoolean("isMaintenanceMode", false),
+            maintenanceMessage = o.optString("maintenanceMessage", "সার্ভার রক্ষণাবেক্ষণ চলছে। শীঘ্রই টুর্নামেন্ট রুম উন্মুক্ত করা হবে।")
+        )
+    }
 
     private fun encodeRule(r: TournamentRuleItem) = JSONObject().apply {
         put("id", r.id)
@@ -1165,5 +1192,39 @@ class AppPersistenceStore(context: Context) {
         bestReactionMs = o.optInt("bestReactionMs", 0),
         gamesPlayed = o.optInt("gamesPlayed", 0),
         bestCombo = o.optInt("bestCombo", 0)
+    )
+
+    private fun encodeMatchPreset(p: MatchPresetTemplate) = JSONObject().apply {
+        put("id", p.id)
+        put("presetName", p.presetName)
+        put("matchTitle", p.matchTitle)
+        put("category", p.category.name)
+        put("matchType", p.matchType.name)
+        put("mapName", p.mapName)
+        put("defaultStartsInMinutes", p.defaultStartsInMinutes)
+        put("entryFee", p.entryFee)
+        put("totalPrize", p.totalPrize)
+        put("perKillPrize", p.perKillPrize)
+        put("booyahPrize", p.booyahPrize)
+        put("totalSlots", p.totalSlots)
+        put("version", p.version)
+        put("isDefaultSaved", p.isDefaultSaved)
+    }
+
+    private fun decodeMatchPreset(o: JSONObject) = MatchPresetTemplate(
+        id = o.optString("id", "preset_${System.currentTimeMillis()}"),
+        presetName = o.optString("presetName", "সেভড প্রিসেট"),
+        matchTitle = o.optString("matchTitle", "টুর্নামেন্ট ম্যাচ"),
+        category = enumValueOrDefault(o.optString("category"), GameCategory.BR_RANK),
+        matchType = enumValueOrDefault(o.optString("matchType"), MatchType.SOLO),
+        mapName = o.optString("mapName", "বারমুডা (Bermuda)"),
+        defaultStartsInMinutes = o.optInt("defaultStartsInMinutes", 20),
+        entryFee = o.optInt("entryFee", 10),
+        totalPrize = o.optInt("totalPrize", 80),
+        perKillPrize = o.optInt("perKillPrize", 1),
+        booyahPrize = o.optInt("booyahPrize", 30),
+        totalSlots = o.optInt("totalSlots", 48),
+        version = o.optString("version", "মোবাইল অনলি (No Emulator)"),
+        isDefaultSaved = o.optBoolean("isDefaultSaved", true)
     )
 }

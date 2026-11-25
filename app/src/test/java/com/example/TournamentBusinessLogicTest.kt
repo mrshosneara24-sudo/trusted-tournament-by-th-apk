@@ -180,7 +180,7 @@ class TournamentBusinessLogicTest {
 
         // Play 1 match via wallet to unlock career withdrawal
         val match = repository.matches.value.first()
-        assertTrue(repository.bookSlotWithWallet(match, 5, "HeroPlayer", "12345678").first)
+        assertTrue(repository.bookSlotWithWallet(match, 1, "HeroPlayer", "12345678").first)
         assertEquals(1, repository.userProfile.value.matchesPlayed)
 
         // Below minimum 50 must fail
@@ -266,7 +266,7 @@ class TournamentBusinessLogicTest {
         // Book a slot
         val bookingSuccess = repository.bookSlotWithBkash(
             match = match,
-            slotNumber = 12,
+            slotNumber = 2,
             playerIgn = "KnightRider",
             playerUid = "9876543210",
             bkashNumber = "01811223344",
@@ -274,7 +274,7 @@ class TournamentBusinessLogicTest {
         )
         assertTrue("Booking must succeed", bookingSuccess)
 
-        val bookedSlot = repository.myBookings.value.find { it.slotNumber == 12 && it.matchId == match.id }
+        val bookedSlot = repository.myBookings.value.find { it.slotNumber == 2 && it.matchId == match.id }
         assertNotNull("Booked slot must exist in bookings", bookedSlot)
         val feePaid = bookedSlot!!.feePaid
         val balanceAfterBooking = repository.walletBalance.value
@@ -494,7 +494,7 @@ class TournamentBusinessLogicTest {
     fun testDynamicWithdrawLimitsAndWithdrawalCategory() {
         repository.addMoneyWithBkash(500, "01711223344", "DEP_LIMIT_1")
         val match = repository.matches.value.first()
-        assertTrue(repository.bookSlotWithWallet(match, 9, "HeroLimit", "44556677").first)
+        assertTrue(repository.bookSlotWithWallet(match, 1, "HeroLimit", "44556677").first)
         repository.updateFinancialSettings(
             bkash = "01900000001",
             nagad = "01900000002",
@@ -515,19 +515,19 @@ class TournamentBusinessLogicTest {
     @Test
     fun testBookSlotRejectsDuplicateSlotCancelledMatchAndFullMatch() {
         val match = repository.matches.value.first()
-        val firstBook = repository.bookSlotWithBkash(match, 20, "Hero1", "111", "01711111111", "TRX_A")
+        val firstBook = repository.bookSlotWithBkash(match, 1, "Hero1", "111", "01711111111", "TRX_A")
         assertTrue(firstBook)
 
         // Duplicate same slot must be rejected
-        val duplicateBook = repository.bookSlotWithBkash(match, 20, "Hero2", "222", "01722222222", "TRX_B")
-        assertFalse("Duplicate booking on same slot #20 must fail", duplicateBook)
+        val duplicateBook = repository.bookSlotWithBkash(match, 1, "Hero2", "222", "01722222222", "TRX_B")
+        assertFalse("Duplicate booking on same slot #1 must fail", duplicateBook)
 
         // Cancel match -> booking must fail
         repository.cancelMatchAndRefundAll(match.id)
         val cancelledMatch = repository.matches.value.first { it.id == match.id }
         assertFalse(
             "Booking on CANCELLED match must fail",
-            repository.bookSlotWithBkash(cancelledMatch, 21, "Hero3", "333", "01733333333", "TRX_C")
+            repository.bookSlotWithBkash(cancelledMatch, 2, "Hero3", "333", "01733333333", "TRX_C")
         )
     }
 
@@ -705,7 +705,7 @@ class TournamentBusinessLogicTest {
 
         // Play 1 match using wallet
         val match = repository.matches.value.first()
-        val booked = repository.bookSlotWithWallet(match, 3, "TH_Arif", "44556677")
+        val booked = repository.bookSlotWithWallet(match, 1, "TH_Arif", "44556677")
         assertTrue(booked.first)
         assertEquals(1, repository.userProfile.value.matchesPlayed)
         val balanceAfterMatch = repository.walletBalance.value // 205 - 10 = 195
@@ -1228,9 +1228,9 @@ class TournamentBusinessLogicTest {
 
         // 3. Match Slot Ban blocks booking, unban restores it
         assertTrue(repository.setUserMatchBan(playerPhone, true, "স্লট নষ্ট করা", moderatorRole = UserRole.OWNER).first)
-        assertFalse("Match-banned user blocked from booking", repository.bookSlotWithWallet(repository.matches.value.first(), 4, "TH_Hasan", "55009911").first)
+        assertFalse("Match-banned user blocked from booking", repository.bookSlotWithWallet(repository.matches.value.first(), 2, "TH_Hasan", "55009911").first)
         assertTrue(repository.setUserMatchBan(playerPhone, false, moderatorRole = UserRole.OWNER).first)
-        assertTrue("Match booking works after unban", repository.bookSlotWithWallet(repository.matches.value.first(), 4, "TH_Hasan", "55009911").first)
+        assertTrue("Match booking works after unban", repository.bookSlotWithWallet(repository.matches.value.first(), 2, "TH_Hasan", "55009911").first)
 
         // 4. Wallet Freeze blocks deposit & withdraw
         assertTrue(repository.setUserWalletFreeze(playerPhone, true, "ফ্রড তদন্ত", moderatorRole = UserRole.OWNER).first)
@@ -1555,8 +1555,153 @@ class TournamentBusinessLogicTest {
         assertEquals(0, repository.reflexStats.value.bestScore)
         assertEquals(0, repository.reflexStats.value.bestReactionMs)
     }
+
+    @Test
+    fun testRealTimeMatchCountdownLoneWolfStartAndSavedBrCsPresets() {
+        // 1. Fresh journey starts ONLY with Lone Wolf matches (no active BR/CS) & valid epoch start timestamps
+        val initialMatches = repository.matches.value
+        assertTrue("Fresh start must contain Lone Wolf matches", initialMatches.isNotEmpty())
+        assertTrue(
+            "Fresh start must ONLY have LONE_WOLF matches",
+            initialMatches.all { it.category == com.example.model.GameCategory.LONE_WOLF }
+        )
+        assertTrue(
+            "All initial matches must have positive scheduledStartAtMillis",
+            initialMatches.all { it.scheduledStartAtMillis > 0L }
+        )
+
+        // 2. Saved BR Rank (Bermuda 48 slots) & CS Rank (8 slots) presets exist in panel by default
+        val presets = repository.matchPresets.value
+        val brPreset = presets.firstOrNull { it.id == "preset_br_bermuda" }
+        val csPreset = presets.firstOrNull { it.id == "preset_cs_squad" }
+        assertNotNull("Saved BR Rank Bermuda preset must exist", brPreset)
+        assertNotNull("Saved CS Rank Squad preset must exist", csPreset)
+        assertEquals(com.example.model.GameCategory.BR_RANK, brPreset?.category)
+        assertEquals(48, brPreset?.totalSlots)
+        assertEquals(com.example.model.GameCategory.CS_RANK, csPreset?.category)
+        assertEquals(8, csPreset?.totalSlots)
+
+        // 3. Real-time countdown decrements second-by-second and formats status states accurately
+        val lwMatch = initialMatches.first()
+        val startMillis = 1_700_000_000_000L
+        val timedUpcoming = lwMatch.copy(
+            status = com.example.model.MatchStatus.UPCOMING,
+            startsInMinutes = 7,
+            scheduledStartAtMillis = startMillis + 7 * 60_000L
+        )
+        assertEquals("⏱️ 07:00 বাকি", timedUpcoming.liveCountdownText(startMillis))
+        assertEquals("⏱️ 05:55 বাকি", timedUpcoming.liveCountdownText(startMillis + 65_000L))
+        assertEquals("🔥 এখনই শুরু হচ্ছে!", timedUpcoming.liveCountdownText(startMillis + 7 * 60_000L))
+
+        val timedRoomOpen = timedUpcoming.copy(status = com.example.model.MatchStatus.ROOM_OPEN)
+        assertEquals("🔓 রুম ওপেন — জয়েন করুন", timedRoomOpen.liveCountdownText(startMillis + 8 * 60_000L))
+
+        val ongoingMatch = timedUpcoming.copy(status = com.example.model.MatchStatus.ONGOING)
+        assertEquals("🔴 লাইভ চলছে!", ongoingMatch.liveCountdownText(startMillis))
+
+        // 4. Non-staff cannot reschedule timer, launch/save/delete presets, or hold BR/CS
+        val pPhone = "01799112233"
+        assertTrue(repository.register("SoloPlayer", "TH_SOLO1", "88112233", pPhone, pPhone, password = "pass123"))
+        assertFalse(repository.rescheduleMatchStartMinutes(lwMatch.id, 7).first)
+        assertFalse(repository.launchMatchFromPreset("preset_br_bermuda", 7).first)
+        assertFalse(repository.holdBrAndCsMatchesForLoneWolf().first)
+
+        // 5. Owner can reschedule countdown timer (e.g. 7 min), launch BR & CS presets, and save custom preset
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val reschedRes = repository.rescheduleMatchStartMinutes(lwMatch.id, 7)
+        assertTrue(reschedRes.first)
+        val reschedMatch = repository.matches.value.first { it.id == lwMatch.id }
+        assertEquals(7, reschedMatch.startsInMinutes)
+        assertTrue(reschedMatch.scheduledStartAtMillis > System.currentTimeMillis())
+
+        assertTrue(repository.launchMatchFromPreset("preset_br_bermuda", 7).first)
+        assertTrue(repository.launchMatchFromPreset("preset_cs_squad", 15).first)
+        val liveBr = repository.matches.value.firstOrNull { it.category == com.example.model.GameCategory.BR_RANK }
+        val liveCs = repository.matches.value.firstOrNull { it.category == com.example.model.GameCategory.CS_RANK }
+        assertNotNull(liveBr)
+        assertNotNull(liveCs)
+        assertEquals(7, liveBr?.startsInMinutes)
+        assertEquals(15, liveCs?.startsInMinutes)
+
+        val customPreset = com.example.model.MatchPresetTemplate(
+            id = "preset_custom_test",
+            presetName = "কাস্টম বারমুডা ডুও",
+            matchTitle = "বারমুডা ডুও কাস্টম #৯৯",
+            category = com.example.model.GameCategory.BR_RANK,
+            matchType = com.example.model.MatchType.DUO,
+            mapName = "বারমুডা (Bermuda)",
+            defaultStartsInMinutes = 10,
+            entryFee = 20,
+            totalPrize = 120,
+            perKillPrize = 2,
+            booyahPrize = 40,
+            totalSlots = 24,
+            isDefaultSaved = false
+        )
+        assertTrue(repository.saveOrUpdateMatchPreset(customPreset).first)
+        assertTrue(repository.matchPresets.value.any { it.id == "preset_custom_test" })
+
+        // 6. Player books a BR slot; holding BR & CS refunds wallet & keeps ONLY Lone Wolf live while preserving presets
+        assertTrue(repository.login(pPhone, "pass123"))
+        assertTrue(
+            repository.submitDepositRequest(
+                amount = 50,
+                paymentMethod = com.example.model.WalletPaymentMethod.BKASH,
+                senderNumber = pPhone,
+                trxId = "BK9H7721A"
+            ).first
+        )
+        // Approve deposit as owner then book as player
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val depId = repository.depositRequests.value.first().id
+        assertTrue(repository.approveDepositRequest(depId).first)
+
+        assertTrue(repository.login(pPhone, "pass123"))
+        val balanceBeforeBook = repository.walletBalance.value
+        assertTrue(repository.bookSlotWithWallet(liveBr!!, 1, "TH_SOLO1", "88112233").first)
+        assertEquals(balanceBeforeBook - liveBr.entryFee, repository.walletBalance.value)
+
+        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        val holdRes = repository.holdBrAndCsMatchesForLoneWolf()
+        assertTrue(holdRes.first)
+        assertTrue(
+            "After holding BR/CS, only LONE_WOLF matches must remain active",
+            repository.matches.value.all { it.category == com.example.model.GameCategory.LONE_WOLF }
+        )
+        assertTrue(
+            "Saved BR & CS presets must remain intact after holding matches",
+            repository.matchPresets.value.any { it.id == "preset_br_bermuda" } &&
+                repository.matchPresets.value.any { it.id == "preset_cs_squad" }
+        )
+
+        val refundedUser = repository.registeredUsers.value.first { it.phone == pPhone }
+        assertEquals(
+            "Player wallet must be refunded when BR/CS match is held",
+            balanceBeforeBook,
+            refundedUser.walletBalance
+        )
+
+        // 7. Reset keeps Lone-Wolf-only active matches & default BR/CS presets
+        assertTrue(repository.deleteMatchPreset("preset_custom_test").first)
+        repository.resetAppForFreshDownload()
+        assertTrue(repository.matches.value.all { it.category == com.example.model.GameCategory.LONE_WOLF })
+        assertTrue(repository.matchPresets.value.any { it.id == "preset_br_bermuda" })
+        assertTrue(repository.matchPresets.value.any { it.id == "preset_cs_squad" })
+    }
+
+    @Test
+    fun testOfficialAnnouncementAndWhatsAppChannelDefaults() {
+        val expectedUrl = "https://whatsapp.com/channel/0029VbDHKuMJ3jv3KJk2nI3e"
+        assertEquals(com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT, repository.appCustomization.value.activeAnnouncement)
+        assertTrue(repository.appCustomization.value.isAnnouncementEnabled)
+        assertEquals(expectedUrl, repository.appCustomization.value.officialWhatsAppUrl)
+        assertEquals(expectedUrl, repository.officialWhatsAppGroupUrl.value)
+
+        // Reset preserves the official WhatsApp update announcement and channel URL
+        repository.resetAppForFreshDownload()
+        assertEquals(com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT, repository.appCustomization.value.activeAnnouncement)
+        assertEquals(expectedUrl, repository.appCustomization.value.officialWhatsAppUrl)
+        assertEquals(expectedUrl, repository.officialWhatsAppGroupUrl.value)
+    }
 }
-
-
-
 

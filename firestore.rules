@@ -90,7 +90,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'title', 'category', 'matchType', 'mapName', 'matchDateTime',
-          'startsInMinutes', 'entryFee', 'totalPrize', 'perKillPrize', 'booyahPrize',
+          'startsInMinutes', 'scheduledStartAtMillis', 'entryFee', 'totalPrize', 'perKillPrize', 'booyahPrize',
           'totalSlots', 'bookedSlots', 'status', 'roomId', 'roomPassword', 'version',
           'createdAt', 'updatedAt'
         ]) &&
@@ -100,6 +100,7 @@ service cloud.firestore {
         data.mapName is string && data.mapName.size() >= 1 && data.mapName.size() <= 60 &&
         data.matchDateTime is string && data.matchDateTime.size() >= 1 && data.matchDateTime.size() <= 80 &&
         data.startsInMinutes is int && data.startsInMinutes >= 0 && data.startsInMinutes <= 100000 &&
+        (!('scheduledStartAtMillis' in data) || (data.scheduledStartAtMillis is int && data.scheduledStartAtMillis >= 0 && data.scheduledStartAtMillis <= 9999999999999)) &&
         data.entryFee is int && data.entryFee >= 0 && data.entryFee <= 50000 &&
         data.totalPrize is int && data.totalPrize >= 0 && data.totalPrize <= 500000 &&
         data.perKillPrize is int && data.perKillPrize >= 0 && data.perKillPrize <= 50000 &&

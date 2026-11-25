@@ -22,6 +22,7 @@ import com.example.model.GiveawayPrizeType
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
 import com.example.model.LiveCommunityPoll
+import com.example.model.MatchPresetTemplate
 import com.example.model.MatchResult
 import com.example.model.MatchType
 import com.example.model.ModerationLogEntry
@@ -177,6 +178,7 @@ class TournamentViewModel(
     val cloudStatusMessage: StateFlow<String> = repository.cloudStatusMessage
     val officialWhatsAppGroupUrl: StateFlow<String> = repository.officialWhatsAppGroupUrl
     val allMatches: StateFlow<List<TournamentMatch>> = repository.matches
+    val matchPresets: StateFlow<List<MatchPresetTemplate>> = repository.matchPresets
     val registeredUsers: StateFlow<List<AppUser>> = repository.registeredUsers
 
     fun onGoogleSignInSuccess(firebaseUid: String, email: String, displayName: String): Pair<Boolean, String> {
@@ -783,13 +785,45 @@ class TournamentViewModel(
         totalPrize: Int,
         perKill: Int,
         booyahPrize: Int,
-        totalSlots: Int
+        totalSlots: Int,
+        startsInMinutes: Int = 15
     ) {
         repository.createNewMatch(
             title, category, matchType, mapName, matchDateTime,
-            entryFee, totalPrize, perKill, booyahPrize, totalSlots
+            entryFee, totalPrize, perKill, booyahPrize, totalSlots,
+            startsInMinutes = startsInMinutes
         )
-        _snackbarMessage.value = "নতুন টুর্নামেন্ট ম্যাচ সফলভাবে তৈরি হয়েছে!"
+        _snackbarMessage.value = "নতুন টুর্নামেন্ট ম্যাচ লাইভ কাউন্টডাউনসহ প্রকাশিত হয়েছে!"
+    }
+
+    fun rescheduleMatchStartMinutes(matchId: String, minutesFromNow: Int): Pair<Boolean, String> {
+        val res = repository.rescheduleMatchStartMinutes(matchId, minutesFromNow)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun launchMatchFromPreset(presetId: String, overrideStartsInMinutes: Int? = null): Pair<Boolean, String> {
+        val res = repository.launchMatchFromPreset(presetId, overrideStartsInMinutes)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun saveOrUpdateMatchPreset(preset: MatchPresetTemplate): Pair<Boolean, String> {
+        val res = repository.saveOrUpdateMatchPreset(preset)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun deleteMatchPreset(presetId: String): Pair<Boolean, String> {
+        val res = repository.deleteMatchPreset(presetId)
+        _snackbarMessage.value = res.second
+        return res
+    }
+
+    fun holdBrAndCsMatchesForLoneWolf(): Pair<Boolean, String> {
+        val res = repository.holdBrAndCsMatchesForLoneWolf()
+        _snackbarMessage.value = res.second
+        return res
     }
 
     fun clearSnackbar() {

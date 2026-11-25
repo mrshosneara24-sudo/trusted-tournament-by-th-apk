@@ -38,6 +38,7 @@
         "mapName": { "type": "string" },
         "matchDateTime": { "type": "string" },
         "startsInMinutes": { "type": "integer" },
+        "scheduledStartAtMillis": { "type": "integer" },
         "entryFee": { "type": "integer" },
         "totalPrize": { "type": "integer" },
         "perKillPrize": { "type": "integer" },

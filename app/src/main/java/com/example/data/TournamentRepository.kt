@@ -45,6 +45,7 @@ import com.example.model.GiveawayPrizeType
 import com.example.model.GiveawayStatus
 import com.example.model.GiveawayWinner
 import com.example.model.LiveCommunityPoll
+import com.example.model.MatchPresetTemplate
 import com.example.model.ModerationActionType
 import com.example.model.ModerationLogEntry
 import com.example.model.PollOptionItem
@@ -52,6 +53,7 @@ import com.example.model.PromoCodeItem
 import com.example.model.ReflexGameStats
 import com.example.model.TournamentRuleItem
 import com.example.model.UserPreferences
+import com.example.model.formatMatchClockTimeLabel
 
 class TournamentRepository(
     private val persistenceStore: AppPersistenceStore? = null,
@@ -109,8 +111,8 @@ class TournamentRepository(
     val masterOwnerPhone = "01861583924"
     var masterOwnerPin = "7788"
 
-    // Official WhatsApp Group for Room ID & Password sharing in 1 tap
-    val officialWhatsAppGroupUrl = MutableStateFlow("https://chat.whatsapp.com/G8TrustedTHTournament")
+    // Official WhatsApp Channel / Group for app updates & Room ID sharing in 1 tap
+    val officialWhatsAppGroupUrl = MutableStateFlow(com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL)
 
     private val defaultRules = listOf(
         TournamentRuleItem(
@@ -262,34 +264,18 @@ class TournamentRepository(
     )
     val registeredUsers: StateFlow<List<AppUser>> = _registeredUsers.asStateFlow()
 
-    private fun defaultInitialMatches(): List<TournamentMatch> = listOf(
+    private fun defaultInitialMatches(baseNowMillis: Long = System.currentTimeMillis()): List<TournamentMatch> {
+        val lw1Start = baseNowMillis + 15 * 60_000L
+        val lw2Start = baseNowMillis + 35 * 60_000L
+        return listOf(
             TournamentMatch(
-                id = "m1",
-                title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো #০১ (সুপারফাস্ট এক্সপ্রেস)",
-                category = GameCategory.BR_RANK,
-                matchType = MatchType.SOLO,
-                mapName = "বারমুডা (Bermuda)",
-                matchDateTime = "আজ বিকাল ৫:০০ PM",
-                startsInMinutes = 10,
-                entryFee = 10,
-                totalPrize = 80,
-                perKillPrize = 1,
-                booyahPrize = 30,
-                totalSlots = 48,
-                bookedSlots = 0,
-                status = MatchStatus.UPCOMING,
-                roomId = null,
-                roomPassword = null,
-                version = "মোবাইল অনলি (সুপারফাস্ট এক্সপ্রেস)"
-            ),
-            TournamentMatch(
-                id = "m2",
-                title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #০২",
+                id = "m_lw_1",
+                title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল #০১",
                 category = GameCategory.LONE_WOLF,
                 matchType = MatchType.SOLO,
                 mapName = "আয়রন কেজ (Iron Cage)",
-                matchDateTime = "আজ বিকাল ৫:৪৫ PM",
-                startsInMinutes = 35,
+                matchDateTime = formatMatchClockTimeLabel(lw1Start),
+                startsInMinutes = 15,
                 entryFee = 10,
                 totalPrize = 15,
                 perKillPrize = 0,
@@ -299,35 +285,17 @@ class TournamentRepository(
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
-                version = "মোবাইল অনলি (১০ মিনিটে শেষ)"
+                version = "মোবাইল অনলি (সুপারফাস্ট এক্সপ্রেস)",
+                scheduledStartAtMillis = lw1Start
             ),
             TournamentMatch(
-                id = "m3",
-                title = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ স্কোয়াড ফাইট #০৩",
-                category = GameCategory.CS_RANK,
-                matchType = MatchType.SQUAD,
-                mapName = "ক্লক টাওয়ার (Clock Tower)",
-                matchDateTime = "আজ সন্ধ্যা ৬:৩০ PM",
-                startsInMinutes = 75,
-                entryFee = 10,
-                totalPrize = 40,
-                perKillPrize = 0,
-                booyahPrize = 40,
-                totalSlots = 8,
-                bookedSlots = 0,
-                status = MatchStatus.UPCOMING,
-                roomId = null,
-                roomPassword = null,
-                version = "মোবাইল অনলি (ফাস্ট ফিনিশ)"
-            ),
-            TournamentMatch(
-                id = "m4",
-                title = "লোন উলফ - ২ বনাম ২ পার্টনার ব্যাটল #০৪",
+                id = "m_lw_2",
+                title = "লোন উলফ - ২ বনাম ২ পার্টনার ব্যাটল #০২",
                 category = GameCategory.LONE_WOLF,
                 matchType = MatchType.DUO,
                 mapName = "আইস কেভ (Ice Cave)",
-                matchDateTime = "আজ সন্ধ্যা ৭:১৫ PM",
-                startsInMinutes = 110,
+                matchDateTime = formatMatchClockTimeLabel(lw2Start),
+                startsInMinutes = 35,
                 entryFee = 10,
                 totalPrize = 20,
                 perKillPrize = 0,
@@ -337,31 +305,68 @@ class TournamentRepository(
                 status = MatchStatus.UPCOMING,
                 roomId = null,
                 roomPassword = null,
-                version = "মোবাইল অনলি (১৫ মিনিটে শেষ)"
-            ),
-            TournamentMatch(
-                id = "m5",
-                title = "বিআর র‍্যাঙ্ক - গ্র্যান্ড ফাইনাল রাশ #০৫",
-                category = GameCategory.BR_RANK,
-                matchType = MatchType.SOLO,
-                mapName = "পারগেটরী (Purgatory)",
-                matchDateTime = "আজ রাত ৮:০০ PM",
-                startsInMinutes = 150,
-                entryFee = 10,
-                totalPrize = 100,
-                perKillPrize = 1,
-                booyahPrize = 40,
-                totalSlots = 48,
-                bookedSlots = 0,
-                status = MatchStatus.UPCOMING,
-                roomId = null,
-                roomPassword = null,
-                version = "মোবাইল অনলি (ইভনিং ফাস্ট এক্সপ্রেস)"
+                version = "মোবাইল অনলি (১৫ মিনিটে শেষ)",
+                scheduledStartAtMillis = lw2Start
             )
+        )
+    }
+
+    private fun defaultSavedMatchPresets(): List<MatchPresetTemplate> = listOf(
+        MatchPresetTemplate(
+            id = "preset_br_bermuda",
+            presetName = "🏆 BR Rank — বারমুডা সোলো প্রিসেট",
+            matchTitle = "বিআর র‍্যাঙ্ক - বারমুডা সোলো এক্সপ্রেস",
+            category = GameCategory.BR_RANK,
+            matchType = MatchType.SOLO,
+            mapName = "বারমুডা (Bermuda)",
+            defaultStartsInMinutes = 30,
+            entryFee = 10,
+            totalPrize = 80,
+            perKillPrize = 1,
+            booyahPrize = 30,
+            totalSlots = 48,
+            version = "মোবাইল অনলি (No Emulator)",
+            isDefaultSaved = true
+        ),
+        MatchPresetTemplate(
+            id = "preset_cs_squad",
+            presetName = "⚔️ CS Rank — ৪v৪ ক্ল্যাশ স্কোয়াড প্রিসেট",
+            matchTitle = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ ক্ল্যাশ স্কোয়াড",
+            category = GameCategory.CS_RANK,
+            matchType = MatchType.SQUAD,
+            mapName = "ক্লক টাওয়ার (Clock Tower)",
+            defaultStartsInMinutes = 20,
+            entryFee = 10,
+            totalPrize = 40,
+            perKillPrize = 0,
+            booyahPrize = 40,
+            totalSlots = 8,
+            version = "মোবাইল অনলি (ফাস্ট ফিনিশ)",
+            isDefaultSaved = true
+        ),
+        MatchPresetTemplate(
+            id = "preset_lw_1v1",
+            presetName = "🐺 Lone Wolf — ১v১ কিং ডুয়েল প্রিসেট",
+            matchTitle = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল",
+            category = GameCategory.LONE_WOLF,
+            matchType = MatchType.SOLO,
+            mapName = "আয়রন কেজ (Iron Cage)",
+            defaultStartsInMinutes = 15,
+            entryFee = 10,
+            totalPrize = 15,
+            perKillPrize = 0,
+            booyahPrize = 15,
+            totalSlots = 2,
+            version = "মোবাইল অনলি (১০ মিনিটে শেষ)",
+            isDefaultSaved = true
+        )
     )
 
     private val _matches = MutableStateFlow<List<TournamentMatch>>(defaultInitialMatches())
     val matches: StateFlow<List<TournamentMatch>> = _matches.asStateFlow()
+
+    private val _matchPresets = MutableStateFlow<List<MatchPresetTemplate>>(defaultSavedMatchPresets())
+    val matchPresets: StateFlow<List<MatchPresetTemplate>> = _matchPresets.asStateFlow()
 
     private val _myBookings = MutableStateFlow<List<SlotBooking>>(emptyList())
     val myBookings: StateFlow<List<SlotBooking>> = _myBookings.asStateFlow()
@@ -473,7 +478,15 @@ class TournamentRepository(
                 _registeredUsers.value = saved.registeredUsers
             }
             if (saved.matches.isNotEmpty()) {
-                _matches.value = saved.matches
+                val nowMs = System.currentTimeMillis()
+                _matches.value = saved.matches.map { m ->
+                    if (m.scheduledStartAtMillis <= 0L) {
+                        m.copy(scheduledStartAtMillis = nowMs + m.startsInMinutes.coerceAtLeast(0) * 60_000L)
+                    } else m
+                }
+            }
+            if (saved.matchPresets.isNotEmpty()) {
+                _matchPresets.value = saved.matchPresets
             }
             _myBookings.value = saved.myBookings
             _transactions.value = saved.transactions
@@ -487,11 +500,17 @@ class TournamentRepository(
             if (saved.dailyMissions.isNotEmpty()) {
                 _dailyMissions.value = saved.dailyMissions
             }
-            _appCustomization.value = saved.appCustomization
+            val normalizedCfg = normalizeLegacyAppConfig(saved.appCustomization)
+            _appCustomization.value = normalizedCfg
             if (saved.strictRules.isNotEmpty()) {
                 _strictRules.value = saved.strictRules
             }
-            officialWhatsAppGroupUrl.value = saved.officialWhatsAppUrl
+            val savedWa = saved.officialWhatsAppUrl
+            officialWhatsAppGroupUrl.value = if (savedWa.isBlank() || savedWa == com.example.model.LEGACY_WHATSAPP_GROUP_URL) {
+                com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
+            } else {
+                savedWa
+            }
             if (saved.chatMessages.isNotEmpty()) {
                 _chatMessages.value = saved.chatMessages
             }
@@ -580,8 +599,9 @@ class TournamentRepository(
         sync.startRealtimeSync(
             CloudTournamentSync.SyncCallbacks(
                 onAppConfigSynced = { cfg, rules ->
-                    _appCustomization.value = cfg
-                    officialWhatsAppGroupUrl.value = cfg.officialWhatsAppUrl
+                    val normalizedCfg = normalizeLegacyAppConfig(cfg)
+                    _appCustomization.value = normalizedCfg
+                    officialWhatsAppGroupUrl.value = normalizedCfg.officialWhatsAppUrl
                     if (!rules.isNullOrEmpty()) {
                         _strictRules.value = rules
                     }
@@ -589,7 +609,7 @@ class TournamentRepository(
                 },
                 onMatchesSynced = { cloudMatches ->
                     if (cloudMatches.isNotEmpty()) {
-                        _matches.value = cloudMatches.sortedBy { it.startsInMinutes }
+                        _matches.value = cloudMatches.sortedBy { it.effectiveStartMillis() }
                         saveState()
                     }
                 },
@@ -860,7 +880,8 @@ class TournamentRepository(
                 communityPolls = _communityPolls.value,
                 triviaProgress = _triviaProgress.value,
                 giveaways = _giveaways.value,
-                reflexStats = _reflexStats.value
+                reflexStats = _reflexStats.value,
+                matchPresets = _matchPresets.value
             )
         )
     }
@@ -2504,25 +2525,35 @@ class TournamentRepository(
         totalPrize: Int,
         perKill: Int,
         booyahPrize: Int,
-        totalSlots: Int
+        totalSlots: Int,
+        startsInMinutes: Int = 15,
+        scheduledStartAtMillis: Long = System.currentTimeMillis() + startsInMinutes.coerceAtLeast(0) * 60_000L
     ) {
+        val safeMinutes = startsInMinutes.coerceIn(1, 100000)
+        val targetMillis = if (scheduledStartAtMillis > 0L) {
+            scheduledStartAtMillis
+        } else {
+            System.currentTimeMillis() + safeMinutes * 60_000L
+        }
+        val resolvedDateTime = matchDateTime.trim().ifBlank { formatMatchClockTimeLabel(targetMillis) }
         val newMatch = TournamentMatch(
             id = "m_${System.currentTimeMillis()}",
             title = title,
             category = category,
             matchType = matchType,
             mapName = mapName,
-            matchDateTime = matchDateTime,
-            startsInMinutes = 45,
+            matchDateTime = resolvedDateTime,
+            startsInMinutes = safeMinutes,
             entryFee = entryFee,
             totalPrize = totalPrize,
             perKillPrize = perKill,
             booyahPrize = booyahPrize,
             totalSlots = totalSlots,
             bookedSlots = 0,
-            status = MatchStatus.UPCOMING
+            status = MatchStatus.UPCOMING,
+            scheduledStartAtMillis = targetMillis
         )
-        _matches.value = listOf(newMatch) + _matches.value
+        _matches.value = (listOf(newMatch) + _matches.value).sortedBy { it.effectiveStartMillis() }
         saveState()
         cloudSync?.pushMatch(newMatch)
     }
@@ -3924,6 +3955,23 @@ class TournamentRepository(
         return true to "⚡ ${updated.ign}: +$safeKills কিল, +৳$safePrize প্রাইজ যোগ ও লাইভ লিডারবোর্ড আপডেট হয়েছে!"
     }
 
+    private fun normalizeLegacyAppConfig(cfg: AppCustomization): AppCustomization {
+        val migratedAnnouncement = if (cfg.activeAnnouncement == com.example.model.LEGACY_DEFAULT_ANNOUNCEMENT) {
+            com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT
+        } else {
+            cfg.activeAnnouncement
+        }
+        val migratedWhatsApp = if (cfg.officialWhatsAppUrl.isBlank() || cfg.officialWhatsAppUrl == com.example.model.LEGACY_WHATSAPP_GROUP_URL) {
+            com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
+        } else {
+            cfg.officialWhatsAppUrl
+        }
+        return cfg.copy(
+            activeAnnouncement = migratedAnnouncement,
+            officialWhatsAppUrl = migratedWhatsApp
+        )
+    }
+
     fun updateAppBranding(
         appName: String,
         appTagline: String,
@@ -3936,7 +3984,7 @@ class TournamentRepository(
             appTagline = appTagline.ifBlank { "১০০% বিশ্বস্ত • মোবাইল অনলি • দ্রুত ক্যাশআউট" },
             selectedLogo = logo,
             noticeTickerText = noticeTicker.ifBlank { "ম্যাচ শুরুর ১৫ মিনিট আগে অ্যাপে কাস্টম রুম আইডি ও পাসওয়ার্ড দেওয়া হবে!" },
-            activeAnnouncement = announcement.ifBlank { "প্রতিদিন বিকাল ৫:০০ থেকে রাত ৮:০০ পর্যন্ত সুপারফাস্ট এক্সপ্রেস ম্যাচ!" },
+            activeAnnouncement = announcement.ifBlank { com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT },
             announcementUpdatedAtMillis = System.currentTimeMillis(),
             isAnnouncementEnabled = true
         )
@@ -3954,7 +4002,7 @@ class TournamentRepository(
         _appCustomization.value = _appCustomization.value.copy(
             officialBkashNumber = bkash.ifBlank { "01861583924" },
             officialNagadNumber = nagad.ifBlank { "01861583924" },
-            officialWhatsAppUrl = whatsAppUrl.ifBlank { "https://chat.whatsapp.com/G8TrustedTHTournament" },
+            officialWhatsAppUrl = whatsAppUrl.ifBlank { com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL },
             minWithdraw = minWithdraw.coerceAtLeast(10),
             maxWithdraw = maxWithdraw.coerceAtLeast(minWithdraw)
         )
@@ -3973,18 +4021,138 @@ class TournamentRepository(
     }
 
     fun updateExistingMatch(updatedMatch: TournamentMatch): Boolean {
+        val normalizedMatch = if (updatedMatch.scheduledStartAtMillis <= 0L) {
+            val target = System.currentTimeMillis() + updatedMatch.startsInMinutes.coerceAtLeast(0) * 60_000L
+            updatedMatch.copy(scheduledStartAtMillis = target)
+        } else {
+            updatedMatch
+        }
         var found = false
         _matches.value = _matches.value.map { match ->
-            if (match.id == updatedMatch.id) {
+            if (match.id == normalizedMatch.id) {
                 found = true
-                updatedMatch
+                normalizedMatch
             } else match
         }
         if (found) {
             saveState()
-            cloudSync?.pushMatch(updatedMatch)
+            cloudSync?.pushMatch(normalizedMatch)
         }
         return found
+    }
+
+    fun rescheduleMatchStartMinutes(matchId: String, minutesFromNow: Int): Pair<Boolean, String> {
+        val actorRole = _userProfile.value.role
+        if (actorRole != UserRole.OWNER && actorRole != UserRole.ADMIN) {
+            return false to "❌ শুধুমাত্র ওনার বা অ্যাডমিন ম্যাচের লাইভ সময় পরিবর্তন করতে পারবেন।"
+        }
+        val safeMins = minutesFromNow.coerceIn(1, 100000)
+        val targetMillis = System.currentTimeMillis() + safeMins * 60_000L
+        val timeLabel = formatMatchClockTimeLabel(targetMillis)
+        var updatedMatch: TournamentMatch? = null
+        _matches.value = _matches.value.map { m ->
+            if (m.id == matchId) {
+                m.copy(
+                    startsInMinutes = safeMins,
+                    scheduledStartAtMillis = targetMillis,
+                    matchDateTime = timeLabel
+                ).also { updatedMatch = it }
+            } else m
+        }
+        val target = updatedMatch ?: return false to "❌ ম্যাচটি খুঁজে পাওয়া যায়নি!"
+        saveState()
+        cloudSync?.pushMatch(target)
+        return true to "⏱️ '${target.title}' ম্যাচের লাইভ টাইমার $safeMins মিনিটে ($timeLabel) আপডেট হয়েছে!"
+    }
+
+    fun saveOrUpdateMatchPreset(preset: MatchPresetTemplate): Pair<Boolean, String> {
+        val actorRole = _userProfile.value.role
+        if (actorRole != UserRole.OWNER && actorRole != UserRole.ADMIN) {
+            return false to "❌ শুধুমাত্র ওনার বা অ্যাডমিন প্রিসেট স্লট সেভ করতে পারবেন।"
+        }
+        val cleanName = preset.presetName.trim().ifBlank {
+            "${preset.category.iconEmoji} ${preset.category.banglaTitle} (${preset.totalSlots} স্লট)"
+        }
+        val cleanTitle = preset.matchTitle.trim().ifBlank { cleanName }
+        val normalized = preset.copy(
+            id = preset.id.ifBlank { "preset_${System.currentTimeMillis()}" },
+            presetName = cleanName,
+            matchTitle = cleanTitle,
+            defaultStartsInMinutes = preset.defaultStartsInMinutes.coerceIn(1, 100000),
+            totalSlots = preset.totalSlots.coerceIn(2, 100)
+        )
+        val existingIdx = _matchPresets.value.indexOfFirst { it.id == normalized.id }
+        _matchPresets.value = if (existingIdx >= 0) {
+            _matchPresets.value.toMutableList().apply { set(existingIdx, normalized) }
+        } else {
+            _matchPresets.value + normalized
+        }
+        saveState()
+        return true to "💾 '${normalized.presetName}' প্যানেলে সেভ করা হয়েছে!"
+    }
+
+    fun deleteMatchPreset(presetId: String): Pair<Boolean, String> {
+        val actorRole = _userProfile.value.role
+        if (actorRole != UserRole.OWNER && actorRole != UserRole.ADMIN) {
+            return false to "❌ অনুমোদন নেই।"
+        }
+        val before = _matchPresets.value.size
+        _matchPresets.value = _matchPresets.value.filterNot { it.id == presetId }
+        return if (_matchPresets.value.size < before) {
+            saveState()
+            true to "🗑️ সেভড প্রিসেটটি মুছে ফেলা হয়েছে।"
+        } else {
+            false to "❌ প্রিসেট খুঁজে পাওয়া যায়নি।"
+        }
+    }
+
+    fun launchMatchFromPreset(presetId: String, overrideStartsInMinutes: Int? = null): Pair<Boolean, String> {
+        val actorRole = _userProfile.value.role
+        if (actorRole != UserRole.OWNER && actorRole != UserRole.ADMIN) {
+            return false to "❌ শুধুমাত্র ওনার বা অ্যাডমিন প্রিসেট থেকে ম্যাচ লাইভ করতে পারবেন।"
+        }
+        val preset = _matchPresets.value.firstOrNull { it.id == presetId }
+            ?: return false to "❌ প্রিসেট খুঁজে পাওয়া যায়নি!"
+        val mins = (overrideStartsInMinutes ?: preset.defaultStartsInMinutes).coerceIn(1, 100000)
+        val targetMillis = System.currentTimeMillis() + mins * 60_000L
+        val timeLabel = formatMatchClockTimeLabel(targetMillis)
+        createNewMatch(
+            title = preset.matchTitle,
+            category = preset.category,
+            matchType = preset.matchType,
+            mapName = preset.mapName,
+            matchDateTime = timeLabel,
+            entryFee = preset.entryFee,
+            totalPrize = preset.totalPrize,
+            perKill = preset.perKillPrize,
+            booyahPrize = preset.booyahPrize,
+            totalSlots = preset.totalSlots,
+            startsInMinutes = mins,
+            scheduledStartAtMillis = targetMillis
+        )
+        return true to "🚀 '${preset.matchTitle}' (${preset.totalSlots} স্লট, ⏱️ ${mins}মি.) লাইভ হয়েছে!"
+    }
+
+    fun holdBrAndCsMatchesForLoneWolf(): Pair<Boolean, String> {
+        val actorRole = _userProfile.value.role
+        if (actorRole != UserRole.OWNER && actorRole != UserRole.ADMIN) {
+            return false to "❌ শুধুমাত্র ওনার বা অ্যাডমিন এই পরিবর্তন করতে পারবেন।"
+        }
+        val brCsMatches = _matches.value.filter {
+            it.category == GameCategory.BR_RANK || it.category == GameCategory.CS_RANK
+        }
+        if (brCsMatches.isEmpty()) {
+            return true to "🐺 আগে থেকেই শুধু Lone Wolf ম্যাচ চালু আছে এবং BR/CS প্রিসেট প্যানেলে সেভ আছে!"
+        }
+        brCsMatches.forEach { match ->
+            cancelMatchAndRefundAll(match.id)
+            cloudSync?.deleteMatchCloud(match.id)
+        }
+        _matches.value = _matches.value.filter {
+            it.category != GameCategory.BR_RANK && it.category != GameCategory.CS_RANK
+        }
+        saveState()
+        return true to "🐺 ${brCsMatches.size}টি BR/CS ম্যাচ হোল্ড করা হয়েছে (বুকিং থাকলে অটো-রিফান্ডসহ)! এখন শুধু Lone Wolf চালু আছে ও BR/CS প্রিসেটে সেভ আছে।"
     }
 
     fun deleteMatch(matchId: String): Boolean {
@@ -4157,7 +4325,7 @@ class TournamentRepository(
         masterOwnerPasskey = "TH-OWNER-7788"
         masterOwnerPin = "7788"
         _appCustomization.value = AppCustomization()
-        officialWhatsAppGroupUrl.value = "https://chat.whatsapp.com/G8TrustedTHTournament"
+        officialWhatsAppGroupUrl.value = com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
         _strictRules.value = defaultRules
         _walletBalance.value = 0
         _dailyStreakInfo.value = DailyStreakInfo(
@@ -4201,6 +4369,7 @@ class TournamentRepository(
         _triviaProgress.value = DailyTriviaProgress()
         _giveaways.value = emptyList()
         _reflexStats.value = ReflexGameStats()
+        _matchPresets.value = defaultSavedMatchPresets()
         resetAiChat()
         _isLoggedIn.value = false
         cloudSync?.resetCloudCollectionForFreshDownload(

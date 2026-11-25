@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -38,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,9 +56,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppCustomization
 import com.example.model.AppLogoOption
+import com.example.model.GameCategory
+import com.example.model.MatchPresetTemplate
 import com.example.model.MatchStatus
 import com.example.model.TournamentMatch
 import com.example.model.TournamentRuleItem
+import com.example.model.formatMatchClockTimeLabel
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
 import com.example.ui.theme.DarkSurface
@@ -84,7 +89,12 @@ fun OwnerCommandAndPromoSection(
     onDeleteMatch: (String) -> Boolean,
     onAddStrictRule: (title: String, description: String, penalty: String, emoji: String) -> Boolean,
     onDeleteStrictRule: (String) -> Boolean,
-    onResetDefaultRules: () -> Unit
+    onResetDefaultRules: () -> Unit,
+    matchPresets: List<MatchPresetTemplate> = emptyList(),
+    onLaunchMatchPreset: (presetId: String, overrideStartsInMinutes: Int?) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeleteMatchPreset: (presetId: String) -> Pair<Boolean, String> = { false to "" },
+    onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String> = { false to "" },
+    onRescheduleMatchMinutes: (matchId: String, minutesFromNow: Int) -> Pair<Boolean, String> = { _, _ -> false to "" }
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -114,7 +124,10 @@ fun OwnerCommandAndPromoSection(
     var editPerKill by remember(activeMatch?.id) { mutableStateOf((activeMatch?.perKillPrize ?: 0).toString()) }
     var editBooyah by remember(activeMatch?.id) { mutableStateOf((activeMatch?.booyahPrize ?: 0).toString()) }
     var editStatus by remember(activeMatch?.id) { mutableStateOf(activeMatch?.status ?: MatchStatus.UPCOMING) }
+    var editStartsInMinutes by remember(activeMatch?.id) { mutableStateOf((activeMatch?.startsInMinutes ?: 15).toString()) }
+    var shouldApplyNewCountdown by remember(activeMatch?.id) { mutableStateOf(false) }
     var confirmDeleteMatchId by remember { mutableStateOf<String?>(null) }
+    var presetLaunchMinutes by remember { mutableIntStateOf(15) }
 
     LaunchedEffect(activeMatch?.id) {
         activeMatch?.let { m ->
@@ -125,6 +138,8 @@ fun OwnerCommandAndPromoSection(
             editPerKill = m.perKillPrize.toString()
             editBooyah = m.booyahPrize.toString()
             editStatus = m.status
+            editStartsInMinutes = m.startsInMinutes.toString()
+            shouldApplyNewCountdown = false
             confirmDeleteMatchId = null
         }
     }
@@ -283,7 +298,104 @@ fun OwnerCommandAndPromoSection(
             }
         }
 
-        // 3. Match Editor & Safe Delete
+        // 2.5 Saved BR & CS Preset Slots + Lone Wolf Only Mode
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = DarkCard,
+            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.55f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("owner_presets_card")
+        ) {
+            val lwCount = matches.count { it.category == GameCategory.LONE_WOLF }
+            val brCount = matches.count { it.category == GameCategory.BR_RANK }
+            val csCount = matches.count { it.category == GameCategory.CS_RANK }
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Schedule, contentDescription = "Saved Presets", tint = FlameYellow, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🐺 Lone Wolf জার্নি ও সেভড BR/CS প্রিসেট স্লট", fontWeight = FontWeight.Black, color = FlameYellow, fontSize = 14.sp)
+                }
+                Text(
+                    text = "লাইভ ম্যাচ: Lone Wolf ($lwCount) • BR Rank ($brCount) • CS Rank ($csCount)",
+                    fontFamily = MonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = FlameCyan
+                )
+                Button(
+                    onClick = {
+                        val res = onHoldBrAndCsForLoneWolf()
+                        Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("owner_hold_br_cs_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = FlameOrange)
+                ) {
+                    Text("🐺 BR ও CS ম্যাচ হোল্ড করুন (শুধু Lone Wolf সক্রিয়)", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                }
+
+                Text("🚀 প্রিসেট চালু করার সময় (মিনিট পর শুরু):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(7, 10, 15, 20, 30, 45).forEach { mins ->
+                        FilterChip(
+                            selected = presetLaunchMinutes == mins,
+                            onClick = { presetLaunchMinutes = mins },
+                            label = { Text("${mins}মি.", fontFamily = MonoFontFamily, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                matchPresets.forEach { preset ->
+                    Surface(shape = RoundedCornerShape(10.dp), color = DarkSurface, border = BorderStroke(1.dp, preset.category.accentColor.copy(alpha = 0.45f))) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(preset.presetName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(
+                                    text = "${preset.totalSlots} স্লট • ${preset.mapName} • এন্ট্রি ৳${preset.entryFee} • প্রাইজ ৳${preset.totalPrize}",
+                                    fontSize = 10.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                            if (!preset.isDefaultSaved) {
+                                IconButton(
+                                    onClick = {
+                                        val res = onDeleteMatchPreset(preset.id)
+                                        Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Delete Preset", tint = FireRed)
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val res = onLaunchMatchPreset(preset.id, presetLaunchMinutes)
+                                    Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .testTag("owner_launch_preset_${preset.id}"),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = VictoryGreen)
+                            ) {
+                                Text("🚀 লাইভ (${presetLaunchMinutes}মি)", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Match Editor, Live Countdown Reset & Safe Delete
         if (activeMatch != null) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -295,7 +407,7 @@ fun OwnerCommandAndPromoSection(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Edit, contentDescription = "Match Editor", tint = FlameCyan, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("⚔️ ম্যাচ এডিটর ও নিরাপদ ডিলিট", fontWeight = FontWeight.Black, color = FlameCyan, fontSize = 14.sp)
+                        Text("⚔️ ম্যাচ এডিটর, লাইভ টাইমার ও ডিলিট", fontWeight = FontWeight.Black, color = FlameCyan, fontSize = 14.sp)
                     }
 
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -305,6 +417,62 @@ fun OwnerCommandAndPromoSection(
                                 onClick = { selectedMatchId = m.id },
                                 label = { Text(m.title.take(20), fontSize = 11.sp) }
                             )
+                        }
+                    }
+
+                    // Live countdown quick rescheduler
+                    Text(
+                        text = "⏱️ রিয়েল-টাইম কাউন্টডাউন: ${activeMatch.liveCountdownText()}",
+                        fontFamily = MonoFontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FlameYellow
+                    )
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(5, 7, 10, 15, 30, 60).forEach { mins ->
+                            FilterChip(
+                                selected = shouldApplyNewCountdown && editStartsInMinutes.toIntOrNull() == mins,
+                                onClick = {
+                                    editStartsInMinutes = mins.toString()
+                                    shouldApplyNewCountdown = true
+                                    editDateTime = formatMatchClockTimeLabel(System.currentTimeMillis() + mins * 60_000L)
+                                },
+                                label = { Text("${mins}মি.", fontFamily = MonoFontFamily, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = editStartsInMinutes,
+                            onValueChange = { raw ->
+                                val digits = raw.filter { it.isDigit() }
+                                editStartsInMinutes = digits
+                                shouldApplyNewCountdown = true
+                                digits.toIntOrNull()?.takeIf { it > 0 }?.let { mins ->
+                                    editDateTime = formatMatchClockTimeLabel(System.currentTimeMillis() + mins * 60_000L)
+                                }
+                            },
+                            label = { Text("বাকি মিনিট") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                        )
+                        Button(
+                            onClick = {
+                                val mins = (editStartsInMinutes.toIntOrNull() ?: 15).coerceIn(1, 100000)
+                                val res = onRescheduleMatchMinutes(activeMatch.id, mins)
+                                shouldApplyNewCountdown = false
+                                Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .height(48.dp)
+                                .testTag("owner_reschedule_timer_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = FlameYellow)
+                        ) {
+                            Text("⏱️ লাইভ টাইমার সেট", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
                         }
                     }
 
@@ -333,10 +501,18 @@ fun OwnerCommandAndPromoSection(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
+                                val parsedMins = (editStartsInMinutes.toIntOrNull() ?: activeMatch.startsInMinutes).coerceIn(1, 100000)
+                                val updatedScheduled = if (shouldApplyNewCountdown) {
+                                    System.currentTimeMillis() + parsedMins * 60_000L
+                                } else {
+                                    activeMatch.effectiveStartMillis()
+                                }
                                 onUpdateExistingMatch(
                                     activeMatch.copy(
                                         title = editTitle.ifBlank { activeMatch.title },
                                         matchDateTime = editDateTime.ifBlank { activeMatch.matchDateTime },
+                                        startsInMinutes = parsedMins,
+                                        scheduledStartAtMillis = updatedScheduled,
                                         entryFee = editEntry.toIntOrNull() ?: activeMatch.entryFee,
                                         totalPrize = editPrize.toIntOrNull() ?: activeMatch.totalPrize,
                                         perKillPrize = editPerKill.toIntOrNull() ?: activeMatch.perKillPrize,
@@ -344,6 +520,7 @@ fun OwnerCommandAndPromoSection(
                                         status = editStatus
                                     )
                                 )
+                                shouldApplyNewCountdown = false
                             },
                             modifier = Modifier.weight(1f).height(48.dp).testTag("owner_save_match_edit_btn"),
                             shape = RoundedCornerShape(10.dp),

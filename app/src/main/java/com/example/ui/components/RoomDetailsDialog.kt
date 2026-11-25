@@ -54,7 +54,7 @@ fun RoomDetailsDialog(
     slotNumber: Int,
     roomId: String?,
     roomPassword: String?,
-    whatsAppUrl: String = "https://chat.whatsapp.com/G8TrustedTHTournament",
+    whatsAppUrl: String = com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL,
     autoLaunchGame: Boolean = false,
     onDismiss: () -> Unit
 ) {

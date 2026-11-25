@@ -101,6 +101,7 @@ test("Owner can create matches, update room credentials & slot capacity, and fri
       mapName: "বারমুডা",
       matchDateTime: "আজ রাত ৮:০০টা",
       startsInMinutes: 35,
+      scheduledStartAtMillis: Date.now() + 35 * 60000,
       entryFee: 20,
       totalPrize: 350,
       perKillPrize: 10,
@@ -109,6 +110,28 @@ test("Owner can create matches, update room credentials & slot capacity, and fri
       bookedSlots: 0,
       status: "UPCOMING",
       version: "মোবাইল অনলি",
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Invalid negative scheduledStartAtMillis is rejected even for owner
+  await assertFails(
+    ownerDb().collection("matches").doc("m_bad_ts").set({
+      title: "BAD TS MATCH",
+      category: "LONE_WOLF",
+      matchType: "SOLO",
+      mapName: "আয়রন কেজ",
+      matchDateTime: "আজ",
+      startsInMinutes: 15,
+      scheduledStartAtMillis: -50,
+      entryFee: 10,
+      totalPrize: 15,
+      perKillPrize: 0,
+      booyahPrize: 15,
+      totalSlots: 2,
+      bookedSlots: 0,
+      status: "UPCOMING",
       createdAt: past,
       updatedAt: past,
     })
@@ -140,10 +163,12 @@ test("Owner can create matches, update room credentials & slot capacity, and fri
     aliceDb().collection("matches").where("status", "in", ["UPCOMING", "ROOM_OPEN", "ONGOING", "FINISHED", "CANCELLED"]).get()
   );
 
-  // Owner updates slot capacity & room credentials
+  // Owner updates slot capacity, room credentials & live rescheduled start time
   await assertSucceeds(
     ownerDb().collection("matches").doc("m_solo_1").update({
       totalSlots: 52,
+      startsInMinutes: 10,
+      scheduledStartAtMillis: Date.now() + 10 * 60000,
       roomId: "TH9988",
       roomPassword: "123",
       status: "ROOM_OPEN",

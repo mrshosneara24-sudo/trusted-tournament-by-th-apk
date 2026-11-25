@@ -114,6 +114,7 @@ import com.example.model.DepositRequest
 import com.example.model.GiveawayEvent
 import com.example.model.GiveawayPrizeType
 import com.example.model.LiveCommunityPoll
+import com.example.model.MatchPresetTemplate
 import com.example.model.MatchResult
 import com.example.model.ModerationLogEntry
 import com.example.model.PromoCodeItem
@@ -225,7 +226,12 @@ fun OwnerControlDialog(
     onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
     onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
     onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
-    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    matchPresets: List<MatchPresetTemplate> = emptyList(),
+    onLaunchMatchPreset: (String, Int?) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeleteMatchPreset: (String) -> Pair<Boolean, String> = { false to "" },
+    onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String> = { false to "" },
+    onRescheduleMatchMinutes: (String, Int) -> Pair<Boolean, String> = { _, _ -> false to "" }
 ) {
     val context = LocalContext.current
     var isUnlocked by remember { mutableStateOf(userProfile.role == UserRole.OWNER) }
@@ -351,7 +357,12 @@ fun OwnerControlDialog(
                     onCreateGiveaway = onCreateGiveaway,
                     onDrawGiveawayWinners = onDrawGiveawayWinners,
                     onCloseGiveaway = onCloseGiveaway,
-                    onDeleteGiveaway = onDeleteGiveaway
+                    onDeleteGiveaway = onDeleteGiveaway,
+                    matchPresets = matchPresets,
+                    onLaunchMatchPreset = onLaunchMatchPreset,
+                    onDeleteMatchPreset = onDeleteMatchPreset,
+                    onHoldBrAndCsForLoneWolf = onHoldBrAndCsForLoneWolf,
+                    onRescheduleMatchMinutes = onRescheduleMatchMinutes
                 )
             }
         }
@@ -582,7 +593,12 @@ private fun OwnerDashboardContent(
     onCreateGiveaway: (String, String, GiveawayPrizeType, String, Int, Int, Int, Boolean) -> Pair<Boolean, String> = { _, _, _, _, _, _, _, _ -> false to "" },
     onDrawGiveawayWinners: (String) -> Pair<Boolean, String> = { false to "" },
     onCloseGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
-    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" }
+    onDeleteGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    matchPresets: List<MatchPresetTemplate> = emptyList(),
+    onLaunchMatchPreset: (String, Int?) -> Pair<Boolean, String> = { _, _ -> false to "" },
+    onDeleteMatchPreset: (String) -> Pair<Boolean, String> = { false to "" },
+    onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String> = { false to "" },
+    onRescheduleMatchMinutes: (String, Int) -> Pair<Boolean, String> = { _, _ -> false to "" }
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val pendingBadgeAppealsCount = remember(badgeAppeals) { badgeAppeals.count { it.status == AppealStatus.PENDING } }
@@ -952,7 +968,12 @@ private fun OwnerDashboardContent(
                             onDeleteMatch = onDeleteMatch,
                             onAddStrictRule = onAddStrictRule,
                             onDeleteStrictRule = onDeleteStrictRule,
-                            onResetDefaultRules = onResetDefaultRules
+                            onResetDefaultRules = onResetDefaultRules,
+                            matchPresets = matchPresets,
+                            onLaunchMatchPreset = onLaunchMatchPreset,
+                            onDeleteMatchPreset = onDeleteMatchPreset,
+                            onHoldBrAndCsForLoneWolf = onHoldBrAndCsForLoneWolf,
+                            onRescheduleMatchMinutes = onRescheduleMatchMinutes
                         )
                     }
                 }

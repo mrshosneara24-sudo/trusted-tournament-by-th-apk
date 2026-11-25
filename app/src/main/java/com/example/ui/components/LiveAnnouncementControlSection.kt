@@ -96,6 +96,12 @@ fun LiveAnnouncementControlSection(
     val presets = remember {
         listOf(
             AnnouncementPreset(
+                label = "📲 আপডেট ও WhatsApp",
+                title = "📢 অফিসিয়াল ঘোষণা",
+                message = com.example.model.OFFICIAL_UPDATE_ANNOUNCEMENT,
+                urgent = false
+            ),
+            AnnouncementPreset(
                 label = "🔑 রুম কোড লাইভ",
                 title = "🔑 কাস্টম রুম কোড প্রকাশিত!",
                 message = "পরবর্তী ম্যাচের রুম আইডি ও পাসওয়ার্ড অ্যাপে দেওয়া হয়েছে! স্লট বুক করা প্লেয়াররা দ্রুত জয়েন করুন।",
