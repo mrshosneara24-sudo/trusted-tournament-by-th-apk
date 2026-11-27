@@ -227,7 +227,7 @@ fun ForgotPasswordDialog(
                                     errorMessage = null
                                 },
                                 label = { Text("ইমেইল / মোবাইল নম্বর / FF UID") },
-                                placeholder = { Text("যেমন: player@gmail.com বা 01861583924") },
+                                placeholder = { Text("যেমন: player@gmail.com বা 017XXXXXXXX") },
                                 leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = FlameCyan) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),

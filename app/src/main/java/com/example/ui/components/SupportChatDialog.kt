@@ -209,7 +209,7 @@ fun SupportChatDialog(
                                 text = if (currentTab == SupportTabType.AI_ASSISTANT) {
                                     "যেকোনো সমস্যায় তাৎক্ষণিক সমাধান ও গাইড"
                                 } else {
-                                    "বিকাশ ও হেল্পলাইন: $officialBkashNumber"
+                                    "অফিসিয়াল লাইভ সাপোর্ট টিম (নম্বর গোপন রাখা হয়েছে)"
                                 },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = if (currentTab == SupportTabType.AI_ASSISTANT) Color(0xFF93C5FD) else FlameYellow
@@ -538,6 +538,7 @@ fun SupportChatDialog(
             profile = profileData,
             onDismiss = { localPlayerProfileCard = null },
             onGiveKudos = onGiveKudos,
+            hasGivenKudos = hasActorGivenKudos(profileData, registeredUsers, currentUser),
             viewerRole = currentUser.role,
             onGrantBadge = onGrantBadge,
             onRevokeBadge = onRevokeBadge

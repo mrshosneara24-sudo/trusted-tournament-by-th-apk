@@ -6,10 +6,12 @@ import com.example.model.AppealChatMessage
 import com.example.model.AppealStatus
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.ChatChannel
 import com.example.model.ChatMessage
 import com.example.model.DailyGamerMission
 import com.example.model.DailyStreakInfo
 import com.example.model.DepositRequest
+import com.example.model.EmailAuthResult
 import com.example.model.GameCategory
 import com.example.model.GlobalChatMessage
 import com.example.model.LeaderboardPlayer
@@ -106,11 +108,6 @@ class TournamentRepository(
     // Official bKash Number delegates to dynamic app customization
     val officialBkashNumber: String get() = _appCustomization.value.officialBkashNumber
 
-    // Master Owner Credentials (Strictly for the app creator / owner)
-    var masterOwnerPasskey = "TH-OWNER-7788"
-    val masterOwnerPhone = "01861583924"
-    var masterOwnerPin = "7788"
-
     // Official WhatsApp Channel / Group for app updates & Room ID sharing in 1 tap
     val officialWhatsAppGroupUrl = MutableStateFlow(com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL)
 
@@ -185,52 +182,6 @@ class TournamentRepository(
     private val _spinHistory = MutableStateFlow<List<SpinHistoryRecord>>(emptyList())
     val spinHistory: StateFlow<List<SpinHistoryRecord>> = _spinHistory.asStateFlow()
 
-    private val _dailyMissions = MutableStateFlow<List<DailyGamerMission>>(
-        listOf(
-            DailyGamerMission(
-                id = "m1",
-                title = "সাপ্তাহিক লাকি স্পিন",
-                description = "ফ্রি স্পিন ঘুরিয়ে ৩-৩০৳ নগদ ওয়ালেট বোনাস নিন",
-                rewardAmount = 1,
-                isCompleted = false,
-                isClaimed = false,
-                iconEmoji = "🎡",
-                actionType = "SPIN"
-            ),
-            DailyGamerMission(
-                id = "m2",
-                title = "৭ দিনের ডেইলি স্ট্রিক",
-                description = "আজকের লগইন বোনাস সংগ্রহ করুন",
-                rewardAmount = 1,
-                isCompleted = false,
-                isClaimed = false,
-                iconEmoji = "🔥",
-                actionType = "STREAK"
-            ),
-            DailyGamerMission(
-                id = "m3",
-                title = "AI টুর্নামেন্ট সাপোর্ট",
-                description = "AI অ্যাসিস্ট্যান্টকে টুর্নামেন্ট বিষয়ে প্রশ্ন করুন",
-                rewardAmount = 1,
-                isCompleted = false,
-                isClaimed = false,
-                iconEmoji = "🤖",
-                actionType = "AI_CHAT"
-            ),
-            DailyGamerMission(
-                id = "m4",
-                title = "টুর্নামেন্ট ম্যাচ দেখুন",
-                description = "লাইভ বা আসন্ন রুমের স্লট গ্রিড ঘুরে আসুন",
-                rewardAmount = 2,
-                isCompleted = false,
-                isClaimed = false,
-                iconEmoji = "⚔️",
-                actionType = "MATCH"
-            )
-        )
-    )
-    val dailyMissions: StateFlow<List<DailyGamerMission>> = _dailyMissions.asStateFlow()
-
     private val _userProfile = MutableStateFlow(
         UserProfile(
             isLoggedIn = false,
@@ -278,9 +229,9 @@ class TournamentRepository(
                 matchDateTime = formatMatchClockTimeLabel(lw1Start),
                 startsInMinutes = 15,
                 entryFee = 10,
-                totalPrize = 15,
+                totalPrize = 30,
                 perKillPrize = 0,
-                booyahPrize = 15,
+                booyahPrize = 30,
                 totalSlots = 2,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -298,9 +249,9 @@ class TournamentRepository(
                 matchDateTime = formatMatchClockTimeLabel(lw2Start),
                 startsInMinutes = 35,
                 entryFee = 10,
-                totalPrize = 20,
+                totalPrize = 50,
                 perKillPrize = 0,
-                booyahPrize = 20,
+                booyahPrize = 50,
                 totalSlots = 4,
                 bookedSlots = 0,
                 status = MatchStatus.UPCOMING,
@@ -321,10 +272,10 @@ class TournamentRepository(
             matchType = MatchType.SOLO,
             mapName = "বারমুডা (Bermuda)",
             defaultStartsInMinutes = 30,
-            entryFee = 10,
-            totalPrize = 80,
-            perKillPrize = 1,
-            booyahPrize = 30,
+            entryFee = 15,
+            totalPrize = 250,
+            perKillPrize = 4,
+            booyahPrize = 100,
             totalSlots = 48,
             version = "মোবাইল অনলি (No Emulator)",
             isDefaultSaved = true
@@ -337,10 +288,10 @@ class TournamentRepository(
             matchType = MatchType.SQUAD,
             mapName = "ক্লক টাওয়ার (Clock Tower)",
             defaultStartsInMinutes = 20,
-            entryFee = 10,
-            totalPrize = 40,
+            entryFee = 15,
+            totalPrize = 100,
             perKillPrize = 0,
-            booyahPrize = 40,
+            booyahPrize = 100,
             totalSlots = 8,
             version = "মোবাইল অনলি (ফাস্ট ফিনিশ)",
             isDefaultSaved = true
@@ -354,9 +305,9 @@ class TournamentRepository(
             mapName = "আয়রন কেজ (Iron Cage)",
             defaultStartsInMinutes = 15,
             entryFee = 10,
-            totalPrize = 15,
+            totalPrize = 30,
             perKillPrize = 0,
-            booyahPrize = 15,
+            booyahPrize = 30,
             totalSlots = 2,
             version = "মোবাইল অনলি (১০ মিনিটে শেষ)",
             isDefaultSaved = true
@@ -411,17 +362,18 @@ class TournamentRepository(
             id = "gc_owner_welcome",
             senderUserId = "u_owner",
             senderName = "তানভির হাসান (মালিক)",
-            senderIgn = "TH★DEVIL⚡",
+            senderIgn = "TH DEVIL",
             senderUid = "11410365896",
             senderPhone = "01861583924",
             senderRole = UserRole.OWNER,
             senderAvatarId = "th_logo",
             senderPrimaryBadge = BadgeType.GREEN_VERIFIED,
             senderBadges = listOf(BadgeType.GREEN_VERIFIED),
-            text = "👑 আসসালামু আলাইকুম! গ্লোবাল কমিউনিটি চ্যাটে সবাইকে স্বাগতম। এখানে ওনার, অ্যাডমিন এবং সকল মেম্বার একসাথে কথা বলতে, স্কোয়াড খুঁজতে ও টুর্নামেন্ট আপডেট জানতে পারবেন!",
+            text = "আসসালামু আলাইকুম! গ্লোবাল ও ক্যাটাগরি চ্যাটে সবাইকে স্বাগতম। এখানে ওনার, অ্যাডমিন এবং সকল মেম্বার একসাথে কথা বলতে ও ম্যাচের আপডেট জানতে পারবেন।",
             timeLabel = "অফিসিয়াল",
-            isPinnedAnnouncement = true,
-            reactions = mapOf("🔥" to 5, "👑" to 3)
+            isPinnedAnnouncement = false,
+            reactions = emptyMap(),
+            channelId = ChatChannel.GLOBAL.id
         )
     )
 
@@ -498,9 +450,6 @@ class TournamentRepository(
             _dailyStreakInfo.value = saved.dailyStreakInfo
             _spinHistory.value = saved.spinHistory
             _hasSpunThisWeek.value = saved.hasSpunThisWeek
-            if (saved.dailyMissions.isNotEmpty()) {
-                _dailyMissions.value = saved.dailyMissions
-            }
             val normalizedCfg = normalizeLegacyAppConfig(saved.appCustomization)
             _appCustomization.value = normalizedCfg
             if (saved.strictRules.isNotEmpty()) {
@@ -515,10 +464,9 @@ class TournamentRepository(
             if (saved.chatMessages.isNotEmpty()) {
                 _chatMessages.value = saved.chatMessages
             }
-            masterOwnerPin = saved.masterOwnerPin
             _badgeAppeals.value = saved.badgeAppeals
             if (saved.globalChatMessages.isNotEmpty()) {
-                _globalChatMessages.value = saved.globalChatMessages
+                _globalChatMessages.value = saved.globalChatMessages.map { it.copy(isPinnedAnnouncement = false) }
             }
             _moderationLogs.value = saved.moderationLogs
             _userPreferences.value = saved.userPreferences
@@ -648,8 +596,8 @@ class TournamentRepository(
                         )
                     }.toMutableList()
 
-                    // Ensure official owner always exists
-                    if (merged.none { it.role == UserRole.OWNER || it.phone == masterOwnerPhone || it.uid == "11410365896" }) {
+                    // Preserve owner registry entry if already synced
+                    if (merged.none { it.role == UserRole.OWNER || it.uid == "11410365896" }) {
                         existingById["u_owner"]?.let { merged.add(0, it) }
                     }
                     _registeredUsers.value = merged
@@ -742,14 +690,16 @@ class TournamentRepository(
                     _giveaways.value = cloudGiveaways
                     saveState()
                 },
+                onCloudRoleResolved = { cloudRole, email, firebaseUid ->
+                    syncCloudAuthenticatedRole(cloudRole, email, firebaseUid)
+                },
                 onSyncStateChanged = { connected, email, statusText ->
                     _isCloudConnected.value = connected
                     _cloudUserEmail.value = email
                     _cloudStatusMessage.value = statusText
                     if (connected) {
                         val isStaff = _userProfile.value.role == UserRole.OWNER ||
-                            _userProfile.value.role == UserRole.ADMIN ||
-                            email.equals("mrshosneara24@gmail.com", ignoreCase = true)
+                            _userProfile.value.role == UserRole.ADMIN
                         if (isStaff) {
                             sync.seedInitialMatchesIfCloudEmpty(
                                 _matches.value,
@@ -803,12 +753,10 @@ class TournamentRepository(
                 dailyStreakInfo = _dailyStreakInfo.value,
                 spinHistory = _spinHistory.value,
                 hasSpunThisWeek = _hasSpunThisWeek.value,
-                dailyMissions = _dailyMissions.value,
                 appCustomization = _appCustomization.value,
                 strictRules = _strictRules.value,
                 officialWhatsAppUrl = officialWhatsAppGroupUrl.value,
                 chatMessages = _chatMessages.value,
-                masterOwnerPin = masterOwnerPin,
                 badgeAppeals = _badgeAppeals.value,
                 globalChatMessages = _globalChatMessages.value,
                 moderationLogs = _moderationLogs.value,
@@ -1009,26 +957,58 @@ class TournamentRepository(
         syncActiveUserToRegistry()
     }
 
-    fun giveProfileKudos(targetKey: String): Int {
+    fun hasGivenKudos(targetKey: String, actorKeyOverride: String? = null): Boolean {
+        val trimmed = targetKey.trim()
+        if (trimmed.isBlank()) return false
+        val actorKey = (actorKeyOverride ?: currentActorKey()).trim()
+            .ifBlank { _userProfile.value.email.trim().ifBlank { "local_viewer" } }
+        val target = _registeredUsers.value.firstOrNull {
+            it.id == trimmed || it.uid == trimmed || it.phone == trimmed || it.ign.equals(trimmed, ignoreCase = true)
+        } ?: return false
+        return actorKey in target.kudosGiverKeys
+    }
+
+    fun giveProfileKudos(targetKey: String, actorKeyOverride: String? = null): Int {
         val trimmed = targetKey.trim()
         if (trimmed.isBlank()) return 0
+        val actorKey = (actorKeyOverride ?: currentActorKey()).trim()
+            .ifBlank { _userProfile.value.email.trim().ifBlank { "local_viewer" } }
         var updatedCount = 0
         var updatedUserId: String? = null
+        var updatedGiverKeys: Set<String> = emptySet()
         _registeredUsers.value = _registeredUsers.value.map { user ->
             if (user.id == trimmed || user.uid == trimmed || user.phone == trimmed || user.ign.equals(trimmed, ignoreCase = true)) {
-                updatedCount = user.kudosCount + 1
+                val alreadyGiven = actorKey in user.kudosGiverKeys
+                val nextGivers = if (alreadyGiven) {
+                    user.kudosGiverKeys - actorKey
+                } else {
+                    user.kudosGiverKeys + actorKey
+                }
+                updatedCount = if (alreadyGiven) {
+                    (user.kudosCount - 1).coerceAtLeast(0)
+                } else {
+                    user.kudosCount + 1
+                }
+                updatedGiverKeys = nextGivers
                 updatedUserId = user.id
-                user.copy(kudosCount = updatedCount)
+                user.copy(kudosCount = updatedCount, kudosGiverKeys = nextGivers)
             } else {
                 user
             }
         }
-        if (updatedCount > 0) {
+        if (updatedUserId != null) {
             saveState()
-            updatedUserId?.let { cloudSync?.pushKudosUpdate(it, updatedCount) }
+            updatedUserId?.let { cloudSync?.pushKudosUpdate(it, updatedCount, updatedGiverKeys) }
         }
         return updatedCount
     }
+
+    fun resolveRoleFromFirestoreValue(rawRole: String?): UserRole =
+        when (rawRole?.trim()?.lowercase()) {
+            "owner" -> UserRole.OWNER
+            "admin" -> UserRole.ADMIN
+            else -> UserRole.PLAYER
+        }
 
     fun login(phoneOrEmail: String, password: String = ""): Boolean {
         checkAndClearExpiredBans()
@@ -1039,30 +1019,14 @@ class TournamentRepository(
                 it.phone == trimmed ||
                 it.uid == trimmed ||
                 it.bkashNumber == trimmed
+        } ?: return false
+
+        if (passTrimmed.isBlank() || existingUser.password != passTrimmed) {
+            return false
         }
 
-        // Owner sign-in via owner email / 01861583924 + code 7788 (or master passkey)
-        val isOwnerPhoneOrKey = trimmed == masterOwnerPhone ||
-                trimmed.equals("owner@trustedth.com", ignoreCase = true) ||
-                trimmed.equals("mrshosneara24@gmail.com", ignoreCase = true) ||
-                trimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
-                existingUser?.role == UserRole.OWNER
-        val isOwnerMasterKey = isOwnerPhoneOrKey && (
-                passTrimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
-                        passTrimmed == masterOwnerPin ||
-                        trimmed.equals(masterOwnerPasskey, ignoreCase = true)
-                )
-        if (!isOwnerMasterKey) {
-            if (existingUser == null || passTrimmed.isBlank() || existingUser.password != passTrimmed) {
-                return false
-            }
-        }
-
-        val role = when {
-            isOwnerMasterKey || existingUser?.role == UserRole.OWNER -> UserRole.OWNER
-            existingUser?.role != null -> existingUser.role
-            else -> UserRole.PLAYER
-        }
+        // Role always comes strictly from the synced user record (Firestore `users/{uid}.role`)
+        val role = existingUser.role
 
         val isBanned = existingUser?.isBanned ?: false
         val banReason = existingUser?.banReason
@@ -1081,9 +1045,9 @@ class TournamentRepository(
                 accountName = existingUser?.name ?: "তানভির হাসান (ওনার)",
                 ign = existingUser?.ign ?: "TH★DEVIL⚡",
                 uid = existingUser?.uid ?: "11410365896",
-                phone = existingUser?.phone ?: masterOwnerPhone,
-                bkashNumber = existingUser?.bkashNumber ?: masterOwnerPhone,
-                email = resolvedEmail.ifBlank { "owner@trustedth.com" },
+                phone = existingUser.phone,
+                bkashNumber = existingUser.bkashNumber,
+                email = resolvedEmail,
                 avatarId = existingUser?.avatarId ?: current.avatarId,
                 customPfpUri = sanitizePfpForRole(UserRole.OWNER, existingUser?.customPfpUri ?: current.customPfpUri),
                 customBannerUri = sanitizeBannerForAccount(UserRole.OWNER, existingBadges, existingUser?.customBannerUri ?: current.customBannerUri),
@@ -1238,9 +1202,7 @@ class TournamentRepository(
         val session = activeResetSession ?: return false
         val trimmed = phoneOrUid.trim()
         val otpTrimmed = enteredOtp.trim()
-        val isValid = (session.phoneOrUid.equals(trimmed, ignoreCase = true) && session.otp == otpTrimmed) ||
-                otpTrimmed == "7788" || otpTrimmed == masterOwnerPin
-        return isValid
+        return session.phoneOrUid.equals(trimmed, ignoreCase = true) && session.otp == otpTrimmed
     }
 
     fun resetPassword(phoneOrUid: String, newPassword: String): Boolean {
@@ -1300,8 +1262,7 @@ class TournamentRepository(
             return false
         }
 
-        val isOwner = verifyOwnerKey(secretCode) || trimmedPhone == masterOwnerPhone
-        val role = if (isOwner) UserRole.OWNER else UserRole.PLAYER
+        val role = UserRole.PLAYER
         val formattedJoinDate = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH).format(java.util.Date())
 
         val newUser = AppUser(
@@ -1365,6 +1326,356 @@ class TournamentRepository(
         return true
     }
 
+    private val verifiedEmails = mutableSetOf<String>()
+
+    fun markEmailVerified(email: String) {
+        val clean = email.trim().lowercase()
+        if (clean.isNotBlank()) {
+            verifiedEmails.add(clean)
+        }
+    }
+
+    fun syncCloudAuthenticatedRole(cloudRole: UserRole, email: String, firebaseUid: String) {
+        val cleanEmail = email.trim()
+        val cleanUid = firebaseUid.trim()
+        if (cleanEmail.isBlank() && cleanUid.isBlank()) return
+        val current = _userProfile.value
+        val updatedRegistered = _registeredUsers.value.map { user ->
+            val idMatch = cleanUid.isNotBlank() && (user.id == cleanUid || user.uid == cleanUid)
+            val emailMatch = cleanEmail.isNotBlank() && user.email.isNotBlank() && user.email.equals(cleanEmail, ignoreCase = true)
+            if (idMatch || emailMatch) {
+                user.copy(
+                    role = cloudRole,
+                    email = if (user.email.isBlank() && cleanEmail.isNotBlank()) cleanEmail else user.email
+                )
+            } else {
+                user
+            }
+        }
+        _registeredUsers.value = updatedRegistered
+        val activeEmailMatch = cleanEmail.isNotBlank() && current.email.equals(cleanEmail, ignoreCase = true)
+        val activeUidMatch = cleanUid.isNotBlank() && (current.uid == cleanUid || current.uid == cleanUid.take(10))
+        if (current.isLoggedIn && (activeEmailMatch || activeUidMatch)) {
+            _userProfile.value = current.copy(
+                role = cloudRole,
+                email = if (current.email.isBlank() && cleanEmail.isNotBlank()) cleanEmail else current.email,
+                level = if (cloudRole == UserRole.OWNER) 0 else current.level,
+                rankBadge = when (cloudRole) {
+                    UserRole.OWNER -> "অফিসিয়াল ওনার"
+                    UserRole.ADMIN -> "অফিসিয়াল অ্যাডমিন"
+                    UserRole.PLAYER -> if (current.rankBadge == "অফিসিয়াল ওনার" || current.rankBadge == "অফিসিয়াল অ্যাডমিন") "নতুন যোদ্ধা" else current.rankBadge
+                }
+            )
+        }
+        saveState()
+    }
+
+    suspend fun signUpWithEmailVerification(
+        accountName: String,
+        email: String,
+        ign: String,
+        uid: String,
+        phone: String,
+        bkash: String = phone,
+        avatarId: String = "th_logo",
+        password: String
+    ): EmailAuthResult {
+        val trimmedName = accountName.trim()
+        val trimmedEmail = email.trim()
+        val trimmedIgn = ign.trim()
+        val trimmedUid = uid.trim().ifBlank { "1002345" }
+        val trimmedPhone = phone.trim()
+        val trimmedBkash = bkash.trim().ifBlank { trimmedPhone }
+        val trimmedPassword = password.trim()
+
+        if (trimmedName.isBlank() || trimmedEmail.isBlank() || !trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+            return EmailAuthResult(false, "সঠিক নাম ও ইমেইল অ্যাড্রেস লিখুন!")
+        }
+        if (trimmedIgn.isBlank() || trimmedPhone.isBlank()) {
+            return EmailAuthResult(false, "গেমের IGN ও মোবাইল নম্বর পূরণ করুন!")
+        }
+        if (trimmedPassword.length < 6) {
+            return EmailAuthResult(false, "কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন!")
+        }
+        val duplicateLocal = _registeredUsers.value.any {
+            (it.email.isNotBlank() && it.email.equals(trimmedEmail, ignoreCase = true)) ||
+                it.phone == trimmedPhone
+        }
+        if (duplicateLocal) {
+            return EmailAuthResult(false, "এই ইমেইল বা মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে!")
+        }
+
+        val sync = cloudSync
+        if (sync != null && sync.isFirebaseBackendReady()) {
+            val cloudOutcome = sync.signUpWithFirebaseEmailVerification(trimmedEmail, trimmedPassword)
+            if (!cloudOutcome.success) {
+                return EmailAuthResult(false, cloudOutcome.message)
+            }
+        }
+
+        // Normal user signup ALWAYS creates UserRole.PLAYER; never admin or owner
+        val formattedJoinDate = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH).format(java.util.Date())
+        val newUser = AppUser(
+            id = "u_${System.currentTimeMillis()}",
+            name = trimmedName,
+            phone = trimmedPhone,
+            email = trimmedEmail,
+            ign = trimmedIgn,
+            uid = trimmedUid,
+            bkashNumber = trimmedBkash,
+            password = trimmedPassword,
+            role = UserRole.PLAYER,
+            joinedDate = formattedJoinDate,
+            walletBalance = SIGNUP_WELCOME_BONUS,
+            matchesPlayed = 0,
+            avatarId = avatarId,
+            battleTagline = "TRUSTED TOURNAMENT এ নতুন যোদ্ধা!",
+            guildName = "TRUSTED TH"
+        )
+        _registeredUsers.value = listOf(newUser) + _registeredUsers.value
+        val welcomeBonusTx = WalletTransaction(
+            id = "tx_welcome_${System.currentTimeMillis()}",
+            title = "অ্যাকাউন্ট খোলার ফ্রি ওয়েলকাম বোনাস (৳$SIGNUP_WELCOME_BONUS)",
+            amount = SIGNUP_WELCOME_BONUS,
+            isCredit = true,
+            timeAgo = "এইমাত্র",
+            statusText = "নতুন অ্যাকাউন্ট খোলায় ফ্রি ৳৫ বোনাস যুক্ত হয়েছে",
+            paymentMethod = "Welcome Bonus",
+            category = TransactionCategory.ALL,
+            trxId = "WELCOME-5",
+            exactDateTime = "আজ এইমাত্র",
+            userPhone = trimmedPhone
+        )
+        _transactions.value = listOf(welcomeBonusTx) + _transactions.value
+        // Keep user logged out until they verify their email via Firebase link
+        _isLoggedIn.value = false
+        saveState()
+        return EmailAuthResult(
+            success = true,
+            message = "Verification email sent to $trimmedEmail. Please verify your email before login.",
+            needsVerification = true
+        )
+    }
+
+    suspend fun loginWithEmailVerification(
+        email: String,
+        password: String
+    ): EmailAuthResult {
+        checkAndClearExpiredBans()
+        val trimmedEmail = email.trim()
+        val trimmedPass = password.trim()
+        if (trimmedEmail.isBlank() || !trimmedEmail.contains("@") || trimmedPass.isBlank()) {
+            return EmailAuthResult(false, "সঠিক ইমেইল ও পাসওয়ার্ড লিখুন!")
+        }
+
+        val sync = cloudSync
+        if (sync != null && sync.isFirebaseBackendReady()) {
+            val outcome = sync.signInWithFirebaseEmailVerification(trimmedEmail, trimmedPass)
+            if (!outcome.success) {
+                return EmailAuthResult(
+                    success = false,
+                    message = outcome.message,
+                    needsVerification = outcome.needsVerification
+                )
+            }
+            // Role is strictly resolved from Firestore `users/{uid}.role`
+            val cloudRole = outcome.cloudRole
+            var existingUser = _registeredUsers.value.find {
+                (outcome.firebaseUid.isNotBlank() && it.id == outcome.firebaseUid) ||
+                    (it.email.isNotBlank() && it.email.equals(trimmedEmail, ignoreCase = true))
+            }
+            if (existingUser == null) {
+                val formattedJoinDate = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH).format(java.util.Date())
+                existingUser = AppUser(
+                    id = outcome.firebaseUid.ifBlank { "u_${System.currentTimeMillis()}" },
+                    name = trimmedEmail.substringBefore("@"),
+                    phone = "",
+                    email = trimmedEmail,
+                    ign = trimmedEmail.substringBefore("@"),
+                    uid = outcome.firebaseUid.take(10),
+                    bkashNumber = "",
+                    password = trimmedPass,
+                    role = cloudRole,
+                    joinedDate = formattedJoinDate,
+                    walletBalance = SIGNUP_WELCOME_BONUS,
+                    avatarId = "th_logo"
+                )
+                _registeredUsers.value = listOf(existingUser) + _registeredUsers.value
+            } else {
+                existingUser = existingUser.copy(
+                    role = cloudRole,
+                    email = trimmedEmail,
+                    password = trimmedPass
+                )
+                _registeredUsers.value = _registeredUsers.value.map {
+                    if (it.id == existingUser.id) existingUser else it
+                }
+            }
+
+            _isLoggedIn.value = true
+            _walletBalance.value = existingUser.walletBalance
+            _userProfile.value = UserProfile(
+                isLoggedIn = true,
+                accountName = existingUser.name,
+                ign = existingUser.ign,
+                uid = existingUser.uid,
+                phone = existingUser.phone,
+                bkashNumber = existingUser.bkashNumber,
+                email = trimmedEmail,
+                avatarId = existingUser.avatarId,
+                customPfpUri = sanitizePfpForRole(cloudRole, existingUser.customPfpUri),
+                customBannerUri = sanitizeBannerForAccount(cloudRole, existingUser.effectiveBadges, existingUser.customBannerUri),
+                bannerColorId = sanitizeBannerColorForAccount(cloudRole, existingUser.effectiveBadges, existingUser.bannerColorId),
+                level = if (cloudRole == UserRole.OWNER) 0 else existingUser.level,
+                rankBadge = when (cloudRole) {
+                    UserRole.OWNER -> "অফিসিয়াল ওনার"
+                    UserRole.ADMIN -> "অফিসিয়াল অ্যাডমিন"
+                    UserRole.PLAYER -> "নতুন যোদ্ধা"
+                },
+                matchesPlayed = existingUser.matchesPlayed,
+                totalWins = existingUser.totalWins,
+                totalKills = existingUser.totalKills,
+                totalEarnings = existingUser.totalEarnings,
+                totalSpent = existingUser.totalSpent,
+                joinedDate = existingUser.joinedDate,
+                role = cloudRole,
+                isBanned = existingUser.isBanned,
+                banReason = existingUser.banReason,
+                customBadges = existingUser.customBadges,
+                revokedBadges = existingUser.revokedBadges,
+                warningsCount = existingUser.warningsCount,
+                banExpiresAtMillis = existingUser.banExpiresAtMillis,
+                moderationWarningsCount = existingUser.moderationWarningsCount,
+                timeoutUntilMillis = existingUser.timeoutUntilMillis,
+                timeoutReason = existingUser.timeoutReason,
+                timeoutBy = existingUser.timeoutBy,
+                isChatMuted = existingUser.isChatMuted,
+                chatMuteUntilMillis = existingUser.chatMuteUntilMillis,
+                chatMuteReason = existingUser.chatMuteReason,
+                isMatchBanned = existingUser.isMatchBanned,
+                matchBanReason = existingUser.matchBanReason,
+                isWalletFrozen = existingUser.isWalletFrozen,
+                walletFreezeReason = existingUser.walletFreezeReason
+            )
+            saveState()
+            sync.startRealtimeSync(
+                CloudTournamentSync.SyncCallbacks(
+                    onAppConfigSynced = { cfg, rules ->
+                        val normalizedCfg = normalizeLegacyAppConfig(cfg)
+                        _appCustomization.value = normalizedCfg
+                        officialWhatsAppGroupUrl.value = normalizedCfg.officialWhatsAppUrl
+                        if (!rules.isNullOrEmpty()) _strictRules.value = rules
+                        saveState()
+                    },
+                    onMatchesSynced = { cloudMatches ->
+                        if (cloudMatches.isNotEmpty()) {
+                            _matches.value = cloudMatches.sortedBy { it.effectiveStartMillis() }
+                            saveState()
+                        }
+                    },
+                    onBookingsSynced = { cloudBookings ->
+                        _myBookings.value = cloudBookings.sortedBy { it.slotNumber }
+                        saveState()
+                    },
+                    onPlayersSynced = { cloudPlayers ->
+                        if (cloudPlayers.isNotEmpty()) {
+                            _registeredUsers.value = cloudPlayers
+                            rebuildLiveLeaderboard()
+                            saveState()
+                        }
+                    },
+                    onPrivateAccountsSynced = { accountMap ->
+                        privateCloudAccounts.putAll(accountMap)
+                    },
+                    onDepositsSynced = { cloudDeposits ->
+                        if (cloudDeposits.isNotEmpty()) {
+                            _depositRequests.value = cloudDeposits
+                            saveState()
+                        }
+                    },
+                    onWithdrawsSynced = { cloudWithdraws ->
+                        if (cloudWithdraws.isNotEmpty()) {
+                            _withdrawRequests.value = cloudWithdraws
+                            saveState()
+                        }
+                    },
+                    onAppealsSynced = { cloudAppeals ->
+                        if (cloudAppeals.isNotEmpty()) {
+                            _badgeAppeals.value = cloudAppeals
+                            saveState()
+                        }
+                    },
+                    onGlobalChatSynced = { cloudChat ->
+                        if (cloudChat.isNotEmpty()) {
+                            _globalChatMessages.value = cloudChat
+                            saveState()
+                        }
+                    },
+                    onModerationLogsSynced = { cloudLogs ->
+                        if (cloudLogs.isNotEmpty()) {
+                            _moderationLogs.value = cloudLogs
+                            saveState()
+                        }
+                    },
+                    onPromoCodesSynced = { _promoCodes.value = it; saveState() },
+                    onBonusDropsSynced = { _bonusDrops.value = it; saveState() },
+                    onCommunityPollsSynced = { _communityPolls.value = it; saveState() },
+                    onGiveawaysSynced = { _giveaways.value = it; saveState() },
+                    onCloudRoleResolved = { r, em, fUid -> syncCloudAuthenticatedRole(r, em, fUid) },
+                    onSyncStateChanged = { connected, em, st ->
+                        _isCloudConnected.value = connected
+                        _cloudUserEmail.value = em
+                        _cloudStatusMessage.value = st
+                    }
+                )
+            )
+            sync.pushUser(existingUser)
+            return EmailAuthResult(true, "সফলভাবে লগইন হয়েছে!")
+        }
+
+        // Offline / unit-test fallback: still enforces email verification
+        val existingUser = _registeredUsers.value.find {
+            it.email.isNotBlank() && it.email.equals(trimmedEmail, ignoreCase = true)
+        } ?: return EmailAuthResult(false, "ভুল ইমেইল অথবা পাসওয়ার্ড!")
+        if (existingUser.password != trimmedPass) {
+            return EmailAuthResult(false, "ভুল ইমেইল অথবা পাসওয়ার্ড!")
+        }
+        if (trimmedEmail.lowercase() !in verifiedEmails) {
+            return EmailAuthResult(
+                success = false,
+                message = "Please verify your email",
+                needsVerification = true
+            )
+        }
+        val ok = login(trimmedEmail, trimmedPass)
+        return if (ok) {
+            EmailAuthResult(true, "সফলভাবে লগইন হয়েছে!")
+        } else {
+            EmailAuthResult(false, "ভুল ইমেইল অথবা পাসওয়ার্ড!")
+        }
+    }
+
+    suspend fun resendVerificationEmail(
+        email: String,
+        password: String
+    ): EmailAuthResult {
+        val cleanEmail = email.trim()
+        val cleanPass = password.trim()
+        if (cleanEmail.isBlank() || cleanPass.isBlank()) {
+            return EmailAuthResult(false, "ভেরিফিকেশন ইমেইল পাঠাতে ইমেইল ও পাসওয়ার্ড লিখুন")
+        }
+        val sync = cloudSync
+        if (sync != null && sync.isFirebaseBackendReady()) {
+            val outcome = sync.resendFirebaseVerificationEmail(cleanEmail, cleanPass)
+            return EmailAuthResult(outcome.success, outcome.message, outcome.needsVerification)
+        }
+        return EmailAuthResult(
+            success = true,
+            message = "Verification email resent to $cleanEmail. Please verify your email.",
+            needsVerification = true
+        )
+    }
+
     fun logout() {
         syncActiveUserToRegistry()
         _isLoggedIn.value = false
@@ -1410,9 +1721,6 @@ class TournamentRepository(
         )
         _spinHistory.value = listOf(record) + _spinHistory.value
 
-        // Complete daily mission m1
-        markMissionCompleted("SPIN")
-
         val tx = WalletTransaction(
             id = UUID.randomUUID().toString(),
             title = if (won == 30) "👑 মেগা লাকি স্পিন জ্যাকপট (৳৩০)" else "সাপ্তাহিক লাকি স্পিন বোনাস (৳$won)",
@@ -1433,40 +1741,6 @@ class TournamentRepository(
 
     fun resetWeeklySpinForTesting() {
         _hasSpunThisWeek.value = false
-    }
-
-    fun markMissionCompleted(actionType: String) {
-        _dailyMissions.value = _dailyMissions.value.map { mission ->
-            if (mission.actionType == actionType && !mission.isCompleted) {
-                mission.copy(isCompleted = true)
-            } else mission
-        }
-        saveState()
-    }
-
-    fun claimMissionReward(missionId: String): Boolean {
-        val mission = _dailyMissions.value.find { it.id == missionId } ?: return false
-        if (!mission.isCompleted || mission.isClaimed) return false
-
-        _walletBalance.value += mission.rewardAmount
-        _dailyMissions.value = _dailyMissions.value.map {
-            if (it.id == missionId) it.copy(isClaimed = true) else it
-        }
-
-        val tx = WalletTransaction(
-            id = UUID.randomUUID().toString(),
-            title = "🎯 দৈনিক মিশন রিওয়ার্ড (+৳${mission.rewardAmount})",
-            amount = mission.rewardAmount,
-            isCredit = true,
-            timeAgo = "এইমাত্র",
-            statusText = "মিশন: ${mission.title} সম্পন্ন করায় নগদ বোনাস জমা",
-            paymentMethod = "Daily Mission",
-            category = TransactionCategory.PRIZE_WIN,
-            userPhone = _userProfile.value.phone
-        )
-        _transactions.value = listOf(tx) + _transactions.value
-        syncActiveUserToRegistry()
-        return true
     }
 
     fun claimDailyStreakReward(): Int {
@@ -1500,8 +1774,6 @@ class TournamentRepository(
             currentStreakDay = day
         )
 
-        // Complete streak mission
-        markMissionCompleted("STREAK")
         syncActiveUserToRegistry()
 
         return rewardAmount
@@ -1547,7 +1819,7 @@ class TournamentRepository(
             id = UUID.randomUUID().toString(),
             senderName = "TH অ্যাডমিন (অফিসিয়াল)",
             isFromAdmin = true,
-            text = "ধন্যবাদ মেসেজের জন্য! আমাদের বিকাশ ও হেল্পলাইন: $officialBkashNumber। আপনার বিষয়টির দ্রুত সমাধান করা হচ্ছে।",
+            text = "ধন্যবাদ মেসেজের জন্য! আমাদের অফিসিয়াল সাপোর্ট টিম আপনার বিষয়টির দ্রুত সমাধান করছে।",
             timeAgo = "এইমাত্র"
         )
         _chatMessages.value = _chatMessages.value + adminReply
@@ -1557,7 +1829,8 @@ class TournamentRepository(
     fun sendGlobalChatMessage(
         text: String,
         replyToId: String? = null,
-        pinAnnouncement: Boolean = false
+        pinAnnouncement: Boolean = false,
+        channelId: String = ChatChannel.GLOBAL.id
     ): Pair<Boolean, String> {
         checkAndClearExpiredModeration()
         val current = _userProfile.value
@@ -1565,21 +1838,23 @@ class TournamentRepository(
             return Pair(false, "গ্লোবাল চ্যাটে মেসেজ পাঠাতে আগে লগইন করুন।")
         }
         if (current.isBanned) {
-            return Pair(false, "🚫 আপনার একাউন্ট সাসপেন্ড রয়েছে, তাই চ্যাট করতে পারবেন না।")
+            return Pair(false, "আপনার একাউন্ট সাসপেন্ড রয়েছে, তাই চ্যাট করতে পারবেন না।")
         }
         if (isActiveUserTimedOut()) {
-            return Pair(false, "⏳ আপনি বর্তমানে অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়া পর্যন্ত চ্যাট করা যাবে না।")
+            return Pair(false, "আপনি বর্তমানে অ্যাপ টাইমআউটে আছেন! টাইমার শেষ হওয়া পর্যন্ত চ্যাট করা যাবে না।")
         }
         if (current.isChatMuted) {
-            return Pair(false, "🔇 আপনার গ্লোবাল চ্যাট মিউট করা আছে! (${current.chatMuteReason ?: "মডারেশন শাস্তি"})")
+            return Pair(false, "আপনার গ্লোবাল চ্যাট মিউট করা আছে! (${current.chatMuteReason ?: "মডারেশন শাস্তি"})")
         }
         val cleanText = text.trim()
         if (cleanText.isBlank()) {
             return Pair(false, "অনুগ্রহ করে কিছু লিখুন।")
         }
 
-        val isStaff = current.role == UserRole.OWNER || current.role == UserRole.ADMIN
-        val shouldPin = pinAnnouncement && isStaff
+        val resolvedChannelId = ChatChannel.entries.firstOrNull {
+            it.id.equals(channelId, ignoreCase = true)
+        }?.id ?: ChatChannel.GLOBAL.id
+
         val replyTarget = if (!replyToId.isNullOrBlank()) {
             _globalChatMessages.value.firstOrNull { it.id == replyToId }
         } else null
@@ -1610,42 +1885,17 @@ class TournamentRepository(
             text = cleanText,
             timestampMillis = System.currentTimeMillis(),
             timeLabel = "এইমাত্র",
-            isPinnedAnnouncement = shouldPin,
+            isPinnedAnnouncement = false,
             replyToId = replyTarget?.id,
             replyToIgn = replyTarget?.senderIgn,
-            replyToText = replyTarget?.text?.take(70)
+            replyToText = replyTarget?.text?.take(70),
+            channelId = resolvedChannelId
         )
 
-        val baseList = if (shouldPin) {
-            _globalChatMessages.value.map { it.copy(isPinnedAnnouncement = false) }
-        } else {
-            _globalChatMessages.value
-        }
-        _globalChatMessages.value = baseList + msg
+        _globalChatMessages.value = _globalChatMessages.value + msg
         saveState()
         cloudSync?.pushGlobalChatMessage(msg)
-        return Pair(true, if (shouldPin) "📌 গ্লোবাল চ্যাটে পিনড ঘোষণা পাঠানো হয়েছে!" else "মেসেজ পাঠানো হয়েছে!")
-    }
-
-    fun togglePinGlobalChatMessage(messageId: String): Pair<Boolean, String> {
-        val role = _userProfile.value.role
-        if (role != UserRole.OWNER && role != UserRole.ADMIN) {
-            return Pair(false, "শুধুমাত্র ওনার বা অ্যাডমিন মেসেজ পিন করতে পারবেন।")
-        }
-        val target = _globalChatMessages.value.firstOrNull { it.id == messageId }
-            ?: return Pair(false, "মেসেজ খুঁজে পাওয়া যায়নি।")
-        val nextPinned = !target.isPinnedAnnouncement
-        _globalChatMessages.value = _globalChatMessages.value.map { msg ->
-            when {
-                msg.id == messageId -> msg.copy(isPinnedAnnouncement = nextPinned).also { cloudSync?.pushGlobalChatMessage(it) }
-                nextPinned -> msg.copy(isPinnedAnnouncement = false).also {
-                    if (msg.isPinnedAnnouncement) cloudSync?.pushGlobalChatMessage(it)
-                }
-                else -> msg
-            }
-        }
-        saveState()
-        return Pair(true, if (nextPinned) "📌 মেসেজটি সবার উপরে পিন করা হয়েছে!" else "পিন সরানো হয়েছে।")
+        return Pair(true, "মেসেজ পাঠানো হয়েছে!")
     }
 
     fun deleteGlobalChatMessage(messageId: String): Pair<Boolean, String> {
@@ -1661,17 +1911,39 @@ class TournamentRepository(
         _globalChatMessages.value = _globalChatMessages.value.filterNot { it.id == messageId }
         saveState()
         cloudSync?.deleteGlobalChatCloud(messageId)
-        return Pair(true, "🗑️ মেসেজ ডিলিট করা হয়েছে।")
+        return Pair(true, "মেসেজ ডিলিট করা হয়েছে।")
     }
 
-    fun reactToGlobalChatMessage(messageId: String, emoji: String): Boolean {
-        if (!_userProfile.value.isLoggedIn) return false
+    fun reactToGlobalChatMessage(
+        messageId: String,
+        reactKey: String,
+        actorKeyOverride: String? = null
+    ): Boolean {
+        if (!_userProfile.value.isLoggedIn && actorKeyOverride == null) return false
+        val cleanReact = reactKey.trim()
+        if (cleanReact.isBlank()) return false
+        val actorKey = (actorKeyOverride ?: currentActorKey()).trim()
+            .ifBlank { _userProfile.value.email.trim().ifBlank { "local_viewer" } }
+
         var updatedMsg: GlobalChatMessage? = null
         _globalChatMessages.value = _globalChatMessages.value.map { msg ->
             if (msg.id == messageId) {
-                val nextMap = msg.reactions.toMutableMap()
-                nextMap[emoji] = (nextMap[emoji] ?: 0) + 1
-                msg.copy(reactions = nextMap).also { updatedMsg = it }
+                val nextReactions = msg.reactions.toMutableMap()
+                val nextReactedBy = msg.reactedByUsers.toMutableMap()
+                val prevReact = nextReactedBy[actorKey]
+                if (prevReact == cleanReact) {
+                    nextReactedBy.remove(actorKey)
+                    val dec = (nextReactions[cleanReact] ?: 1) - 1
+                    if (dec > 0) nextReactions[cleanReact] = dec else nextReactions.remove(cleanReact)
+                } else {
+                    if (!prevReact.isNullOrBlank()) {
+                        val dec = (nextReactions[prevReact] ?: 1) - 1
+                        if (dec > 0) nextReactions[prevReact] = dec else nextReactions.remove(prevReact)
+                    }
+                    nextReactedBy[actorKey] = cleanReact
+                    nextReactions[cleanReact] = (nextReactions[cleanReact] ?: 0) + 1
+                }
+                msg.copy(reactions = nextReactions, reactedByUsers = nextReactedBy).also { updatedMsg = it }
             } else {
                 msg
             }
@@ -1776,9 +2048,6 @@ class TournamentRepository(
             if (it.id == liveMatch.id) it.copy(bookedSlots = updatedBookedCount) else it
         }
 
-        // Complete MATCH mission
-        markMissionCompleted("MATCH")
-
         // Increment career matchesPlayed & totalSpent for active player
         _userProfile.value = _userProfile.value.copy(
             matchesPlayed = _userProfile.value.matchesPlayed + 1,
@@ -1865,8 +2134,6 @@ class TournamentRepository(
         _matches.value = _matches.value.map {
             if (it.id == liveMatch.id) it.copy(bookedSlots = updatedBookedCount) else it
         }
-
-        markMissionCompleted("MATCH")
 
         _userProfile.value = _userProfile.value.copy(
             matchesPlayed = _userProfile.value.matchesPlayed + 1,
@@ -2136,10 +2403,10 @@ class TournamentRepository(
             amount = amount,
             isCredit = true,
             timeAgo = "এইমাত্র",
-            statusText = "⏳ অপেক্ষমাণ (ওনার/অ্যাডমিন যাচাই করছেন)",
-            paymentMethod = "${paymentMethod.tag} ($cleanPhone | TrxID: $cleanTrx)",
+            statusText = "অপেক্ষমাণ (ওনার/অ্যাডমিন যাচাই করছেন)",
+            paymentMethod = "${paymentMethod.tag} (নম্বর গোপন | TrxID: $cleanTrx)",
             trxId = cleanTrx,
-            senderBkash = cleanPhone,
+            senderBkash = null,
             category = TransactionCategory.DEPOSIT,
             userPhone = request.userPhone,
             requestId = reqId
@@ -2495,6 +2762,7 @@ class TournamentRepository(
             System.currentTimeMillis() + safeMinutes * 60_000L
         }
         val resolvedDateTime = matchDateTime.trim().ifBlank { formatMatchClockTimeLabel(targetMillis) }
+        val effectivePerKill = if (category == GameCategory.LONE_WOLF) 0 else perKill.coerceAtLeast(0)
         val newMatch = TournamentMatch(
             id = "m_${System.currentTimeMillis()}",
             title = title,
@@ -2505,7 +2773,7 @@ class TournamentRepository(
             startsInMinutes = safeMinutes,
             entryFee = entryFee,
             totalPrize = totalPrize,
-            perKillPrize = perKill,
+            perKillPrize = effectivePerKill,
             booyahPrize = booyahPrize,
             totalSlots = totalSlots,
             bookedSlots = 0,
@@ -2518,29 +2786,6 @@ class TournamentRepository(
     }
 
     // ==================== OWNER EXCLUSIVE METHODS ====================
-
-    fun verifyOwnerKey(key: String): Boolean {
-        val trimmed = key.trim()
-        return trimmed.equals(masterOwnerPasskey, ignoreCase = true) ||
-                trimmed == masterOwnerPin ||
-                trimmed == masterOwnerPhone
-    }
-
-    fun claimOwnerRole(key: String): Boolean {
-        if (verifyOwnerKey(key)) {
-            val current = _userProfile.value
-            val newName = if (current.accountName.contains("ওনার")) current.accountName else "${current.accountName} (ওনার)"
-            _userProfile.value = current.copy(
-                role = UserRole.OWNER,
-                accountName = newName,
-                isBanned = false
-            )
-            syncActiveUserToRegistry()
-            pushActiveUserToCloud()
-            return true
-        }
-        return false
-    }
 
     private fun currentActorLabel(role: UserRole = _userProfile.value.role): String {
         return when (role) {
@@ -3211,7 +3456,6 @@ class TournamentRepository(
 
     fun promoteToAdmin(
         targetUserOrPhone: String,
-        adminPasscode: String,
         customName: String? = null,
         ign: String? = null,
         uid: String? = null
@@ -3219,13 +3463,11 @@ class TournamentRepository(
         val list = _registeredUsers.value.toMutableList()
         val trimmed = targetUserOrPhone.trim()
         val index = list.indexOfFirst { it.id == trimmed || it.phone == trimmed || it.uid == trimmed }
-        val code = adminPasscode.ifBlank { "TH-ADMIN-2026" }
 
         if (index != -1) {
             val existing = list[index]
             val promotedUser = existing.copy(
                 role = UserRole.ADMIN,
-                adminPasscode = code,
                 appointedDate = "এইমাত্র"
             )
             list[index] = promotedUser
@@ -3252,7 +3494,6 @@ class TournamentRepository(
                 uid = uid ?: "9876543210",
                 bkashNumber = trimmed,
                 role = UserRole.ADMIN,
-                adminPasscode = code,
                 appointedDate = "এইমাত্র"
             )
             _registeredUsers.value = listOf(newAdmin) + list
@@ -3273,7 +3514,6 @@ class TournamentRepository(
             val demotedBadges = user.effectiveBadges - BadgeType.MODERATOR
             val demotedUser = user.copy(
                 role = UserRole.PLAYER,
-                adminPasscode = null,
                 customBannerUri = sanitizeBannerForAccount(UserRole.PLAYER, demotedBadges, user.customBannerUri),
                 bannerColorId = sanitizeBannerColorForAccount(UserRole.PLAYER, demotedBadges, user.bannerColorId),
                 customPfpUri = sanitizePfpForRole(UserRole.PLAYER, user.customPfpUri)
@@ -3293,15 +3533,6 @@ class TournamentRepository(
             cloudSync?.pushUser(demotedUser)
             cloudSync?.syncAdminGrant(demotedUser.id, grantAdmin = false, ign = demotedUser.ign)
             rebuildLiveLeaderboard()
-            return true
-        }
-        return false
-    }
-
-    fun updateMasterOwnerPin(newPin: String): Boolean {
-        if (newPin.trim().length >= 4) {
-            masterOwnerPin = newPin.trim()
-            saveState()
             return true
         }
         return false
@@ -3757,7 +3988,8 @@ class TournamentRepository(
             return false to "❌ বিজয়ী প্লেয়ারের ফোন, UID বা IGN খুঁজে পাওয়া যায়নি!"
         }
         val safeKills = winnerKills.coerceIn(0, 99)
-        val calculatedPrize = (customPrizeAmount ?: (match.booyahPrize + safeKills * match.perKillPrize)).coerceAtLeast(0)
+        val effectivePerKill = if (match.category == GameCategory.LONE_WOLF) 0 else match.perKillPrize
+        val calculatedPrize = (customPrizeAmount ?: (match.booyahPrize + safeKills * effectivePerKill)).coerceAtLeast(0)
 
         val list = _registeredUsers.value.toMutableList()
         val winner = list[idx]
@@ -3980,11 +4212,13 @@ class TournamentRepository(
     }
 
     fun updateExistingMatch(updatedMatch: TournamentMatch): Boolean {
-        val normalizedMatch = if (updatedMatch.scheduledStartAtMillis <= 0L) {
-            val target = System.currentTimeMillis() + updatedMatch.startsInMinutes.coerceAtLeast(0) * 60_000L
-            updatedMatch.copy(scheduledStartAtMillis = target)
+        val effectivePerKill = if (updatedMatch.category == GameCategory.LONE_WOLF) 0 else updatedMatch.perKillPrize.coerceAtLeast(0)
+        val sanitizedMatch = updatedMatch.copy(perKillPrize = effectivePerKill)
+        val normalizedMatch = if (sanitizedMatch.scheduledStartAtMillis <= 0L) {
+            val target = System.currentTimeMillis() + sanitizedMatch.startsInMinutes.coerceAtLeast(0) * 60_000L
+            sanitizedMatch.copy(scheduledStartAtMillis = target)
         } else {
-            updatedMatch
+            sanitizedMatch
         }
         var found = false
         _matches.value = _matches.value.map { match ->
@@ -4033,10 +4267,12 @@ class TournamentRepository(
             "${preset.category.iconEmoji} ${preset.category.banglaTitle} (${preset.totalSlots} স্লট)"
         }
         val cleanTitle = preset.matchTitle.trim().ifBlank { cleanName }
+        val effectivePerKill = if (preset.category == GameCategory.LONE_WOLF) 0 else preset.perKillPrize.coerceAtLeast(0)
         val normalized = preset.copy(
             id = preset.id.ifBlank { "preset_${System.currentTimeMillis()}" },
             presetName = cleanName,
             matchTitle = cleanTitle,
+            perKillPrize = effectivePerKill,
             defaultStartsInMinutes = preset.defaultStartsInMinutes.coerceIn(1, 100000),
             totalSlots = preset.totalSlots.coerceIn(2, 100)
         )
@@ -4282,8 +4518,6 @@ class TournamentRepository(
             kudosCount = 12
         )
         persistenceStore?.clearAll()
-        masterOwnerPasskey = "TH-OWNER-7788"
-        masterOwnerPin = "7788"
         _appCustomization.value = AppCustomization()
         officialWhatsAppGroupUrl.value = com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL
         _strictRules.value = defaultRules
@@ -4295,9 +4529,6 @@ class TournamentRepository(
         )
         _spinHistory.value = emptyList()
         _hasSpunThisWeek.value = false
-        _dailyMissions.value = _dailyMissions.value.map {
-            it.copy(isCompleted = false, isClaimed = false)
-        }
         _userProfile.value = UserProfile(
             isLoggedIn = false,
             role = UserRole.PLAYER
@@ -4755,7 +4986,7 @@ class TournamentRepository(
         return sendGlobalChatMessage(
             text = msgText,
             replyToId = null,
-            pinAnnouncement = true
+            pinAnnouncement = false
         )
     }
 
@@ -4846,9 +5077,9 @@ class TournamentRepository(
 
         if (announceInChat) {
             sendGlobalChatMessage(
-                text = "🎉 [লাইভ মেগা গিভওয়ে] ${giveaway.title}\n${giveaway.prizeType.emoji} পুরস্কার: ${giveaway.prizeLabel} (${giveaway.winnersCount} জন বিজয়ী)\n🎟️ মোট টিকিট: ${giveaway.maxEntries} টি — ম্যাচ স্ক্রিন থেকে এখনই ফ্রি জয়েন করুন!",
+                text = "🎉 [লাইভ মেগা গিভওয়ে] ${giveaway.title}\n${giveaway.prizeType.emoji} পুরস্কার: ${giveaway.prizeLabel} (${giveaway.winnersCount} জন বিজয়ী)\n🎟️ মোট টিকিট: ${giveaway.maxEntries} টি — ফান/গিভওয়ে ট্যাব থেকে এখনই ফ্রি জয়েন করুন!",
                 replyToId = null,
-                pinAnnouncement = true
+                pinAnnouncement = false
             )
         }
         return true to "🎉 মেগা গিভওয়ে সফলভাবে সবার কাছে লাইভ করা হয়েছে!"
@@ -4977,7 +5208,7 @@ class TournamentRepository(
         sendGlobalChatMessage(
             text = "🎊 [গিভওয়ে রেজাল্ট] \"${giveaway.title}\" এর লাইভ লটারি ড্র সম্পন্ন!\nপুরস্কার (${giveaway.prizeLabel}) জিতেছেন:\n$winnerNames\nঅভিনন্দন বিজয়ীদের! 🔥",
             replyToId = null,
-            pinAnnouncement = true
+            pinAnnouncement = false
         )
 
         return true to "🎉 লাইভ ড্র সম্পন্ন! বিজয়ী: ${winners.joinToString(", ") { it.ign }}"

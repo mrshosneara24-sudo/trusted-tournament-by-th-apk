@@ -339,7 +339,8 @@ fun SlotBookingDialog(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Copyable bKash Number Bar
+                            // Copyable Gateway Reference Bar (Personal number kept private)
+                            val gatewayRef = "TH-BKASH-PAY"
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -350,7 +351,7 @@ fun SlotBookingDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = officialBkashNumber,
+                                    text = com.example.model.maskPhoneForPrivacy(officialBkashNumber),
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 1.sp
@@ -360,8 +361,8 @@ fun SlotBookingDialog(
 
                                 Button(
                                     onClick = {
-                                        clipboardManager.setText(AnnotatedString(officialBkashNumber))
-                                        Toast.makeText(context, "বিকাশ নম্বর ($officialBkashNumber) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                        clipboardManager.setText(AnnotatedString(gatewayRef))
+                                        Toast.makeText(context, "গেটওয়ে রেফারেন্স ($gatewayRef) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
                                     shape = RoundedCornerShape(8.dp),
@@ -381,7 +382,7 @@ fun SlotBookingDialog(
 
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "উপরের নম্বরে বিকাশ থেকে ৳${match.entryFee} সেন্ড মানি করুন। অ্যাপ স্বয়ংক্রিয়ভাবে আপনার পেমেন্ট সনাক্ত করে আপনার স্লট বরাদ্দ করবে।",
+                                text = "নিরাপত্তার স্বার্থে ব্যক্তিগত নম্বর গোপন রাখা হয়েছে। ওয়ালেট বা TrxID সাবমিট করলে শুধু ওনার/অ্যাডমিন প্যানেলে যাচাই হবে।",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

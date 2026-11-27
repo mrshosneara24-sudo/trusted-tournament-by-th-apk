@@ -460,7 +460,7 @@ fun RulesAndSupportScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = "আমাদের অফিসিয়াল বিকাশ নম্বর:",
+                        text = "আমাদের সুরক্ষিত পেমেন্ট গেটওয়ে ও হেল্পলাইন:",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -480,7 +480,7 @@ fun RulesAndSupportScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = officialBkashNumber,
+                                text = com.example.model.maskPhoneForPrivacy(officialBkashNumber),
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = FlameYellow
@@ -488,15 +488,12 @@ fun RulesAndSupportScreen(
                             )
 
                             Button(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(officialBkashNumber))
-                                    Toast.makeText(context, "নম্বর ($officialBkashNumber) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
-                                },
+                                onClick = onOpenSupportChat,
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = BkashPink),
                                 modifier = Modifier.height(48.dp)
                             ) {
-                                Text("কপি", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("লাইভ সাপোর্ট", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

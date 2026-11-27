@@ -2,8 +2,12 @@ package com.example
 
 import com.example.data.TournamentRepository
 import com.example.model.BadgeType
+import com.example.model.ChatChannel
 import com.example.model.UserProfile
 import com.example.model.UserRole
+import com.example.model.WalletPaymentMethod
+import com.example.model.maskPhoneForPrivacy
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -61,18 +65,38 @@ class TournamentBusinessLogicTest {
     }
 
     @Test
-    fun testOwnerAuthenticationWithMasterKeyAndPin() {
-        // Test with invalid key
-        assertFalse("Invalid key should be rejected", repository.verifyOwnerKey("WRONG_KEY"))
+    fun testFirestoreRoleResolutionAndNoHardcodedOwnerAdminCodes() {
+        // Hardcoded legacy passcodes 7788 / 77110 must NEVER log in or elevate privileges
+        assertFalse("Code 7788 must be rejected for owner phone", repository.login("01861583924", "7788"))
+        assertFalse("Code 7788 must be rejected for owner email", repository.login("owner@trustedth.com", "7788"))
+        assertFalse("Code 77110 must be rejected", repository.login("owner@trustedth.com", "77110"))
+        assertFalse("User must remain logged out", repository.isLoggedIn.value)
 
-        // Test with official master key
-        assertTrue("Master key TH-OWNER-7788 should be verified", repository.verifyOwnerKey("TH-OWNER-7788"))
-        assertTrue("Master PIN 7788 should be verified", repository.verifyOwnerKey("7788"))
+        // Role resolver strictly parses Firestore users/{uid}.role values
+        assertEquals(UserRole.OWNER, repository.resolveRoleFromFirestoreValue("owner"))
+        assertEquals(UserRole.OWNER, repository.resolveRoleFromFirestoreValue(" OWNER "))
+        assertEquals(UserRole.ADMIN, repository.resolveRoleFromFirestoreValue("admin"))
+        assertEquals(UserRole.PLAYER, repository.resolveRoleFromFirestoreValue("player"))
+        assertEquals(UserRole.PLAYER, repository.resolveRoleFromFirestoreValue(""))
+        assertEquals(UserRole.PLAYER, repository.resolveRoleFromFirestoreValue(null))
 
-        // Claim role
-        val claimed = repository.claimOwnerRole("TH-OWNER-7788")
-        assertTrue("Claim owner role should succeed", claimed)
-        assertEquals("User role should be OWNER", UserRole.OWNER, repository.userProfile.value.role)
+        // Syncing role from Firestore updates the active session role
+        assertTrue(
+            repository.register(
+                accountName = "Cloud Admin",
+                ign = "TH_CloudAdmin",
+                uid = "firebase_uid_admin_1",
+                phone = "01712349999",
+                bkash = "01712349999",
+                password = "pass1234",
+                email = "cloud.admin@gmail.com"
+            )
+        )
+        assertEquals(UserRole.PLAYER, repository.userProfile.value.role)
+        repository.syncCloudAuthenticatedRole(UserRole.ADMIN, "cloud.admin@gmail.com", "firebase_uid_admin_1")
+        assertEquals(UserRole.ADMIN, repository.userProfile.value.role)
+        repository.syncCloudAuthenticatedRole(UserRole.OWNER, "cloud.admin@gmail.com", "firebase_uid_admin_1")
+        assertEquals(UserRole.OWNER, repository.userProfile.value.role)
     }
 
     @Test
@@ -81,7 +105,6 @@ class TournamentBusinessLogicTest {
         // Promote/add player
         repository.promoteToAdmin(
             targetUserOrPhone = testUserPhone,
-            adminPasscode = "1234",
             customName = "Fraud Suspect",
             ign = "HackerBD",
             uid = "99887766"
@@ -105,7 +128,6 @@ class TournamentBusinessLogicTest {
         val newAdminPhone = "01755443322"
         repository.promoteToAdmin(
             targetUserOrPhone = newAdminPhone,
-            adminPasscode = "ADMIN-PASS-99",
             customName = "Shakil Ahmed",
             ign = "TH_Mod_Shakil",
             uid = "33445566"
@@ -114,7 +136,6 @@ class TournamentBusinessLogicTest {
         val admin = repository.registeredUsers.value.find { it.phone == newAdminPhone }
         assertNotNull("Admin should exist", admin)
         assertEquals("Role should be ADMIN", UserRole.ADMIN, admin!!.role)
-        assertEquals("Passcode should match", "ADMIN-PASS-99", admin.adminPasscode)
 
         // Demote
         repository.demoteAdmin(newAdminPhone)
@@ -233,29 +254,45 @@ class TournamentBusinessLogicTest {
     }
 
     @Test
-    fun testDailyGamerMissionsClaiming() {
-        val initialBal = repository.walletBalance.value
-        val mission = repository.dailyMissions.value.first()
-        val missionId = mission.id
+    fun testLoneWolfZeroPerKillAndHigherSlotPrizes() {
+        val initialMatches = repository.matches.value
+        assertTrue("Initial matches must not be empty", initialMatches.isNotEmpty())
+        assertTrue(
+            "All Lone Wolf matches must have perKillPrize == 0 and higher booyahPrize (>= 30)",
+            initialMatches.filter { it.category == com.example.model.GameCategory.LONE_WOLF }
+                .all { it.perKillPrize == 0 && it.booyahPrize >= 30 && it.totalPrize >= 30 }
+        )
 
-        // Cannot claim incomplete mission
-        val prematureClaim = repository.claimMissionReward(missionId)
-        assertFalse("Cannot claim incomplete mission", prematureClaim)
+        // Creating a Lone Wolf match with non-zero perKill MUST sanitize perKillPrize to 0
+        repository.createNewMatch(
+            title = "Lone Wolf Custom Test",
+            category = com.example.model.GameCategory.LONE_WOLF,
+            matchType = com.example.model.MatchType.SOLO,
+            mapName = "আয়রন কেজ",
+            matchDateTime = "আজ ৯:০০ PM",
+            entryFee = 15,
+            totalPrize = 60,
+            perKill = 25,
+            booyahPrize = 60,
+            totalSlots = 2
+        )
+        val createdLw = repository.matches.value.first { it.title == "Lone Wolf Custom Test" }
+        assertEquals("Lone Wolf perKillPrize must strictly stay 0", 0, createdLw.perKillPrize)
+        assertEquals(60, createdLw.booyahPrize)
 
-        // Complete the mission
-        repository.markMissionCompleted(mission.actionType)
-        val updatedMission = repository.dailyMissions.value.find { it.id == missionId }
-        assertNotNull("Mission must exist", updatedMission)
-        assertTrue("Mission should now be completed", updatedMission!!.isCompleted)
+        // Updating a Lone Wolf match MUST also force perKillPrize = 0
+        assertTrue(repository.updateExistingMatch(createdLw.copy(perKillPrize = 50)))
+        val updatedLw = repository.matches.value.first { it.id == createdLw.id }
+        assertEquals("Updated Lone Wolf perKillPrize must remain 0", 0, updatedLw.perKillPrize)
 
-        // Claim reward
-        val successClaim = repository.claimMissionReward(missionId)
-        assertTrue("Claiming completed mission should succeed", successClaim)
-        assertEquals("Wallet balance must increase by mission reward", initialBal + updatedMission.rewardAmount, repository.walletBalance.value)
-
-        // Cannot claim again
-        val doubleClaim = repository.claimMissionReward(missionId)
-        assertFalse("Cannot claim already claimed mission", doubleClaim)
+        // Presets have higher prizes and Lone Wolf preset has 0 perKill
+        val brPreset = repository.matchPresets.value.first { it.id == "preset_br_bermuda" }
+        val csPreset = repository.matchPresets.value.first { it.id == "preset_cs_squad" }
+        val lwPreset = repository.matchPresets.value.first { it.id == "preset_lw_1v1" }
+        assertTrue(brPreset.totalPrize >= 250 && brPreset.booyahPrize >= 100)
+        assertTrue(csPreset.totalPrize >= 100 && csPreset.booyahPrize >= 100)
+        assertEquals(0, lwPreset.perKillPrize)
+        assertTrue(lwPreset.booyahPrize >= 30)
     }
 
     @Test
@@ -328,12 +365,14 @@ class TournamentBusinessLogicTest {
         // App starts logged out for new users
         assertFalse("App starts with isLoggedIn = false", repository.isLoggedIn.value)
 
-        // Wrong PIN rejected
-        assertFalse(repository.login(repository.masterOwnerPhone, "0000"))
+        // Wrong password and removed legacy passcodes rejected
+        assertFalse(repository.login("01861583924", "0000"))
+        assertFalse(repository.login("01861583924", "7788"))
+        assertFalse(repository.login("owner@trustedth.com", "77110"))
         assertFalse(repository.isLoggedIn.value)
 
-        // Real Owner credentials succeed
-        val success = repository.login(repository.masterOwnerPhone, repository.masterOwnerPin)
+        // Real Owner account login with registered password succeeds as OWNER
+        val success = repository.login("owner@trustedth.com", "123456")
         assertTrue("Real owner login should succeed", success)
         assertTrue("isLoggedIn must be true after login", repository.isLoggedIn.value)
         assertEquals("Role must be OWNER", UserRole.OWNER, repository.userProfile.value.role)
@@ -442,11 +481,9 @@ class TournamentBusinessLogicTest {
         // 3. Wrong OTP fails verification
         assertFalse("Wrong OTP must fail verification", repository.verifyPasswordResetOtp(ownerPhone, "0000"))
 
-        // 4. Generated OTP passes verification
+        // 4. Generated OTP passes verification, legacy 7788 code is rejected
+        assertFalse("Legacy code 7788 must NOT bypass OTP", repository.verifyPasswordResetOtp(ownerPhone, "7788"))
         assertTrue("Generated OTP must verify successfully", repository.verifyPasswordResetOtp(ownerPhone, generatedOtp))
-
-        // 5. Master recovery code also works if active session exists
-        assertTrue("Master recovery code 7788 must verify", repository.verifyPasswordResetOtp(ownerPhone, "7788"))
 
         // 6. Password shorter than 4 chars must be rejected
         assertFalse("Short password must be rejected", repository.resetPassword(ownerPhone, "123"))
@@ -611,18 +648,17 @@ class TournamentBusinessLogicTest {
     }
 
     @Test
-    fun testOwnerSignInWith01861583924AndCode7788GrantsOwnerRoleAndRejectsRandomPhone() {
-        // Random unregistered phone cannot hijack owner using 7788
-        assertFalse(
-            "Unregistered random phone with 7788 must be rejected",
-            repository.login("01711112222", "7788")
-        )
+    fun testOwnerLoginRejectsHardcodedCodesAndResolvesRoleFromFirestoreUsers() {
+        // Hardcoded 7788 / 77110 must be rejected for any phone or email
+        assertFalse("Unregistered phone with 7788 must be rejected", repository.login("01711112222", "7788"))
+        assertFalse("Owner phone with removed code 7788 must be rejected", repository.login("01861583924", "7788"))
+        assertFalse("Owner email with removed code 77110 must be rejected", repository.login("owner@trustedth.com", "77110"))
         assertFalse(repository.isLoggedIn.value)
 
-        // Official owner phone 01861583924 + code 7788 automatically signs in as OWNER
+        // Owner registered account signs in with actual password & gets OWNER role from record
         assertTrue(
-            "Owner phone 01861583924 with code 7788 must sign in cleanly",
-            repository.login("01861583924", "7788")
+            "Owner login with registered password must sign in cleanly",
+            repository.login("01861583924", "123456")
         )
         assertTrue(repository.isLoggedIn.value)
         assertEquals(UserRole.OWNER, repository.userProfile.value.role)
@@ -822,12 +858,22 @@ class TournamentBusinessLogicTest {
         assertEquals("সোলো রাশার & শটগান কিং 🔥", syncedUser.battleTagline)
         assertTrue("Join date must not be blank", syncedUser.joinedDate.isNotBlank())
 
-        // Give kudos / GG
+        // Single-use toggleable kudos / GG per actor
+        assertFalse(repository.hasGivenKudos(syncedUser.id))
         val kudos1 = repository.giveProfileKudos(syncedUser.id)
-        val kudos2 = repository.giveProfileKudos("44332211")
         assertEquals(1, kudos1)
-        assertEquals(2, kudos2)
-        assertEquals(2, repository.registeredUsers.value.first { it.phone == phone }.kudosCount)
+        assertTrue(repository.hasGivenKudos(syncedUser.id))
+
+        // Calling again from the same actor toggles/removes the kudos back to 0
+        val kudosToggledOff = repository.giveProfileKudos("44332211")
+        assertEquals(0, kudosToggledOff)
+        assertFalse(repository.hasGivenKudos(syncedUser.id))
+
+        // Different actors can each give kudos once and remove their own
+        assertEquals(1, repository.giveProfileKudos(syncedUser.id, actorKeyOverride = "actor_one"))
+        assertEquals(2, repository.giveProfileKudos(syncedUser.id, actorKeyOverride = "actor_two"))
+        assertEquals(1, repository.giveProfileKudos(syncedUser.id, actorKeyOverride = "actor_one"))
+        assertEquals(1, repository.registeredUsers.value.first { it.phone == phone }.kudosCount)
     }
 
     @Test
@@ -957,7 +1003,7 @@ class TournamentBusinessLogicTest {
 
         // Owner logs in and replies in the appeal chat
         repository.logout()
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val staffReply = repository.sendAppealChatMessage(
             appealId = appealId,
             text = "প্রুফ ভেরিফাইড, এখন ব্যাজ দিচ্ছি"
@@ -1043,7 +1089,7 @@ class TournamentBusinessLogicTest {
 
         // 3. Owner & Admin: Animated GIF PFP + Animated GIF Banner allowed
         repository.logout()
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val ownerGifSuccess = repository.updateProfileAppearance(
             customPfpUri = "file:///data/user/0/com.example/files/profile_media/gif_pfp_owner.gif",
             customBannerUri = "file:///data/user/0/com.example/files/profile_media/gif_banner_owner.gif",
@@ -1056,7 +1102,7 @@ class TournamentBusinessLogicTest {
         // Promote to Admin -> Admin gets GIF PFP & GIF Banner -> Demote Admin -> GIFs sanitized!
         val adminPhone = "01744556677"
         assertTrue(repository.register("AdminKai", "TH_Kai", "44556677", adminPhone, adminPhone, password = "pass123"))
-        assertTrue(repository.promoteToAdmin(adminPhone, "TH-KAI", "Kai", "TH_Kai", "44556677"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "Kai", "TH_Kai", "44556677"))
         repository.logout()
         assertTrue(repository.login(adminPhone, "pass123"))
         assertTrue(
@@ -1074,9 +1120,9 @@ class TournamentBusinessLogicTest {
     }
 
     @Test
-    fun testGlobalChatOwnerAdminMemberRolesRepliesPinsReactionsAndBanRestriction() {
-        // Default seeded Owner announcement exists
-        assertTrue(repository.globalChatMessages.value.any { it.senderRole == UserRole.OWNER && it.isPinnedAnnouncement })
+    fun testGlobalChatOwnerAdminMemberRolesRepliesSingleReactionsNoPinsAndBanRestriction() {
+        // Default seeded Owner welcome exists and is NOT pinned (pinned messages are removed)
+        assertTrue(repository.globalChatMessages.value.any { it.senderRole == UserRole.OWNER && !it.isPinnedAnnouncement })
 
         // 1. Regular Member registers and sends message
         val memberPhone = "01712340011"
@@ -1086,13 +1132,11 @@ class TournamentBusinessLogicTest {
         val memberMsg = repository.globalChatMessages.value.last()
         assertEquals(UserRole.PLAYER, memberMsg.senderRole)
         assertEquals("TH_Sajid", memberMsg.senderIgn)
+        assertFalse(memberMsg.isPinnedAnnouncement)
 
-        // Member cannot pin announcements
-        assertFalse("Regular member must not pin messages", repository.togglePinGlobalChatMessage(memberMsg.id).first)
-
-        // 2. Owner replies & pins official announcement
+        // 2. Owner replies in global chat (pinAnnouncement param is ignored/false; no pinned messages)
         repository.logout()
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val ownerSend = repository.sendGlobalChatMessage(
             text = "রাত ৮টায় রুম আইডি দেওয়া হবে!",
             replyToId = memberMsg.id,
@@ -1103,16 +1147,33 @@ class TournamentBusinessLogicTest {
         assertEquals(UserRole.OWNER, ownerMsg.senderRole)
         assertEquals(memberMsg.id, ownerMsg.replyToId)
         assertEquals("TH_Sajid", ownerMsg.replyToIgn)
-        assertTrue(ownerMsg.isPinnedAnnouncement)
+        assertFalse("Pinned messages are completely removed", ownerMsg.isPinnedAnnouncement)
 
-        // 3. Reaction works
-        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "🔥"))
-        assertEquals(1, repository.globalChatMessages.value.first { it.id == ownerMsg.id }.reactions["🔥"])
+        // 3. Single-use toggleable reactions: each user has at most 1 reaction per message
+        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "GG"))
+        assertEquals(1, repository.globalChatMessages.value.first { it.id == ownerMsg.id }.reactions["GG"])
+
+        // Switching to another reaction moves the same user's single vote instead of giving infinite reactions
+        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "WIN"))
+        val afterSwitch = repository.globalChatMessages.value.first { it.id == ownerMsg.id }
+        assertNull(afterSwitch.reactions["GG"])
+        assertEquals(1, afterSwitch.reactions["WIN"])
+
+        // Tapping the same reaction again removes/toggles it off
+        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "WIN"))
+        val afterToggleOff = repository.globalChatMessages.value.first { it.id == ownerMsg.id }
+        assertTrue(afterToggleOff.reactions.isEmpty())
+        assertTrue(afterToggleOff.reactedByUsers.isEmpty())
+
+        // Separate actors can each hold 1 reaction independently
+        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "GG", actorKeyOverride = "actor_a"))
+        assertTrue(repository.reactToGlobalChatMessage(ownerMsg.id, "GG", actorKeyOverride = "actor_b"))
+        assertEquals(2, repository.globalChatMessages.value.first { it.id == ownerMsg.id }.reactions["GG"])
 
         // 4. Admin sends message
         val adminPhone = "01799887700"
         assertTrue(repository.register("AdminRafi", "TH_AdminRafi", "99887700", adminPhone, adminPhone, password = "pass123"))
-        assertTrue(repository.promoteToAdmin(adminPhone, "TH-RAFI", "AdminRafi", "TH_AdminRafi", "99887700"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "AdminRafi", "TH_AdminRafi", "99887700"))
         repository.logout()
         assertTrue(repository.login(adminPhone, "pass123"))
         val adminSend = repository.sendGlobalChatMessage("স্লট দ্রুত ফুল হচ্ছে গাইজ!")
@@ -1121,7 +1182,7 @@ class TournamentBusinessLogicTest {
 
         // 5. Banned user cannot send messages in Global Chat
         repository.logout()
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertTrue(repository.banUser(memberPhone, "স্প্যাম"))
         repository.logout()
         assertTrue(repository.login(memberPhone, "pass123"))
@@ -1132,29 +1193,33 @@ class TournamentBusinessLogicTest {
         repository.resetAppForFreshDownload()
         assertEquals(1, repository.globalChatMessages.value.size)
         assertEquals(UserRole.OWNER, repository.globalChatMessages.value.first().senderRole)
+        assertFalse(repository.globalChatMessages.value.first().isPinnedAnnouncement)
     }
 
     @Test
-    fun testOwnerUidIs11410365896AndLoweredBudgetMatchPrizesPreservedAcrossReset() {
+    fun testOwnerUidIs11410365896AndUpgradedPrizesWithZeroLoneWolfKillPrizeAcrossReset() {
         val owner = repository.registeredUsers.value.first { it.role == UserRole.OWNER }
         assertEquals("11410365896", owner.uid)
 
-        // All default matches must use budget-friendly lowered prizes
+        // All initial Lone Wolf matches must have higher prizes (>= 30) and strictly 0 perKillPrize
         val matches = repository.matches.value
         assertTrue("Initial matches must not be empty", matches.isNotEmpty())
-        assertTrue("All match total prizes should be <= 100", matches.all { it.totalPrize <= 100 })
-        assertTrue("All match per-kill prizes should be <= 1", matches.all { it.perKillPrize <= 1 })
-        assertTrue("All match booyah prizes should be <= 40", matches.all { it.booyahPrize <= 40 })
+        assertTrue("All initial matches must have totalPrize >= 30", matches.all { it.totalPrize >= 30 })
+        assertTrue("All initial matches must have booyahPrize >= 30", matches.all { it.booyahPrize >= 30 })
+        assertTrue(
+            "All Lone Wolf matches must have 0 perKillPrize",
+            matches.filter { it.category == com.example.model.GameCategory.LONE_WOLF }.all { it.perKillPrize == 0 }
+        )
 
         // Verify login as owner keeps updated UID 11410365896
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertEquals("11410365896", repository.userProfile.value.uid)
 
-        // Reset and verify Owner UID + lowered match prizes + clean moderationLogs persist
+        // Reset and verify Owner UID + upgraded Lone Wolf prizes + 0 perKillPrize + clean moderationLogs persist
         repository.resetAppForFreshDownload()
         val resetOwner = repository.registeredUsers.value.first { it.role == UserRole.OWNER }
         assertEquals("11410365896", resetOwner.uid)
-        assertTrue(repository.matches.value.all { it.totalPrize <= 100 && it.perKillPrize <= 1 })
+        assertTrue(repository.matches.value.all { it.totalPrize >= 30 && it.booyahPrize >= 30 && it.perKillPrize == 0 })
         assertTrue(repository.moderationLogs.value.isEmpty())
     }
 
@@ -1199,7 +1264,7 @@ class TournamentBusinessLogicTest {
         val adminPhone = "01755009922"
         assertTrue(repository.register("Hasan", "TH_Hasan", "55009911", playerPhone, playerPhone, password = "pass123"))
         assertTrue(repository.register("ModKai", "TH_ModKai", "55009922", adminPhone, adminPhone, password = "pass123"))
-        assertTrue(repository.promoteToAdmin(adminPhone, "TH-KAI", "ModKai", "TH_ModKai", "55009922"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "ModKai", "TH_ModKai", "55009922"))
 
         // Log in back as Hasan so active profile checks apply to Hasan
         repository.logout()
@@ -1273,7 +1338,7 @@ class TournamentBusinessLogicTest {
         // 2. Register second player & admin, promote admin
         assertTrue(repository.register("PlayerTwo", "TH_Two", "33334444", p2, p2, password = "pass123"))
         assertTrue(repository.register("AdminThree", "TH_Mod", "55556666", adminPhone, adminPhone, password = "pass123"))
-        assertTrue(repository.promoteToAdmin(adminPhone, "TH-MOD", "AdminThree", "TH_Mod", "55556666"))
+        assertTrue(repository.promoteToAdmin(adminPhone, "AdminThree", "TH_Mod", "55556666"))
 
         // Admin publishes urgent announcement
         repository.logout()
@@ -1286,7 +1351,7 @@ class TournamentBusinessLogicTest {
 
         // Owner clears announcement
         repository.logout()
-        assertTrue(repository.login("01861583924", "7788"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertTrue(repository.clearAppAnnouncement().first)
         assertFalse(repository.appCustomization.value.isAnnouncementEnabled)
         assertEquals("", repository.appCustomization.value.activeAnnouncement)
@@ -1340,7 +1405,7 @@ class TournamentBusinessLogicTest {
 
     @Test
     fun testPromoCodesRedeemLimitsAndFrozenWalletBlock() {
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val created = repository.createPromoCode("THWIN25", "স্পেশাল বোনাস", 25, maxUses = 1)
         assertTrue(created.first)
         assertEquals(1, repository.promoCodes.value.size)
@@ -1364,7 +1429,7 @@ class TournamentBusinessLogicTest {
         assertFalse(repository.redeemPromoCode("THWIN25").first)
 
         // Toggle active & frozen wallet block on a fresh promo code
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertTrue(repository.createPromoCode("THFREEZE", "টেস্ট", 10, maxUses = 5).first)
         assertTrue(repository.setUserWalletFreeze(p2, true, "তদন্ত", moderatorRole = UserRole.OWNER).first)
         repository.logout()
@@ -1372,14 +1437,14 @@ class TournamentBusinessLogicTest {
         assertFalse("Frozen wallet cannot redeem promo code", repository.redeemPromoCode("THFREEZE").first)
 
         // Owner delete promo code
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertTrue(repository.togglePromoCodeActive(promoId, false).first)
         assertTrue(repository.deletePromoCode(promoId).first)
     }
 
     @Test
     fun testBonusGiftDropsCommunityPollsAndDailyTrivia() {
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val dropRes = repository.launchBonusGiftDrop("⚡ বোনাস রেইন", "ক্লেইম করুন", amountPerClaim = 7, totalBoxes = 1)
         assertTrue(dropRes.first)
         val dropId = repository.bonusDrops.value.first().id
@@ -1426,10 +1491,11 @@ class TournamentBusinessLogicTest {
         val refreshMsg = repository.refreshAppAndCloudState()
         assertTrue(refreshMsg.isNotBlank())
 
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val matchId = repository.matches.value.first().id
         assertTrue(repository.broadcastMatchToGlobalChat(matchId).first)
-        assertTrue(repository.globalChatMessages.value.any { it.isPinnedAnnouncement })
+        assertTrue(repository.globalChatMessages.value.all { !it.isPinnedAnnouncement })
+        assertTrue(repository.globalChatMessages.value.any { it.text.contains("ম্যাচ অ্যালার্ট") })
 
         val audit = repository.buildOwnerAuditSummaryText()
         assertTrue(audit.contains("TRUSTED TOURNAMENT"))
@@ -1462,7 +1528,7 @@ class TournamentBusinessLogicTest {
         )
 
         // 2. Owner launches CASH_TAKA giveaway (maxEntries=2) and FF_DIAMONDS giveaway
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val cashGwRes = repository.createGiveaway(
             title = "৳৭৫ মেগা ক্যাশ গিভওয়ে",
             description = "২ জন টিকিট নিতে পারবেন",
@@ -1506,8 +1572,8 @@ class TournamentBusinessLogicTest {
         assertTrue(repository.register("PlayerThree", "TH_GW3", "70003333", p3, p3, password = "pass123"))
         assertFalse("Full giveaway must reject extra entries", repository.joinGiveaway(cashGwId).first)
 
-        // 4. Owner draws winners for CASH_TAKA giveaway -> real winner chosen, pinned to Global Chat, & wallet credited ONLY for CASH_TAKA
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        // 4. Owner draws winners for CASH_TAKA giveaway -> real winner chosen, announced to Global Chat, & wallet credited ONLY for CASH_TAKA
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val drawCashRes = repository.drawGiveawayWinners(cashGwId)
         assertTrue(drawCashRes.first)
         val drawnCashGw = repository.giveaways.value.first { it.id == cashGwId }
@@ -1515,7 +1581,7 @@ class TournamentBusinessLogicTest {
         assertEquals(1, drawnCashGw.winners.size)
         val cashWinner = drawnCashGw.winners.first()
         assertTrue(cashWinner.uid in setOf("70001111", "70002222"))
-        assertTrue(repository.globalChatMessages.value.any { it.isPinnedAnnouncement && it.text.contains(cashWinner.ign) })
+        assertTrue(repository.globalChatMessages.value.any { !it.isPinnedAnnouncement && it.text.contains(cashWinner.ign) })
 
         val cashWinnerUser = repository.registeredUsers.value.first { it.uid == cashWinner.uid }
         assertEquals(p1InitialWallet + 75, cashWinnerUser.walletBalance)
@@ -1545,7 +1611,7 @@ class TournamentBusinessLogicTest {
         assertEquals(walletBeforeReflex, repository.walletBalance.value)
 
         // 6. Close / Delete giveaway & fresh download reset wipes giveaways and reflexStats
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertTrue(repository.deleteGiveaway(diamondGwId).first)
         assertFalse(repository.giveaways.value.any { it.id == diamondGwId })
 
@@ -1607,7 +1673,7 @@ class TournamentBusinessLogicTest {
         assertFalse(repository.holdBrAndCsMatchesForLoneWolf().first)
 
         // 5. Owner can reschedule countdown timer (e.g. 7 min), launch BR & CS presets, and save custom preset
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val reschedRes = repository.rescheduleMatchStartMinutes(lwMatch.id, 7)
         assertTrue(reschedRes.first)
         val reschedMatch = repository.matches.value.first { it.id == lwMatch.id }
@@ -1652,7 +1718,7 @@ class TournamentBusinessLogicTest {
             ).first
         )
         // Approve deposit as owner then book as player
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val depId = repository.depositRequests.value.first().id
         assertTrue(repository.approveDepositRequest(depId).first)
 
@@ -1661,7 +1727,7 @@ class TournamentBusinessLogicTest {
         assertTrue(repository.bookSlotWithWallet(liveBr!!, 1, "TH_SOLO1", "88112233").first)
         assertEquals(balanceBeforeBook - liveBr.entryFee, repository.walletBalance.value)
 
-        assertTrue(repository.login(repository.masterOwnerPhone, repository.masterOwnerPin))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         val holdRes = repository.holdBrAndCsMatchesForLoneWolf()
         assertTrue(holdRes.first)
         assertTrue(
@@ -1751,10 +1817,120 @@ class TournamentBusinessLogicTest {
         repository.logout()
         assertTrue(repository.login(playerEmail, "newpass99"))
 
-        // Owner can also sign in using owner@trustedth.com + 7788
+        // Hardcoded 7788 / 77110 rejected; owner signs in with registered password & Firestore role
         repository.logout()
-        assertTrue(repository.login("owner@trustedth.com", "7788"))
+        assertFalse(repository.login("owner@trustedth.com", "7788"))
+        assertFalse(repository.login("owner@trustedth.com", "77110"))
+        assertTrue(repository.login("owner@trustedth.com", "123456"))
         assertEquals(UserRole.OWNER, repository.userProfile.value.role)
     }
+
+    @Test
+    fun testEmailVerificationBlocksUnverifiedLoginAndNeverGrantsAdminOnSignup() = runBlocking {
+        val playerEmail = "verified.gamer@gmail.com"
+        val signUpRes = repository.signUpWithEmailVerification(
+            accountName = "Verified Gamer",
+            email = playerEmail,
+            ign = "TH_77110",
+            uid = "7788990011",
+            phone = "01711223344",
+            bkash = "01711223344",
+            password = "77110_secure_password"
+        )
+        assertTrue("Sign up should create unverified account and ask user to verify", signUpRes.success)
+        assertTrue("Sign up should require email verification", signUpRes.needsVerification)
+        assertFalse("User must stay logged out until email is verified", repository.isLoggedIn.value)
+
+        // Normal user signup must NEVER become ADMIN or OWNER even with 77110 text
+        val createdUser = repository.registeredUsers.value.first { it.email == playerEmail }
+        assertEquals("Signed up user must strictly be PLAYER", UserRole.PLAYER, createdUser.role)
+
+        // Login before email verification MUST fail with exact message
+        val blockedLogin = repository.loginWithEmailVerification(playerEmail, "77110_secure_password")
+        assertFalse("Unverified email login must be blocked", blockedLogin.success)
+        assertTrue("Unverified login must flag needsVerification", blockedLogin.needsVerification)
+        assertEquals("Please verify your email", blockedLogin.message)
+        assertFalse("Logged in flag must stay false when email is unverified", repository.isLoggedIn.value)
+
+        // Once email is verified, login succeeds as PLAYER
+        repository.markEmailVerified(playerEmail)
+        val okLogin = repository.loginWithEmailVerification(playerEmail, "77110_secure_password")
+        assertTrue("Verified email login should succeed", okLogin.success)
+        assertTrue("User should be logged in after verification", repository.isLoggedIn.value)
+        assertEquals(UserRole.PLAYER, repository.userProfile.value.role)
+    }
+
+    @Test
+    fun testDepositPrivacyHidesSenderNumberFromPublicTransactionsWhileKeepingForAdminPanel() {
+        val playerPhone = "01755443322"
+        assertTrue(
+            repository.register(
+                accountName = "Private Player",
+                ign = "TH_Privacy",
+                uid = "4455667788",
+                phone = playerPhone,
+                bkash = playerPhone,
+                password = "pass1234",
+                email = "privacy@gmail.com"
+            )
+        )
+
+        val submitted = repository.submitDepositRequest(
+            amount = 150,
+            paymentMethod = WalletPaymentMethod.BKASH,
+            senderNumber = playerPhone,
+            trxId = "TRX998877"
+        )
+        assertTrue("Deposit submission must succeed", submitted.first)
+
+        val requestForAdmin = repository.depositRequests.value.first { it.trxId == "TRX998877" }
+        assertEquals("Admin/Owner panel must retain sender number", playerPhone, requestForAdmin.senderNumber)
+
+        val playerTx = repository.transactions.value.first { it.trxId == "TRX998877" }
+        assertNull("Transaction history must NOT expose raw senderBkash", playerTx.senderBkash)
+        assertFalse(
+            "Transaction paymentMethod must NOT expose raw phone number",
+            playerTx.paymentMethod.contains(playerPhone)
+        )
+        assertEquals("017*****322", maskPhoneForPrivacy(playerPhone))
+    }
+
+    @Test
+    fun testDiscordChatCategoryChannelsAndEmojiFreeWelcomeMessage() {
+        // Default welcome message is in GLOBAL channel and contains no emojis
+        val welcomeMsg = repository.globalChatMessages.value.first()
+        assertEquals(ChatChannel.GLOBAL.id, welcomeMsg.channelId)
+        assertFalse(welcomeMsg.text.contains("🏆"))
+        assertFalse(welcomeMsg.text.contains("💎"))
+
+        // Register & send category chat messages
+        assertTrue(
+            repository.register(
+                accountName = "Chat Player",
+                ign = "TH_Chat",
+                uid = "1122334455",
+                phone = "01811223344",
+                bkash = "01811223344",
+                password = "pass1234",
+                email = "chat@gmail.com"
+            )
+        )
+        val loneWolfResult = repository.sendGlobalChatMessage(
+            text = "Lone Wolf room ready?",
+            channelId = ChatChannel.LONE_WOLF.id
+        )
+        assertTrue("Sending to Lone Wolf channel must succeed", loneWolfResult.first)
+        val brResult = repository.sendGlobalChatMessage(
+            text = "BR Rank squad open",
+            channelId = ChatChannel.BR_RANK.id
+        )
+        assertTrue("Sending to BR Rank channel must succeed", brResult.first)
+
+        val lwMsg = repository.globalChatMessages.value.first { it.text == "Lone Wolf room ready?" }
+        val brMsg = repository.globalChatMessages.value.first { it.text == "BR Rank squad open" }
+        assertEquals(ChatChannel.LONE_WOLF.id, lwMsg.channelId)
+        assertEquals(ChatChannel.BR_RANK.id, brMsg.channelId)
+    }
 }
+
 

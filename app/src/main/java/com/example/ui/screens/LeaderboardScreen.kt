@@ -71,6 +71,7 @@ import com.example.ui.components.BadgePill
 import com.example.ui.components.BadgeShowcaseDialog
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.PlayerProfileCardDialog
+import com.example.ui.components.hasActorGivenKudos
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.toPlayerProfileCard
 import com.example.ui.theme.DarkBorder
@@ -744,6 +745,7 @@ fun LeaderboardScreen(
             profile = profileData,
             onDismiss = { localPlayerProfileCard = null },
             onGiveKudos = onGiveKudos,
+            hasGivenKudos = hasActorGivenKudos(profileData, registeredUsers, currentUser),
             onViewAllBadges = {
                 localPlayerProfileCard = null
                 showBadgeDialog = true

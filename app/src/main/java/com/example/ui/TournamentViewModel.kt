@@ -11,11 +11,12 @@ import com.example.model.AppUser
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
 import com.example.model.BonusGiftDrop
+import com.example.model.ChatChannel
 import com.example.model.ChatMessage
-import com.example.model.DailyGamerMission
 import com.example.model.DailyStreakInfo
 import com.example.model.DailyTriviaProgress
 import com.example.model.DepositRequest
+import com.example.model.EmailAuthResult
 import com.example.model.GameCategory
 import com.example.model.GiveawayEvent
 import com.example.model.GiveawayPrizeType
@@ -52,6 +53,7 @@ enum class TournamentTab(val banglaLabel: String) {
     MY_MATCHES("বুকিং"),
     WALLET("ওয়ালেট"),
     LEADERBOARD("র‍্যাঙ্ক"),
+    FUN_GIVEAWAY("গিভওয়ে"),
     GLOBAL_CHAT("গ্লোবাল"),
     ACCOUNT("প্রোফাইল")
 }
@@ -109,7 +111,6 @@ class TournamentViewModel(
     val hasSpunToday: StateFlow<Boolean> = repository.hasSpunToday
     val hasSpunThisWeek: StateFlow<Boolean> = repository.hasSpunThisWeek
     val spinHistory: StateFlow<List<SpinHistoryRecord>> = repository.spinHistory
-    val dailyMissions: StateFlow<List<DailyGamerMission>> = repository.dailyMissions
     val appCustomization: StateFlow<AppCustomization> = repository.appCustomization
     val strictRules: StateFlow<List<TournamentRuleItem>> = repository.strictRules
     val badgeAppeals: StateFlow<List<BadgeAppeal>> = repository.badgeAppeals
@@ -249,7 +250,6 @@ class TournamentViewModel(
     fun openSlotGrid(match: TournamentMatch) {
         _roomSlotGridMatchId.value = match.id
         _roomSlotGridMatch.value = repository.matches.value.find { it.id == match.id } ?: match
-        repository.markMissionCompleted("MATCH")
     }
 
     fun closeSlotGrid() {
@@ -323,13 +323,6 @@ class TournamentViewModel(
         return prize
     }
 
-    fun claimMission(missionId: String) {
-        val success = repository.claimMissionReward(missionId)
-        if (success) {
-            _snackbarMessage.value = "🎯 দৈনিক মিশন রিওয়ার্ড নগদ বোনাস ওয়ালেটে যুক্ত হয়েছে!"
-        }
-    }
-
     fun openDailyStreak() {
         _showDailyStreakDialog.value = true
     }
@@ -383,18 +376,12 @@ class TournamentViewModel(
     fun sendGlobalChatMessage(
         text: String,
         replyToId: String? = null,
-        pinAnnouncement: Boolean = false
+        channelId: String = ChatChannel.GLOBAL.id
     ): Pair<Boolean, String> {
-        val res = repository.sendGlobalChatMessage(text, replyToId, pinAnnouncement)
-        if (!res.first || pinAnnouncement) {
+        val res = repository.sendGlobalChatMessage(text, replyToId, false, channelId)
+        if (!res.first) {
             _snackbarMessage.value = res.second
         }
-        return res
-    }
-
-    fun togglePinGlobalChatMessage(messageId: String): Pair<Boolean, String> {
-        val res = repository.togglePinGlobalChatMessage(messageId)
-        _snackbarMessage.value = res.second
         return res
     }
 
@@ -404,13 +391,12 @@ class TournamentViewModel(
         return res
     }
 
-    fun reactToGlobalChatMessage(messageId: String, emoji: String): Boolean {
-        return repository.reactToGlobalChatMessage(messageId, emoji)
+    fun reactToGlobalChatMessage(messageId: String, reactKey: String): Boolean {
+        return repository.reactToGlobalChatMessage(messageId, reactKey)
     }
 
     fun sendAiMessage(query: String) {
         repository.sendAiAssistantMessage(query)
-        repository.markMissionCompleted("AI_CHAT")
     }
 
     fun resetAiChat() {
@@ -451,7 +437,7 @@ class TournamentViewModel(
                 setSupportDialogTab(SupportTabType.LIVE_ADMIN)
             }
             "ACTION_CALL_ADMIN" -> {
-                _snackbarMessage.value = "বিকাশ ও এডমিন হেল্পলাইন: $officialBkashNumber"
+                _snackbarMessage.value = "অফিসিয়াল লাইভ সাপোর্ট চ্যাটে যোগাযোগ করুন — আপনার ও ওনারের নম্বর গোপন রাখা হয়েছে।"
             }
         }
     }
@@ -642,6 +628,52 @@ class TournamentViewModel(
         return success
     }
 
+    suspend fun signUpWithEmailVerification(
+        accountName: String,
+        email: String,
+        ign: String,
+        uid: String,
+        phone: String,
+        bkash: String,
+        avatarId: String = "th_logo",
+        password: String
+    ): EmailAuthResult {
+        val result = repository.signUpWithEmailVerification(
+            accountName = accountName,
+            email = email,
+            ign = ign,
+            uid = uid,
+            phone = phone,
+            bkash = bkash,
+            avatarId = avatarId,
+            password = password
+        )
+        _snackbarMessage.value = result.message
+        return result
+    }
+
+    suspend fun loginWithEmailVerification(
+        email: String,
+        password: String
+    ): EmailAuthResult {
+        val result = repository.loginWithEmailVerification(email, password)
+        _snackbarMessage.value = if (result.success) {
+            "সফলভাবে লগইন হয়েছে! স্বাগতম ${userProfile.value.accountName}"
+        } else {
+            result.message
+        }
+        return result
+    }
+
+    suspend fun resendVerificationEmail(
+        email: String,
+        password: String
+    ): EmailAuthResult {
+        val result = repository.resendVerificationEmail(email, password)
+        _snackbarMessage.value = result.message
+        return result
+    }
+
     fun requestPasswordResetOtp(phoneOrUid: String): Pair<Boolean, String> {
         val result = repository.requestPasswordResetOtp(phoneOrUid)
         if (result.first) {
@@ -744,10 +776,17 @@ class TournamentViewModel(
         _snackbarMessage.value = "প্রোফাইল বায়ো আপডেট হয়েছে!"
     }
 
+    fun hasGivenKudos(targetKey: String): Boolean {
+        return repository.hasGivenKudos(targetKey)
+    }
+
     fun giveProfileKudos(targetKey: String): Int {
+        val wasGiven = repository.hasGivenKudos(targetKey)
         val count = repository.giveProfileKudos(targetKey)
-        if (count > 0) {
-            _snackbarMessage.value = "🔥 প্লেয়ারকে রেস্পেক্ট (GG) পাঠানো হয়েছে!"
+        _snackbarMessage.value = if (wasGiven) {
+            "রেস্পেক্ট (GG) সরানো হয়েছে।"
+        } else {
+            "🔥 প্লেয়ারকে রেস্পেক্ট (GG) পাঠানো হয়েছে!"
         }
         return count
     }
@@ -835,16 +874,6 @@ class TournamentViewModel(
         _showOwnerDialog.value = false
     }
 
-    fun claimOwnerRole(key: String): Boolean {
-        val success = repository.claimOwnerRole(key)
-        if (success) {
-            _snackbarMessage.value = "👑 অভিনন্দন! আপনি সুপ্রিম ওনার (Owner) হিসেবে সফলভাবে ভেরিফাইড হয়েছেন!"
-        } else {
-            _snackbarMessage.value = "ভুল ওনার মাস্টার কী! অ্যাক্সেস প্রত্যাখ্যাত।"
-        }
-        return success
-    }
-
     fun banUser(userIdOrPhone: String, reason: String) {
         val success = repository.banUser(userIdOrPhone, reason)
         if (success) {
@@ -863,12 +892,11 @@ class TournamentViewModel(
 
     fun promoteToAdmin(
         targetUserOrPhone: String,
-        adminPasscode: String,
         customName: String? = null,
         ign: String? = null,
         uid: String? = null
     ) {
-        val success = repository.promoteToAdmin(targetUserOrPhone, adminPasscode, customName, ign, uid)
+        val success = repository.promoteToAdmin(targetUserOrPhone, customName, ign, uid)
         if (success) {
             _snackbarMessage.value = "🛡️ নতুন টুর্নামেন্ট অ্যাডমিন সফলভাবে নিয়োগ করা হয়েছে!"
         }
@@ -879,16 +907,6 @@ class TournamentViewModel(
         if (success) {
             _snackbarMessage.value = "অ্যাডমিন পদ বাতিল করে সাধারণ প্লেয়ার করা হয়েছে।"
         }
-    }
-
-    fun updateMasterOwnerPin(newPin: String): Boolean {
-        val success = repository.updateMasterOwnerPin(newPin)
-        if (success) {
-            _snackbarMessage.value = "ওনার মাস্টার পিন সফলভাবে পরিবর্তন করা হয়েছে!"
-        } else {
-            _snackbarMessage.value = "পিন কমপক্ষে ৪ অক্ষরের হতে হবে।"
-        }
-        return success
     }
 
     fun grantBadgeToUser(targetPhoneOrUidOrId: String, badge: BadgeType): Boolean {

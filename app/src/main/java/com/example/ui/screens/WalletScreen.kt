@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import com.example.model.maskPhoneForPrivacy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,16 +96,16 @@ fun WalletScreen(
     var selectedReceiptTx by remember { mutableStateOf<WalletTransaction?>(null) }
 
     val userTransactions = remember(transactions, currentUserPhone) {
-        if (currentUserPhone.isBlank()) transactions
+        if (currentUserPhone.isBlank()) emptyList()
         else transactions.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
     }
     val userDeposits = remember(depositRequests, currentUserPhone) {
-        if (currentUserPhone.isBlank()) depositRequests
-        else depositRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+        if (currentUserPhone.isBlank()) emptyList()
+        else depositRequests.filter { it.userPhone == currentUserPhone }
     }
     val userWithdraws = remember(withdrawRequests, currentUserPhone) {
-        if (currentUserPhone.isBlank()) withdrawRequests
-        else withdrawRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+        if (currentUserPhone.isBlank()) emptyList()
+        else withdrawRequests.filter { it.userPhone == currentUserPhone }
     }
 
     val filteredTransactions = remember(userTransactions, selectedCategory) {
@@ -426,7 +427,7 @@ fun WalletScreen(
                                         color = Color.White
                                     )
                                     Text(
-                                        text = "TrxID: ${req.trxId} • নম্বর: ${req.senderNumber}",
+                                        text = "TrxID: ${req.trxId} • প্রেরক: ${maskPhoneForPrivacy(req.senderNumber)} (শুধু ওনার/অ্যাডমিন প্যানেলে দৃশ্যমান)",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White.copy(alpha = 0.7f)
                                     )

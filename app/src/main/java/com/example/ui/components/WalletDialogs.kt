@@ -227,7 +227,8 @@ fun AddMoneyDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Official Send Money Card
+                    // Private Payment Gateway Card (Hides personal phone numbers from public UI)
+                    val gatewayRef = "TH-${selectedMethod.name}-GATEWAY"
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = accentColor.copy(alpha = 0.14f),
@@ -236,7 +237,7 @@ fun AddMoneyDialog(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "${selectedMethod.displayName} পার্সোনাল সেন্ড মানি নম্বর:",
+                                text = "${selectedMethod.displayName} সুরক্ষিত পেমেন্ট গেটওয়ে:",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.9f)
                             )
@@ -247,7 +248,7 @@ fun AddMoneyDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = activeOfficialNumber,
+                                    text = gatewayRef,
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontFamily = MonoFontFamily,
                                         fontWeight = FontWeight.Black,
@@ -257,8 +258,8 @@ fun AddMoneyDialog(
                                 )
                                 Button(
                                     onClick = {
-                                        clipboardManager.setText(AnnotatedString(activeOfficialNumber))
-                                        Toast.makeText(context, "নম্বর ($activeOfficialNumber) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                        clipboardManager.setText(AnnotatedString(gatewayRef))
+                                        Toast.makeText(context, "গেটওয়ে রেফারেন্স ($gatewayRef) কপি হয়েছে!", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                                     shape = RoundedCornerShape(10.dp),
@@ -269,6 +270,12 @@ fun AddMoneyDialog(
                                     Text("কপি করুন", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "নিরাপত্তার স্বার্থে পার্সোনাল নম্বর গোপন রাখা হয়েছে। আপনার ডিপোজিট নম্বর শুধু ওনার/অ্যাডমিন প্যানেলে ভেরিফিকেশনের জন্য দৃশ্যমান থাকবে।",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
                         }
                     }
 

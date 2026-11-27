@@ -481,7 +481,6 @@ data class AppUser(
     val isBanned: Boolean = false,
     val banReason: String? = null,
     val bannedAt: String? = null,
-    val adminPasscode: String? = null,
     val appointedDate: String? = null,
     val joinedDate: String = "অক্টোবর ২০২৬",
     val walletBalance: Int = 0,
@@ -503,6 +502,7 @@ data class AppUser(
     val playerRole: String = "সোলো প্লেয়ার",
     val level: Int = 1,
     val kudosCount: Int = 0,
+    val kudosGiverKeys: Set<String> = emptySet(),
     val warningsCount: Int = 0,
     val banExpiresAtMillis: Long? = null,
     val moderationWarningsCount: Int = 0,
@@ -657,6 +657,28 @@ data class ChatMessage(
     val actionLabel: String? = null
 )
 
+enum class ChatChannel(val id: String, val channelName: String, val description: String) {
+    GLOBAL("GLOBAL", "# global-chat", "সবার জন্য উন্মুক্ত গ্লোবাল চ্যাট"),
+    LONE_WOLF("LONE_WOLF", "# lone-wolf", "লোন উলফ 1v1 ও 2v2 ম্যাচ চ্যাট"),
+    BR_RANK("BR_RANK", "# br-rank", "বারমুডা ফুল ম্যাপ স্কোয়াড ও র‍্যাঙ্ক চ্যাট"),
+    CS_RANK("CS_RANK", "# cs-rank", "ক্ল্যাশ স্কোয়াড কাস্টম রুম ও টিম চ্যাট")
+}
+
+fun maskPhoneForPrivacy(rawPhone: String): String {
+    val clean = rawPhone.trim()
+    return when {
+        clean.length >= 7 -> "${clean.take(3)}*****${clean.takeLast(3)}"
+        clean.isNotBlank() -> "***${clean.takeLast(2)}"
+        else -> "গোপন নম্বর"
+    }
+}
+
+data class EmailAuthResult(
+    val success: Boolean,
+    val message: String,
+    val needsVerification: Boolean = false
+)
+
 data class GlobalChatMessage(
     val id: String,
     val senderUserId: String,
@@ -676,7 +698,9 @@ data class GlobalChatMessage(
     val replyToId: String? = null,
     val replyToIgn: String? = null,
     val replyToText: String? = null,
-    val reactions: Map<String, Int> = emptyMap()
+    val reactions: Map<String, Int> = emptyMap(),
+    val reactedByUsers: Map<String, String> = emptyMap(),
+    val channelId: String = ChatChannel.GLOBAL.id
 )
 
 data class SpinHistoryRecord(

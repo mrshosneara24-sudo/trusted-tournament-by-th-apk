@@ -63,12 +63,10 @@ data class PersistedAppState(
     val dailyStreakInfo: DailyStreakInfo,
     val spinHistory: List<SpinHistoryRecord>,
     val hasSpunThisWeek: Boolean,
-    val dailyMissions: List<DailyGamerMission>,
     val appCustomization: AppCustomization,
     val strictRules: List<TournamentRuleItem>,
     val officialWhatsAppUrl: String,
     val chatMessages: List<ChatMessage>,
-    val masterOwnerPin: String,
     val badgeAppeals: List<BadgeAppeal> = emptyList(),
     val globalChatMessages: List<GlobalChatMessage> = emptyList(),
     val moderationLogs: List<ModerationLogEntry> = emptyList(),
@@ -108,12 +106,10 @@ class AppPersistenceStore(context: Context) {
                 put("dailyStreakInfo", encodeStreak(state.dailyStreakInfo))
                 put("spinHistory", JSONArray().apply { state.spinHistory.forEach { put(encodeSpin(it)) } })
                 put("hasSpunThisWeek", state.hasSpunThisWeek)
-                put("dailyMissions", JSONArray().apply { state.dailyMissions.forEach { put(encodeMission(it)) } })
                 put("appCustomization", encodeCustomization(state.appCustomization))
                 put("strictRules", JSONArray().apply { state.strictRules.forEach { put(encodeRule(it)) } })
                 put("officialWhatsAppUrl", state.officialWhatsAppUrl)
                 put("chatMessages", JSONArray().apply { state.chatMessages.forEach { put(encodeChat(it)) } })
-                put("masterOwnerPin", state.masterOwnerPin)
                 put("badgeAppeals", JSONArray().apply { state.badgeAppeals.forEach { put(encodeBadgeAppeal(it)) } })
                 put("globalChatMessages", JSONArray().apply { state.globalChatMessages.forEach { put(encodeGlobalChat(it)) } })
                 put("moderationLogs", JSONArray().apply { state.moderationLogs.forEach { put(encodeModerationLog(it)) } })
@@ -149,14 +145,12 @@ class AppPersistenceStore(context: Context) {
                 dailyStreakInfo = decodeStreak(root.getJSONObject("dailyStreakInfo")),
                 spinHistory = decodeList(root.optJSONArray("spinHistory"), ::decodeSpin),
                 hasSpunThisWeek = root.optBoolean("hasSpunThisWeek", false),
-                dailyMissions = decodeList(root.optJSONArray("dailyMissions"), ::decodeMission),
                 appCustomization = decodeCustomization(root.getJSONObject("appCustomization")),
                 strictRules = decodeList(root.optJSONArray("strictRules"), ::decodeRule),
                 officialWhatsAppUrl = root.optString("officialWhatsAppUrl", com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL).let { url ->
                     if (url.isBlank() || url == com.example.model.LEGACY_WHATSAPP_GROUP_URL) com.example.model.OFFICIAL_WHATSAPP_CHANNEL_URL else url
                 },
                 chatMessages = decodeList(root.optJSONArray("chatMessages"), ::decodeChat),
-                masterOwnerPin = root.optString("masterOwnerPin", "7788"),
                 badgeAppeals = decodeList(root.optJSONArray("badgeAppeals"), ::decodeBadgeAppeal),
                 globalChatMessages = decodeList(root.optJSONArray("globalChatMessages"), ::decodeGlobalChat),
                 moderationLogs = decodeList(root.optJSONArray("moderationLogs"), ::decodeModerationLog),
@@ -329,7 +323,6 @@ class AppPersistenceStore(context: Context) {
         put("isBanned", u.isBanned)
         put("banReason", u.banReason)
         put("bannedAt", u.bannedAt)
-        put("adminPasscode", u.adminPasscode)
         put("appointedDate", u.appointedDate)
         put("joinedDate", u.joinedDate)
         put("walletBalance", u.walletBalance)
@@ -351,6 +344,7 @@ class AppPersistenceStore(context: Context) {
         put("playerRole", u.playerRole)
         put("level", u.level)
         put("kudosCount", u.kudosCount)
+        put("kudosGiverKeys", JSONArray().apply { u.kudosGiverKeys.forEach { put(it) } })
         put("warningsCount", u.warningsCount)
         put("banExpiresAtMillis", u.banExpiresAtMillis)
         put("moderationWarningsCount", u.moderationWarningsCount)
@@ -385,7 +379,6 @@ class AppPersistenceStore(context: Context) {
         isBanned = o.optBoolean("isBanned", false),
         banReason = o.optNullableString("banReason"),
         bannedAt = o.optNullableString("bannedAt"),
-        adminPasscode = o.optNullableString("adminPasscode"),
         appointedDate = o.optNullableString("appointedDate"),
         joinedDate = o.optString("joinedDate", "আজ"),
         walletBalance = o.optInt("walletBalance", 0),
@@ -407,6 +400,16 @@ class AppPersistenceStore(context: Context) {
         playerRole = o.optString("playerRole", "সোলো প্লেয়ার"),
         level = o.optInt("level", 1),
         kudosCount = o.optInt("kudosCount", 0),
+        kudosGiverKeys = run {
+            val arr = o.optJSONArray("kudosGiverKeys")
+            val set = linkedSetOf<String>()
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    arr.optString(i).takeIf { it.isNotBlank() }?.let { set.add(it) }
+                }
+            }
+            set
+        },
         warningsCount = o.optInt("warningsCount", 0),
         banExpiresAtMillis = o.optNullableLong("banExpiresAtMillis"),
         moderationWarningsCount = o.optInt("moderationWarningsCount", 0),
@@ -688,28 +691,6 @@ class AppPersistenceStore(context: Context) {
         isJackpot = o.optBoolean("isJackpot", false)
     )
 
-    private fun encodeMission(m: DailyGamerMission) = JSONObject().apply {
-        put("id", m.id)
-        put("title", m.title)
-        put("description", m.description)
-        put("rewardAmount", m.rewardAmount)
-        put("isCompleted", m.isCompleted)
-        put("isClaimed", m.isClaimed)
-        put("iconEmoji", m.iconEmoji)
-        put("actionType", m.actionType)
-    }
-
-    private fun decodeMission(o: JSONObject) = DailyGamerMission(
-        id = o.getString("id"),
-        title = o.getString("title"),
-        description = o.getString("description"),
-        rewardAmount = o.getInt("rewardAmount"),
-        isCompleted = o.optBoolean("isCompleted", false),
-        isClaimed = o.optBoolean("isClaimed", false),
-        iconEmoji = o.optString("iconEmoji", "🎯"),
-        actionType = o.optString("actionType", "MATCH")
-    )
-
     private fun encodeCustomization(c: AppCustomization) = JSONObject().apply {
         put("appName", c.appName)
         put("appTagline", c.appTagline)
@@ -883,11 +864,13 @@ class AppPersistenceStore(context: Context) {
         put("text", m.text)
         put("timestampMillis", m.timestampMillis)
         put("timeLabel", m.timeLabel)
-        put("isPinnedAnnouncement", m.isPinnedAnnouncement)
+        put("isPinnedAnnouncement", false)
         put("replyToId", m.replyToId)
         put("replyToIgn", m.replyToIgn)
         put("replyToText", m.replyToText)
         put("reactions", JSONObject().apply { m.reactions.forEach { (k, v) -> put(k, v) } })
+        put("reactedByUsers", JSONObject().apply { m.reactedByUsers.forEach { (k, v) -> put(k, v) } })
+        put("channelId", m.channelId)
     }
 
     private fun decodeGlobalChat(o: JSONObject): GlobalChatMessage {
@@ -909,6 +892,16 @@ class AppPersistenceStore(context: Context) {
                 if (v > 0) reactionsMap[k] = v
             }
         }
+        val reactedByObj = o.optJSONObject("reactedByUsers")
+        val reactedByMap = linkedMapOf<String, String>()
+        if (reactedByObj != null) {
+            val keys = reactedByObj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val v = reactedByObj.optString(k, "")
+                if (k.isNotBlank() && v.isNotBlank()) reactedByMap[k] = v
+            }
+        }
         return GlobalChatMessage(
             id = o.optString("id", ""),
             senderUserId = o.optString("senderUserId", ""),
@@ -924,11 +917,13 @@ class AppPersistenceStore(context: Context) {
             text = o.optString("text", ""),
             timestampMillis = o.optLong("timestampMillis", System.currentTimeMillis()),
             timeLabel = o.optString("timeLabel", "এইমাত্র"),
-            isPinnedAnnouncement = o.optBoolean("isPinnedAnnouncement", false),
+            isPinnedAnnouncement = false,
             replyToId = o.optNullableString("replyToId"),
             replyToIgn = o.optNullableString("replyToIgn"),
             replyToText = o.optNullableString("replyToText"),
-            reactions = reactionsMap
+            reactions = reactionsMap,
+            reactedByUsers = reactedByMap,
+            channelId = o.optString("channelId", "GLOBAL").ifBlank { "GLOBAL" }
         )
     }
 
@@ -1213,20 +1208,24 @@ class AppPersistenceStore(context: Context) {
         put("isDefaultSaved", p.isDefaultSaved)
     }
 
-    private fun decodeMatchPreset(o: JSONObject) = MatchPresetTemplate(
-        id = o.optString("id", "preset_${System.currentTimeMillis()}"),
-        presetName = o.optString("presetName", "সেভড প্রিসেট"),
-        matchTitle = o.optString("matchTitle", "টুর্নামেন্ট ম্যাচ"),
-        category = enumValueOrDefault(o.optString("category"), GameCategory.BR_RANK),
-        matchType = enumValueOrDefault(o.optString("matchType"), MatchType.SOLO),
-        mapName = o.optString("mapName", "বারমুডা (Bermuda)"),
-        defaultStartsInMinutes = o.optInt("defaultStartsInMinutes", 20),
-        entryFee = o.optInt("entryFee", 10),
-        totalPrize = o.optInt("totalPrize", 80),
-        perKillPrize = o.optInt("perKillPrize", 1),
-        booyahPrize = o.optInt("booyahPrize", 30),
-        totalSlots = o.optInt("totalSlots", 48),
-        version = o.optString("version", "মোবাইল অনলি (No Emulator)"),
-        isDefaultSaved = o.optBoolean("isDefaultSaved", true)
-    )
+    private fun decodeMatchPreset(o: JSONObject): MatchPresetTemplate {
+        val decodedCat = enumValueOrDefault(o.optString("category"), GameCategory.BR_RANK)
+        val rawPerKill = o.optInt("perKillPrize", if (decodedCat == GameCategory.LONE_WOLF) 0 else 4)
+        return MatchPresetTemplate(
+            id = o.optString("id", "preset_${System.currentTimeMillis()}"),
+            presetName = o.optString("presetName", "সেভড প্রিসেট"),
+            matchTitle = o.optString("matchTitle", "টুর্নামেন্ট ম্যাচ"),
+            category = decodedCat,
+            matchType = enumValueOrDefault(o.optString("matchType"), MatchType.SOLO),
+            mapName = o.optString("mapName", "বারমুডা (Bermuda)"),
+            defaultStartsInMinutes = o.optInt("defaultStartsInMinutes", 20),
+            entryFee = o.optInt("entryFee", 10),
+            totalPrize = o.optInt("totalPrize", 100),
+            perKillPrize = if (decodedCat == GameCategory.LONE_WOLF) 0 else rawPerKill,
+            booyahPrize = o.optInt("booyahPrize", 50),
+            totalSlots = o.optInt("totalSlots", 48),
+            version = o.optString("version", "মোবাইল অনলি (No Emulator)"),
+            isDefaultSaved = o.optBoolean("isDefaultSaved", true)
+        )
+    }
 }

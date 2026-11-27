@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -112,6 +113,7 @@ import com.example.ui.components.OwnerControlDialog
 import kotlinx.coroutines.launch
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.PlayerProfileCardDialog
+import com.example.ui.components.hasActorGivenKudos
 import com.example.ui.components.toPlayerProfileCard
 import com.example.ui.components.RoomDetailsDialog
 import com.example.ui.components.RoomSlotGridDialog
@@ -122,6 +124,7 @@ import com.example.ui.components.WithdrawDialog
 import com.example.ui.components.getLogoDrawable
 import com.example.ui.screens.AccountScreen
 import com.example.ui.screens.AuthOnboardingScreen
+import com.example.ui.screens.FunAndGiveawayScreen
 import com.example.ui.screens.GlobalChatScreen
 import com.example.ui.screens.LeaderboardScreen
 import com.example.ui.screens.MatchesScreen
@@ -197,7 +200,6 @@ fun MainTournamentApp(
     val showWithdraw by viewModel.showWithdrawDialog.collectAsStateWithLifecycle()
     val showLuckySpin by viewModel.showLuckySpinDialog.collectAsStateWithLifecycle()
     val spinHistory by viewModel.spinHistory.collectAsStateWithLifecycle()
-    val dailyMissions by viewModel.dailyMissions.collectAsStateWithLifecycle()
     val dailyStreakInfo by viewModel.dailyStreakInfo.collectAsStateWithLifecycle()
     val showDailyStreak by viewModel.showDailyStreakDialog.collectAsStateWithLifecycle()
     val showSupportChat by viewModel.showSupportChatDialog.collectAsStateWithLifecycle()
@@ -263,10 +265,13 @@ fun MainTournamentApp(
     if (!isLoggedIn) {
         AuthOnboardingScreen(
             onRegister = { name, email, ign, uid, phone, bkash, pass ->
-                viewModel.register(name, ign, uid, phone, bkash, "avatar_1", pass, email)
+                viewModel.signUpWithEmailVerification(name, email, ign, uid, phone, bkash, "avatar_1", pass)
             },
             onLogin = { email, pass ->
-                viewModel.login(email, pass)
+                viewModel.loginWithEmailVerification(email, pass)
+            },
+            onResendVerification = { email, pass ->
+                viewModel.resendVerificationEmail(email, pass)
             },
             onRequestOtp = { phoneOrUid ->
                 viewModel.requestPasswordResetOtp(phoneOrUid)
@@ -294,8 +299,16 @@ fun MainTournamentApp(
 
     val pendingRequestsCount = remember(depositRequests, withdrawRequests, userProfile) {
         val isStaff = userProfile.role == UserRole.OWNER || userProfile.role == UserRole.ADMIN
-        val d = if (isStaff) depositRequests else depositRequests.filter { it.userPhone == userProfile.phone }
-        val w = if (isStaff) withdrawRequests else withdrawRequests.filter { it.userPhone == userProfile.phone }
+        val d = if (isStaff) {
+            depositRequests
+        } else {
+            depositRequests.filter { userProfile.phone.isNotBlank() && it.userPhone == userProfile.phone }
+        }
+        val w = if (isStaff) {
+            withdrawRequests
+        } else {
+            withdrawRequests.filter { userProfile.phone.isNotBlank() && it.userPhone == userProfile.phone }
+        }
         d.count { it.status == RequestStatus.PENDING } + w.count { it.status == RequestStatus.PENDING }
     }
 
@@ -629,7 +642,7 @@ fun MainTournamentApp(
                             contentDescription = "Tournament Matches"
                         )
                     },
-                    label = { Text(TournamentTab.MATCHES.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.MATCHES.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -650,7 +663,7 @@ fun MainTournamentApp(
                             contentDescription = "My Matches"
                         )
                     },
-                    label = { Text(TournamentTab.MY_MATCHES.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.MY_MATCHES.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -671,7 +684,7 @@ fun MainTournamentApp(
                             contentDescription = "bKash Wallet"
                         )
                     },
-                    label = { Text(TournamentTab.WALLET.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.WALLET.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -692,7 +705,7 @@ fun MainTournamentApp(
                             contentDescription = "Leaderboard"
                         )
                     },
-                    label = { Text(TournamentTab.LEADERBOARD.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.LEADERBOARD.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -703,7 +716,31 @@ fun MainTournamentApp(
                     modifier = Modifier.testTag("tab_leaderboard")
                 )
 
-                // Global Chat Tab (Alongside Leaderboard)
+                // Fun & Giveaway Tab (Placed right beside Global Chat)
+                NavigationBarItem(
+                    selected = currentTab == TournamentTab.FUN_GIVEAWAY,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.selectTab(TournamentTab.FUN_GIVEAWAY)
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.CardGiftcard,
+                            contentDescription = "Fun and Giveaway"
+                        )
+                    },
+                    label = { Text(TournamentTab.FUN_GIVEAWAY.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color.White,
+                        selectedTextColor = FlameYellow,
+                        indicatorColor = MaterialTheme.colorScheme.primary,
+                        unselectedIconColor = TextMuted,
+                        unselectedTextColor = TextMuted
+                    ),
+                    modifier = Modifier.testTag("tab_fun_giveaway")
+                )
+
+                // Global Chat Tab (Right alongside Fun/Giveaway)
                 NavigationBarItem(
                     selected = currentTab == TournamentTab.GLOBAL_CHAT,
                     onClick = {
@@ -725,7 +762,7 @@ fun MainTournamentApp(
                             )
                         }
                     },
-                    label = { Text(TournamentTab.GLOBAL_CHAT.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.GLOBAL_CHAT.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -746,7 +783,7 @@ fun MainTournamentApp(
                             contentDescription = "User Account"
                         )
                     },
-                    label = { Text(TournamentTab.ACCOUNT.banglaLabel, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                    label = { Text(TournamentTab.ACCOUNT.banglaLabel, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color.White,
                         selectedTextColor = FlameYellow,
@@ -1009,23 +1046,7 @@ fun MainTournamentApp(
                                 onBookSlotClick = { viewModel.openSlotBooking(it) },
                                 onViewRoomClick = { viewModel.openRoomDetails(it) },
                                 onViewSlotGridClick = { viewModel.openSlotGrid(it) },
-                                onDailySpinClick = { viewModel.openLuckySpin() },
-                                onSupportChatClick = { viewModel.openSupportChat() },
-                                onDailyStreakClick = { viewModel.openDailyStreak() },
-                                dailyMissions = dailyMissions,
-                                onClaimMission = { viewModel.claimMission(it) },
-                                appCustomization = appCustomization,
-                                bonusDrops = bonusDrops,
-                                communityPolls = communityPolls,
-                                triviaProgress = triviaProgress,
-                                currentActorKeys = currentActorKeys,
-                                onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
-                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
-                                onAnswerTrivia = { idx -> viewModel.answerDailyTrivia(idx) },
-                                giveaways = giveaways,
-                                reflexStats = reflexStats,
-                                onJoinGiveaway = { gwId -> viewModel.joinGiveaway(gwId) },
-                                onRecordReflexResult = { s, ms, combo -> viewModel.recordReflexGameResult(s, ms, combo) }
+                                appCustomization = appCustomization
                             )
                         }
 
@@ -1072,25 +1093,37 @@ fun MainTournamentApp(
                             )
                         }
 
+                        TournamentTab.FUN_GIVEAWAY -> {
+                            FunAndGiveawayScreen(
+                                onDailySpinClick = { viewModel.openLuckySpin() },
+                                onDailyStreakClick = { viewModel.openDailyStreak() },
+                                onSupportChatClick = { viewModel.openSupportChat() },
+                                bonusDrops = bonusDrops,
+                                communityPolls = communityPolls,
+                                triviaProgress = triviaProgress,
+                                currentActorKeys = currentActorKeys,
+                                onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
+                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
+                                onAnswerTrivia = { idx -> viewModel.answerDailyTrivia(idx) },
+                                giveaways = giveaways,
+                                reflexStats = reflexStats,
+                                onJoinGiveaway = { gwId -> viewModel.joinGiveaway(gwId) },
+                                onRecordReflexResult = { s, ms, combo -> viewModel.recordReflexGameResult(s, ms, combo) }
+                            )
+                        }
+
                         TournamentTab.GLOBAL_CHAT -> {
                             GlobalChatScreen(
                                 messages = globalChatMessages,
                                 currentUser = userProfile,
                                 registeredUsers = registeredUsers,
-                                onSendMessage = { text, replyToId, pin ->
-                                    viewModel.sendGlobalChatMessage(text, replyToId, pin)
-                                },
-                                onTogglePin = { msgId -> viewModel.togglePinGlobalChatMessage(msgId) },
-                                onDeleteMessage = { msgId -> viewModel.deleteGlobalChatMessage(msgId) },
-                                onReactMessage = { msgId, emoji -> viewModel.reactToGlobalChatMessage(msgId, emoji) },
-                                onPlayerProfileClick = { selectedPlayerProfileCard = it },
-                                bonusDrops = bonusDrops,
-                                communityPolls = communityPolls,
                                 currentActorKeys = currentActorKeys,
-                                onClaimBonusDrop = { viewModel.claimBonusGiftDrop(it) },
-                                onVoteCommunityPoll = { pollId, optionId -> viewModel.voteCommunityPoll(pollId, optionId) },
-                                giveaways = giveaways,
-                                onJoinGiveaway = { gwId -> viewModel.joinGiveaway(gwId) }
+                                onSendMessage = { text, replyToId, channelId ->
+                                    viewModel.sendGlobalChatMessage(text, replyToId, channelId)
+                                },
+                                onDeleteMessage = { msgId -> viewModel.deleteGlobalChatMessage(msgId) },
+                                onReactMessage = { msgId, reactKey -> viewModel.reactToGlobalChatMessage(msgId, reactKey) },
+                                onPlayerProfileClick = { selectedPlayerProfileCard = it }
                             )
                         }
 
@@ -1099,11 +1132,14 @@ fun MainTournamentApp(
                                 userProfile = userProfile,
                                 walletBalance = walletBalance,
                                 onEditProfileClick = { viewModel.openEditProfile() },
-                                onLogin = { phoneOrEmail, password ->
-                                    viewModel.login(phoneOrEmail, password)
+                                onLogin = { email, password ->
+                                    viewModel.loginWithEmailVerification(email, password)
                                 },
-                                onRegister = { name, ign, uid, phone, bkash, avatarId, pass ->
-                                    viewModel.register(name, ign, uid, phone, bkash, avatarId, pass)
+                                onRegister = { name, email, ign, uid, phone, bkash, avatarId, pass ->
+                                    viewModel.signUpWithEmailVerification(name, email, ign, uid, phone, bkash, avatarId, pass)
+                                },
+                                onResendVerification = { email, password ->
+                                    viewModel.resendVerificationEmail(email, password)
                                 },
                                 onRequestOtp = { phoneOrUid ->
                                     viewModel.requestPasswordResetOtp(phoneOrUid)
@@ -1433,14 +1469,12 @@ fun MainTournamentApp(
             depositRequests = depositRequests,
             withdrawRequests = withdrawRequests,
             onDismiss = { viewModel.closeOwnerPanel() },
-            onClaimOwner = { key -> viewModel.claimOwnerRole(key) },
             onBanUser = { target, reason -> viewModel.banUser(target, reason) },
             onUnbanUser = { target -> viewModel.unbanUser(target) },
-            onPromoteToAdmin = { target, passcode, name, ign, uid ->
-                viewModel.promoteToAdmin(target, passcode, name, ign, uid)
+            onPromoteToAdmin = { target, name, ign, uid ->
+                viewModel.promoteToAdmin(target, name, ign, uid)
             },
             onDemoteAdmin = { target -> viewModel.demoteAdmin(target) },
-            onUpdateMasterPin = { pin -> viewModel.updateMasterOwnerPin(pin) },
             onCancelSlotAndRefund = { bookingId ->
                 viewModel.cancelSlotBookingAndRefund(bookingId)
             },
@@ -1596,6 +1630,7 @@ fun MainTournamentApp(
                 }
             } else null,
             onGiveKudos = { targetKey -> viewModel.giveProfileKudos(targetKey) },
+            hasGivenKudos = hasActorGivenKudos(effectiveProfileData, registeredUsers, userProfile),
             userProfileForAppeal = userProfile,
             badgeAppeals = badgeAppeals,
             onSubmitBadgeAppeal = { badge, note -> viewModel.submitBadgeAppeal(badge, note) },

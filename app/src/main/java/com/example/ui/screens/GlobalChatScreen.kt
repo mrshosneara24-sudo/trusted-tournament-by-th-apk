@@ -35,10 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -68,327 +64,217 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.AppUser
 import com.example.model.BadgeType
-import com.example.model.BonusGiftDrop
-import com.example.model.GiveawayEvent
-import com.example.model.GiveawayStatus
+import com.example.model.ChatChannel
 import com.example.model.GlobalChatMessage
-import com.example.model.LiveCommunityPoll
 import com.example.model.UserProfile
 import com.example.model.UserRole
-import com.example.ui.components.LiveBonusDropBannerCard
-import com.example.ui.components.LiveCommunityPollCard
-import com.example.ui.components.LiveMegaGiveawayCard
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.getBadgeDrawableRes
 import com.example.ui.components.toPlayerProfileCard
-import com.example.ui.theme.DarkBackground
-import com.example.ui.theme.DarkBorder
-import com.example.ui.theme.DarkCard
-import com.example.ui.theme.DarkElevated
-import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DisplayFontFamily
-import com.example.ui.theme.FireRed
-import com.example.ui.theme.FlameCyan
-import com.example.ui.theme.FlameOrange
-import com.example.ui.theme.FlameYellow
-import com.example.ui.theme.NeonPink
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.VictoryGreen
-import com.example.ui.theme.WaterBlue
+import com.example.ui.theme.MonoFontFamily
 
-private enum class GlobalChatFilter(val label: String) {
-    ALL("💬 সবাই"),
-    STAFF("👑 ওনার ও অ্যাডমিন"),
-    PINNED("📌 পিনড")
-}
+private val DiscordCanvas = Color(0xFF16181D)
+private val DiscordHeaderBg = Color(0xFF202228)
+private val DiscordChannelBarBg = Color(0xFF272A32)
+private val DiscordDivider = Color(0xFF2F323B)
+private val DiscordComposerBg = Color(0xFF2B2E36)
+private val DiscordMutedText = Color(0xFF9BA1AC)
 
-private val quickChatChips = listOf(
-    "GG 🔥",
-    "রুম কোড কখন?",
-    "কেউ ডুও/স্কোয়াড খেলবে?",
-    "হ্যালো সবাই 👋",
-    "শুভকামনা 🏆"
+private val OwnerRed = Color(0xFFEF4444)
+private val OwnerBlack = Color(0xFF050507)
+private val AdminRed = Color(0xFFDC2626)
+
+private val quickChatPhrases = listOf(
+    "GG",
+    "রুম কোড কখন দিবে?",
+    "কেউ ডুও বা স্কোয়াড খেলবে?",
+    "হ্যালো সবাই",
+    "বেস্ট অব লাক"
 )
 
-private val quickReactionEmojis = listOf("🔥", "👍", "😂", "🏆")
+private val reactionOptions = listOf("GG", "WIN", "+1")
 
 @Composable
 fun GlobalChatScreen(
     messages: List<GlobalChatMessage>,
     currentUser: UserProfile,
     registeredUsers: List<AppUser>,
-    onSendMessage: (text: String, replyToId: String?, pinAnnouncement: Boolean) -> Pair<Boolean, String>,
-    onTogglePin: (messageId: String) -> Pair<Boolean, String>,
-    onDeleteMessage: (messageId: String) -> Pair<Boolean, String>,
-    onReactMessage: (messageId: String, emoji: String) -> Boolean,
-    onPlayerProfileClick: (PlayerProfileCardData) -> Unit,
-    bonusDrops: List<BonusGiftDrop> = emptyList(),
-    communityPolls: List<LiveCommunityPoll> = emptyList(),
     currentActorKeys: Set<String> = emptySet(),
-    onClaimBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
-    onVoteCommunityPoll: (String, String) -> Pair<Boolean, String> = { _, _ -> false to "" },
-    giveaways: List<GiveawayEvent> = emptyList(),
-    onJoinGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
+    onSendMessage: (text: String, replyToId: String?, channelId: String) -> Pair<Boolean, String>,
+    onDeleteMessage: (messageId: String) -> Pair<Boolean, String>,
+    onReactMessage: (messageId: String, reactKey: String) -> Boolean = { _, _ -> false },
+    onPlayerProfileClick: (PlayerProfileCardData) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(GlobalChatFilter.ALL) }
+    var selectedChannel by remember { mutableStateOf(ChatChannel.GLOBAL) }
     var replyingTo by remember { mutableStateOf<GlobalChatMessage?>(null) }
-    var pinAsAnnouncement by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     val isStaff = currentUser.role == UserRole.OWNER || currentUser.role == UserRole.ADMIN
-    val pinnedMessage = remember(messages) { messages.lastOrNull { it.isPinnedAnnouncement } }
 
-    val visibleMessages = remember(messages, selectedFilter) {
-        when (selectedFilter) {
-            GlobalChatFilter.ALL -> messages
-            GlobalChatFilter.STAFF -> messages.filter {
-                it.senderRole == UserRole.OWNER || it.senderRole == UserRole.ADMIN
-            }
-            GlobalChatFilter.PINNED -> messages.filter { it.isPinnedAnnouncement }
+    val channelMessages = remember(messages, selectedChannel) {
+        messages.filter { msg ->
+            val msgChannel = ChatChannel.entries.firstOrNull {
+                it.id.equals(msg.channelId, ignoreCase = true)
+            } ?: ChatChannel.GLOBAL
+            msgChannel == selectedChannel
         }
     }
 
-    LaunchedEffect(visibleMessages.size) {
-        if (visibleMessages.isNotEmpty()) {
-            listState.animateScrollToItem(visibleMessages.size - 1)
+    LaunchedEffect(channelMessages.size, selectedChannel) {
+        if (channelMessages.isNotEmpty()) {
+            listState.animateScrollToItem(channelMessages.size - 1)
         }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(DiscordCanvas)
             .imePadding()
             .testTag("global_chat_screen")
     ) {
-        // 1. Top Community Global Chat Header + Filter Chips
-        Surface(
-            color = DarkSurface,
-            border = BorderStroke(1.dp, DarkBorder),
-            modifier = Modifier.fillMaxWidth()
+        // 1. Upgraded Discord-Style Server Header + Category Channel Switcher
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DiscordHeaderBg)
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Color(0xFF230E0A), DarkSurface, Color(0xFF061E2E))
-                        )
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(listOf(FireRed, WaterBlue))
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Forum,
-                                contentDescription = "Global Chat",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "গ্লোবাল কমিউনিটি চ্যাট",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontFamily = DisplayFontFamily,
-                                    fontWeight = FontWeight.Black
-                                ),
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "ওনার, অ্যাডমিন ও সকল মেম্বারের উন্মুক্ত চ্যাট",
-                                fontSize = 11.sp,
-                                color = FlameCyan,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = VictoryGreen.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, VictoryGreen.copy(alpha = 0.55f))
+                        shape = RoundedCornerShape(8.dp),
+                        color = DiscordChannelBarBg,
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(VictoryGreen)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = "${registeredUsers.size.coerceAtLeast(1)} মেম্বার",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = VictoryGreen
-                            )
-                        }
-                    }
-                }
-
-                // Filter Chips Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    GlobalChatFilter.entries.forEach { filter ->
-                        val selected = selectedFilter == filter
-                        FilterChip(
-                            selected = selected,
-                            onClick = { selectedFilter = filter },
-                            label = {
-                                Text(
-                                    text = filter.label,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = WaterBlue,
-                                selectedLabelColor = Color.White,
-                                containerColor = DarkCard,
-                                labelColor = TextSecondary
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = selected,
-                                borderColor = DarkBorder,
-                                selectedBorderColor = FlameYellow
-                            ),
-                            modifier = Modifier.testTag("global_chat_filter_${filter.name.lowercase()}")
+                        Text(
+                            text = "#",
+                            fontFamily = MonoFontFamily,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                         )
                     }
-                }
-            }
-        }
-
-        // 2. Sticky Pinned Announcement Banner (if any)
-        pinnedMessage?.let { pinned ->
-            Surface(
-                color = Color(0xFF281907),
-                border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.65f)),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .testTag("global_chat_pinned_banner")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PushPin,
-                        contentDescription = "Pinned",
-                        tint = FlameYellow,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "📌 পিনড ঘোষণা • ${pinned.senderIgn} (${pinned.senderRole.banglaTitle})",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            color = FlameYellow,
+                            text = selectedChannel.channelName.removePrefix("# ").trim(),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = DisplayFontFamily,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = pinned.text,
+                            text = selectedChannel.description,
                             fontSize = 11.sp,
-                            color = Color.White,
-                            maxLines = 2,
+                            color = DiscordMutedText,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (isStaff) {
-                        IconButton(
-                            onClick = { onTogglePin(pinned.id) },
-                            modifier = Modifier.size(32.dp)
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = DiscordChannelBarBg,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF22C55E))
+                        )
+                        Text(
+                            text = "${registeredUsers.size.coerceAtLeast(1)} অনলাইন",
+                            fontSize = 10.sp,
+                            fontFamily = MonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // Global + Category Channel Tabs (Everyone can chat; zero emojis; zero pinned tabs)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                ChatChannel.entries.forEach { channel ->
+                    val isSelected = selectedChannel == channel
+                    val msgCount = messages.count { msg ->
+                        (ChatChannel.entries.firstOrNull { it.id.equals(msg.channelId, ignoreCase = true) } ?: ChatChannel.GLOBAL) == channel
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) Color(0xFF343844) else DiscordChannelBarBg.copy(alpha = 0.65f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) Color.White.copy(alpha = 0.6f) else DiscordDivider
+                        ),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                selectedChannel = channel
+                                replyingTo = null
+                            }
+                            .testTag("chat_channel_${channel.id.lowercase()}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Unpin",
-                                tint = FlameYellow,
-                                modifier = Modifier.size(15.dp)
+                            Text(
+                                text = channel.channelName,
+                                fontSize = 11.sp,
+                                fontFamily = MonoFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else DiscordMutedText
                             )
+                            if (msgCount > 0) {
+                                Text(
+                                    text = "$msgCount",
+                                    fontSize = 9.sp,
+                                    fontFamily = MonoFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else DiscordMutedText
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Live Giveaways, Bonus Drops & Polls directly inside Global Chat
-        val activeChatGiveaways = giveaways.filter { it.status == GiveawayStatus.LIVE }
-        val activeChatDrops = bonusDrops.filter { it.active }
-        val activeChatPolls = communityPolls.filter { it.active }
-        if (activeChatGiveaways.isNotEmpty() || activeChatDrops.isNotEmpty() || activeChatPolls.isNotEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                activeChatGiveaways.take(1).forEach { gw ->
-                    LiveMegaGiveawayCard(
-                        giveaway = gw,
-                        currentActorKeys = currentActorKeys,
-                        onJoinGiveaway = onJoinGiveaway
-                    )
-                }
-                activeChatDrops.take(1).forEach { drop ->
-                    LiveBonusDropBannerCard(
-                        drop = drop,
-                        hasClaimed = currentActorKeys.any { it in drop.claimedByKeys },
-                        onClaimClick = onClaimBonusDrop
-                    )
-                }
-                activeChatPolls.take(1).forEach { poll ->
-                    LiveCommunityPollCard(
-                        poll = poll,
-                        hasVoted = currentActorKeys.any { it in poll.votedByKeys },
-                        onVote = onVoteCommunityPoll
-                    )
-                }
-            }
-        }
+        HorizontalDivider(color = DiscordDivider, thickness = 1.dp)
 
-        // 3. Messages Feed
-        if (visibleMessages.isEmpty()) {
+        // 2. Plain Text Discord Messages Feed (no card embeds, no emojis, no pinned messages)
+        if (channelMessages.isEmpty()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -400,20 +286,20 @@ fun GlobalChatScreen(
                     Icon(
                         imageVector = Icons.Filled.Forum,
                         contentDescription = null,
-                        tint = FlameCyan.copy(alpha = 0.7f),
-                        modifier = Modifier.size(48.dp)
+                        tint = DiscordMutedText,
+                        modifier = Modifier.size(40.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "এই ফিল্টারে কোনো মেসেজ নেই",
+                        text = "${selectedChannel.channelName} চ্যানেলে স্বাগতম",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "প্রথম মেসেজ পাঠিয়ে সবার সাথে আড্ডা শুরু করুন!",
+                        text = "এই চ্যানেলে প্রথম মেসেজ পাঠিয়ে আলোচনা শুরু করুন।",
                         fontSize = 12.sp,
-                        color = TextSecondary
+                        color = DiscordMutedText
                     )
                 }
             }
@@ -424,10 +310,9 @@ fun GlobalChatScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .testTag("global_chat_list"),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                items(visibleMessages, key = { it.id }) { msg ->
+                items(channelMessages, key = { it.id }) { msg ->
                     val liveUser = registeredUsers.firstOrNull {
                         (msg.senderPhone.isNotBlank() && it.phone == msg.senderPhone) ||
                             (msg.senderUid.isNotBlank() && msg.senderUid != "N/A" && it.uid == msg.senderUid) ||
@@ -440,8 +325,11 @@ fun GlobalChatScreen(
                     val resolvedBadges = liveUser?.effectiveBadges ?: msg.senderBadges
                     val isOwnMessage = (currentUser.phone.isNotBlank() && msg.senderPhone == currentUser.phone) ||
                         (currentUser.uid.isNotBlank() && msg.senderUid == currentUser.uid)
+                    val userSelectedReact = currentActorKeys.firstNotNullOfOrNull { key ->
+                        msg.reactedByUsers[key]
+                    }
 
-                    GlobalChatMessageCard(
+                    GlobalChatDiscordMessageRow(
                         message = msg,
                         resolvedRole = resolvedRole,
                         resolvedIgn = resolvedIgn,
@@ -450,268 +338,213 @@ fun GlobalChatScreen(
                         resolvedBadges = resolvedBadges,
                         isOwnMessage = isOwnMessage,
                         canModerate = isStaff,
+                        userSelectedReact = userSelectedReact,
                         onSenderClick = {
                             onPlayerProfileClick(msg.toPlayerProfileCard(registeredUsers, currentUser))
                         },
                         onReplyClick = { replyingTo = msg },
-                        onReactClick = { emoji -> onReactMessage(msg.id, emoji) },
-                        onPinClick = { onTogglePin(msg.id) },
-                        onDeleteClick = { onDeleteMessage(msg.id) }
+                        onDeleteClick = { onDeleteMessage(msg.id) },
+                        onReactClick = { reactKey -> onReactMessage(msg.id, reactKey) }
                     )
                 }
             }
         }
 
-        // 4. Bottom Composer Bar
-        HorizontalDivider(color = DarkBorder)
-        Surface(
-            color = DarkSurface,
-            modifier = Modifier.fillMaxWidth()
+        // 3. Upgraded Discord-Style Composer Bar
+        HorizontalDivider(color = DiscordDivider, thickness = 1.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DiscordHeaderBg)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (currentUser.isBanned) {
-                    Surface(
-                        color = Color(0xFF2B0D09),
-                        border = BorderStroke(1.dp, Color(0xFFEF4444)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+            if (currentUser.isBanned) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = OwnerRed,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "আপনার একাউন্ট ব্যান করা আছে, তাই চ্যাটে মেসেজ পাঠানো বন্ধ।",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else if (currentUser.isChatMuted && currentUser.role != UserRole.OWNER) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .testTag("global_chat_muted_banner"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = "Chat Muted",
+                        tint = OwnerRed,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "আপনার গ্লোবাল চ্যাট সাময়িকভাবে মিউট করা হয়েছে! (${currentUser.chatMuteReason ?: "চ্যাট নীতিমালা ভঙ্গ"})",
+                        fontSize = 11.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else {
+                // Plain Reply Preview Strip
+                AnimatedVisibility(visible = replyingTo != null) {
+                    replyingTo?.let { reply ->
                         Row(
-                            modifier = Modifier.padding(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(DiscordChannelBarBg, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Warning,
+                                imageVector = Icons.AutoMirrored.Filled.Reply,
                                 contentDescription = null,
-                                tint = Color(0xFFEF4444),
-                                modifier = Modifier.size(18.dp)
+                                tint = DiscordMutedText,
+                                modifier = Modifier.size(14.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "আপনার একাউন্ট ব্যান করা আছে, তাই গ্লোবাল চ্যাটে মেসেজ পাঠানো বন্ধ।",
-                                fontSize = 11.sp,
+                                text = "Reply @${reply.senderIgn}: ${reply.text}",
+                                fontSize = 10.sp,
                                 color = Color.White,
-                                fontWeight = FontWeight.SemiBold
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
-                        }
-                    }
-                } else if (currentUser.isChatMuted && currentUser.role != UserRole.OWNER) {
-                    Surface(
-                        color = Color(0xFF2B0D09),
-                        border = BorderStroke(1.dp, FlameOrange),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("global_chat_muted_banner")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Warning,
-                                contentDescription = "Chat Muted",
-                                tint = FlameOrange,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "🔇 আপনার গ্লোবাল চ্যাট সাময়িকভাবে মিউট করা হয়েছে! (${currentUser.chatMuteReason ?: "চ্যাট নীতিমালা ভঙ্গ"})",
-                                fontSize = 11.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                } else {
-                    // Reply preview strip
-                    AnimatedVisibility(visible = replyingTo != null) {
-                        replyingTo?.let { reply ->
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = DarkCard,
-                                border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.55f)),
-                                modifier = Modifier.fillMaxWidth()
+                            IconButton(
+                                onClick = { replyingTo = null },
+                                modifier = Modifier.size(28.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Reply,
-                                        contentDescription = null,
-                                        tint = FlameCyan,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "রিপ্লাই: ${reply.senderIgn}",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = FlameCyan
-                                        )
-                                        Text(
-                                            text = reply.text,
-                                            fontSize = 10.sp,
-                                            color = TextSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { replyingTo = null },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Close,
-                                            contentDescription = "Cancel Reply",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Quick Phrases + Owner/Admin Pin Toggle
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isStaff) {
-                            item {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (pinAsAnnouncement) FlameYellow else DarkCard,
-                                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.7f)),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable { pinAsAnnouncement = !pinAsAnnouncement }
-                                        .testTag("global_chat_pin_toggle")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.PushPin,
-                                            contentDescription = null,
-                                            tint = if (pinAsAnnouncement) Color.Black else FlameYellow,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = if (pinAsAnnouncement) "📌 পিন সক্রিয়" else "📌 পিন ঘোষণা",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = if (pinAsAnnouncement) Color.Black else FlameYellow
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        items(quickChatChips) { chipText ->
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = DarkCard,
-                                border = BorderStroke(1.dp, DarkBorder),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .clickable {
-                                        val (ok, _) = onSendMessage(chipText, replyingTo?.id, pinAsAnnouncement)
-                                        if (ok) {
-                                            replyingTo = null
-                                            pinAsAnnouncement = false
-                                        }
-                                    }
-                            ) {
-                                Text(
-                                    text = chipText,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextPrimary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    // Input Text Field + Send Button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            placeholder = {
-                                val rolePrefix = when (currentUser.role) {
-                                    UserRole.OWNER -> "👑 ওনার হিসেবে লিখুন..."
-                                    UserRole.ADMIN -> "🛡️ অ্যাডমিন হিসেবে লিখুন..."
-                                    UserRole.PLAYER -> "সবার সাথে চ্যাট করুন..."
-                                }
-                                Text(text = rolePrefix, fontSize = 12.sp, color = TextMuted)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("global_chat_input"),
-                            maxLines = 3,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = when (currentUser.role) {
-                                    UserRole.OWNER -> FlameYellow
-                                    UserRole.ADMIN -> FlameOrange
-                                    UserRole.PLAYER -> WaterBlue
-                                },
-                                unfocusedBorderColor = DarkBorder,
-                                focusedContainerColor = DarkCard,
-                                unfocusedContainerColor = DarkCard
-                            ),
-                            shape = RoundedCornerShape(22.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Surface(
-                            onClick = {
-                                if (inputText.isNotBlank()) {
-                                    val msgToSend = inputText
-                                    val (ok, _) = onSendMessage(msgToSend, replyingTo?.id, pinAsAnnouncement)
-                                    if (ok) {
-                                        inputText = ""
-                                        replyingTo = null
-                                        pinAsAnnouncement = false
-                                    }
-                                }
-                            },
-                            shape = CircleShape,
-                            color = when (currentUser.role) {
-                                UserRole.OWNER -> FlameYellow
-                                UserRole.ADMIN -> FlameOrange
-                                UserRole.PLAYER -> WaterBlue
-                            },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("global_chat_send_btn")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send Global Chat Message",
-                                    tint = if (currentUser.role == UserRole.PLAYER) Color.White else Color.Black,
-                                    modifier = Modifier.size(20.dp)
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Cancel Reply",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
+                        }
+                    }
+                }
+
+                // Quick Text Phrases (plain text, zero emojis, zero pin toggles)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(quickChatPhrases) { phrase ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = DiscordChannelBarBg,
+                            border = BorderStroke(1.dp, DiscordDivider),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    val (ok, _) = onSendMessage(
+                                        phrase,
+                                        replyingTo?.id,
+                                        selectedChannel.id
+                                    )
+                                    if (ok) {
+                                        replyingTo = null
+                                    }
+                                }
+                        ) {
+                            Text(
+                                text = phrase,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Input Field + Send Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder = {
+                            Text(
+                                text = "Message ${selectedChannel.channelName}",
+                                fontSize = 12.sp,
+                                color = DiscordMutedText
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("global_chat_input"),
+                        maxLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            unfocusedBorderColor = DiscordDivider,
+                            focusedContainerColor = DiscordComposerBg,
+                            unfocusedContainerColor = DiscordComposerBg
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Surface(
+                        onClick = {
+                            if (inputText.isNotBlank()) {
+                                val msgToSend = inputText
+                                val (ok, _) = onSendMessage(
+                                    msgToSend,
+                                    replyingTo?.id,
+                                    selectedChannel.id
+                                )
+                                if (ok) {
+                                    inputText = ""
+                                    replyingTo = null
+                                }
+                            }
+                        },
+                        shape = CircleShape,
+                        color = when (currentUser.role) {
+                            UserRole.OWNER -> OwnerRed
+                            UserRole.ADMIN -> AdminRed
+                            UserRole.PLAYER -> Color.White
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("global_chat_send_btn")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send Global Chat Message",
+                                tint = when (currentUser.role) {
+                                    UserRole.OWNER -> OwnerBlack
+                                    UserRole.ADMIN -> Color.White
+                                    UserRole.PLAYER -> OwnerBlack
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -722,7 +555,7 @@ fun GlobalChatScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GlobalChatMessageCard(
+private fun GlobalChatDiscordMessageRow(
     message: GlobalChatMessage,
     resolvedRole: UserRole,
     resolvedIgn: String,
@@ -731,27 +564,12 @@ private fun GlobalChatMessageCard(
     resolvedBadges: List<BadgeType>,
     isOwnMessage: Boolean,
     canModerate: Boolean,
+    userSelectedReact: String?,
     onSenderClick: () -> Unit,
     onReplyClick: () -> Unit,
-    onReactClick: (String) -> Unit,
-    onPinClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onReactClick: (String) -> Unit
 ) {
-    val cardBorderColor = when {
-        message.isPinnedAnnouncement -> FlameYellow
-        resolvedRole == UserRole.OWNER -> FlameYellow.copy(alpha = 0.7f)
-        resolvedRole == UserRole.ADMIN -> FlameOrange.copy(alpha = 0.65f)
-        isOwnMessage -> NeonPink.copy(alpha = 0.6f)
-        else -> DarkBorder
-    }
-
-    val cardBgColor = when {
-        resolvedRole == UserRole.OWNER -> Color(0xFF1F1808)
-        resolvedRole == UserRole.ADMIN -> Color(0xFF11192B)
-        isOwnMessage -> Color(0xFF0E1B2E)
-        else -> DarkCard
-    }
-
     val displayBadges = remember(resolvedBadges, resolvedRole) {
         resolvedBadges.filterNot { badge ->
             (resolvedRole == UserRole.OWNER && badge == BadgeType.GREEN_VERIFIED) ||
@@ -759,91 +577,124 @@ private fun GlobalChatMessageCard(
         }
     }
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = cardBgColor,
-        border = BorderStroke(1.dp, cardBorderColor),
+    // Strict role-based colors:
+    // Owner = Red and Black | Admin = Red and White | Player = White only
+    val nameColor = when (resolvedRole) {
+        UserRole.OWNER -> OwnerRed
+        UserRole.ADMIN -> Color.White
+        UserRole.PLAYER -> Color.White
+    }
+    val messageColor = when (resolvedRole) {
+        UserRole.OWNER -> Color(0xFFFCA5A5)
+        UserRole.ADMIN -> Color.White
+        UserRole.PLAYER -> Color.White
+    }
+    val avatarBorderColor = when (resolvedRole) {
+        UserRole.OWNER -> OwnerRed
+        UserRole.ADMIN -> AdminRed
+        UserRole.PLAYER -> Color.White.copy(alpha = 0.65f)
+    }
+    val rowAccentStripe = when (resolvedRole) {
+        UserRole.OWNER -> OwnerRed
+        UserRole.ADMIN -> AdminRed
+        UserRole.PLAYER -> Color.Transparent
+    }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("global_chat_msg_${message.id}")
+            .background(
+                when (resolvedRole) {
+                    UserRole.OWNER -> OwnerBlack.copy(alpha = 0.6f)
+                    UserRole.ADMIN -> Color(0xFF1F1619)
+                    UserRole.PLAYER -> Color.Transparent
+                }
+            )
+            .testTag("global_chat_msg_${message.id}"),
+        verticalAlignment = Alignment.Top
     ) {
+        if (resolvedRole != UserRole.PLAYER) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(64.dp)
+                    .background(rowAccentStripe)
+            )
+        }
+
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .weight(1f)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Sender Header Row (Direct Clickable PFP + IGN + Role Chip + Badges beside Name)
+            // Optional plain-text Discord reply line (no embed box, no emoji)
+            if (!message.replyToIgn.isNullOrBlank() && !message.replyToText.isNullOrBlank()) {
+                Text(
+                    text = "Reply @${message.replyToIgn}: ${message.replyToText}",
+                    fontSize = 10.sp,
+                    color = DiscordMutedText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 46.dp, bottom = 3.dp)
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                // Clickable Avatar
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .clickable { onSenderClick() }
+                        .testTag("global_chat_pfp_${message.id}"),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Direct Clickable Profile Picture (opens full Profile Card)
-                    Box(
+                    ProfileAvatarImage(
+                        avatarId = resolvedAvatarId,
+                        customPfpUri = resolvedCustomPfpUri,
+                        role = resolvedRole,
+                        contentDescription = "$resolvedIgn প্রোফাইল দেখুন",
+                        showGifBadge = false,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
-                            .clickable { onSenderClick() }
-                            .testTag("global_chat_pfp_${message.id}"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ProfileAvatarImage(
-                            avatarId = resolvedAvatarId,
-                            customPfpUri = resolvedCustomPfpUri,
-                            role = resolvedRole,
-                            contentDescription = "$resolvedIgn প্রোফাইল দেখুন",
-                            showGifBadge = false,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .border(
-                                    width = 1.8.dp,
-                                    color = when (resolvedRole) {
-                                        UserRole.OWNER -> FlameYellow
-                                        UserRole.ADMIN -> FlameOrange
-                                        UserRole.PLAYER -> FlameCyan
-                                    },
-                                    shape = CircleShape
-                                )
-                        )
-                    }
+                            .border(1.5.dp, avatarBorderColor, CircleShape)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onSenderClick() }
-                            .padding(vertical = 2.dp)
-                            .testTag("global_chat_sender_${message.id}"),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Header: Sender Name + Role Pill + Colored Badges beside name + Timestamp
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
                     ) {
-                        // IGN + Role (Icon + Name) + Badges right beside the Name
                         FlowRow(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSenderClick() }
+                                .testTag("global_chat_sender_${message.id}"),
                             horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Text(
                                 text = resolvedIgn,
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.Black,
-                                color = when (resolvedRole) {
-                                    UserRole.OWNER -> FlameYellow
-                                    UserRole.ADMIN -> FlameOrange
-                                    UserRole.PLAYER -> Color.White
-                                },
+                                fontWeight = FontWeight.Bold,
+                                color = nameColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.align(Alignment.CenterVertically)
                             )
 
-                            // Role Chip with Official Icon + Role Name
                             GlobalChatRoleTag(
                                 role = resolvedRole,
                                 modifier = Modifier
@@ -851,16 +702,16 @@ private fun GlobalChatMessageCard(
                                     .testTag("global_chat_role_${message.id}")
                             )
 
-                            // All earned badges: V_BADGE & PRO_PLAYER icon-only; all other badges show icon + badge name
+                            // Discord-style Badges beside Name (zero emojis; uses badge hexColor)
                             displayBadges.forEach { badge ->
                                 val isIconOnlyBadge = badge == BadgeType.V_BADGE || badge == BadgeType.PRO_PLAYER
                                 val drawableRes = getBadgeDrawableRes(badge)
                                 val badgeAccent = Color(badge.hexColor)
                                 if (isIconOnlyBadge) {
                                     Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = badgeAccent.copy(alpha = 0.16f),
-                                        border = BorderStroke(1.dp, badgeAccent.copy(alpha = 0.7f)),
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = badgeAccent.copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, badgeAccent),
                                         modifier = Modifier
                                             .align(Alignment.CenterVertically)
                                             .testTag("global_chat_badge_icon_${message.id}_${badge.name}")
@@ -874,27 +725,29 @@ private fun GlobalChatMessageCard(
                                                     painter = painterResource(id = drawableRes),
                                                     contentDescription = badge.title,
                                                     contentScale = ContentScale.Fit,
-                                                    modifier = Modifier.size(14.dp)
+                                                    modifier = Modifier.size(13.dp)
                                                 )
                                             } else {
-                                                Text(
-                                                    text = badge.iconEmoji,
-                                                    fontSize = 11.sp
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(7.dp)
+                                                        .clip(CircleShape)
+                                                        .background(badgeAccent)
                                                 )
                                             }
                                         }
                                     }
                                 } else {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = badgeAccent.copy(alpha = 0.16f),
-                                        border = BorderStroke(1.dp, badgeAccent.copy(alpha = 0.7f)),
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = badgeAccent.copy(alpha = 0.22f),
+                                        border = BorderStroke(1.dp, badgeAccent),
                                         modifier = Modifier
                                             .align(Alignment.CenterVertically)
                                             .testTag("global_chat_badge_${message.id}_${badge.name}")
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
@@ -903,19 +756,21 @@ private fun GlobalChatMessageCard(
                                                     painter = painterResource(id = drawableRes),
                                                     contentDescription = null,
                                                     contentScale = ContentScale.Fit,
-                                                    modifier = Modifier.size(13.dp)
+                                                    modifier = Modifier.size(12.dp)
                                                 )
                                             } else {
-                                                Text(
-                                                    text = badge.iconEmoji,
-                                                    fontSize = 10.sp
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .clip(CircleShape)
+                                                        .background(badgeAccent)
                                                 )
                                             }
                                             Text(
                                                 text = badge.title,
                                                 fontSize = 9.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                color = badgeAccent,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -923,166 +778,99 @@ private fun GlobalChatMessageCard(
                                     }
                                 }
                             }
-                        }
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
                             Text(
                                 text = message.timeLabel,
                                 fontSize = 9.sp,
-                                color = TextMuted
+                                color = DiscordMutedText,
+                                modifier = Modifier.align(Alignment.CenterVertically)
                             )
-                            if (message.isPinnedAnnouncement) {
+                        }
+
+                        // Compact Actions (Reply, Delete — NO Pin button)
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            IconButton(
+                                onClick = onReplyClick,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .testTag("global_chat_reply_${message.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Reply,
+                                    contentDescription = "Reply",
+                                    tint = DiscordMutedText,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            if (canModerate || isOwnMessage) {
+                                IconButton(
+                                    onClick = onDeleteClick,
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .testTag("global_chat_delete_${message.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = "Delete Message",
+                                        tint = OwnerRed,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Plain Discord message body text (Owner = Red/Black, Admin = Red/White, Player = White only)
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
+                        ),
+                        color = messageColor
+                    )
+
+                    // Single-use toggleable plain-text reactions (no emojis, 1 react per user per message)
+                    Row(
+                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        reactionOptions.forEach { reactKey ->
+                            val count = if (message.reactedByUsers.isNotEmpty()) {
+                                message.reactedByUsers.values.count { it == reactKey }
+                            } else {
+                                message.reactions[reactKey] ?: 0
+                            }
+                            val isSelectedByMe = userSelectedReact == reactKey
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelectedByMe) Color.White else DiscordChannelBarBg,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelectedByMe) Color.White else DiscordDivider
+                                ),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { onReactClick(reactKey) }
+                                    .testTag("global_chat_react_${message.id}_$reactKey")
+                            ) {
                                 Text(
-                                    text = "• 📌 পিনড",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = FlameYellow
+                                    text = if (count > 0) "$reactKey $count" else reactKey,
+                                    fontSize = 10.sp,
+                                    fontFamily = MonoFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelectedByMe) OwnerBlack else DiscordMutedText,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
                             }
                         }
                     }
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconButton(
-                        onClick = onReplyClick,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("global_chat_reply_${message.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Reply,
-                            contentDescription = "Reply",
-                            tint = FlameCyan,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    if (canModerate) {
-                        IconButton(
-                            onClick = onPinClick,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .testTag("global_chat_pin_${message.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.PushPin,
-                                contentDescription = "Pin Message",
-                                tint = if (message.isPinnedAnnouncement) FlameYellow else TextMuted,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    }
-                    if (canModerate || isOwnMessage) {
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier
-                                .size(32.dp)
-                                .testTag("global_chat_delete_${message.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
-                                contentDescription = "Delete Message",
-                                tint = Color(0xFFEF4444).copy(alpha = 0.85f),
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Reply quote block
-            if (!message.replyToIgn.isNullOrBlank() && !message.replyToText.isNullOrBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = DarkElevated,
-                    border = BorderStroke(1.dp, FlameCyan.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
-                        Text(
-                            text = "↩️ ${message.replyToIgn}",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = FlameCyan
-                        )
-                        Text(
-                            text = message.replyToText,
-                            fontSize = 10.sp,
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            // Message Text
-            Text(
-                text = message.text,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp
-                ),
-                color = Color.White
-            )
-
-            // Reactions Row (Existing counts + quick tap reactions)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                quickReactionEmojis.forEach { emoji ->
-                    val count = message.reactions[emoji] ?: 0
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (count > 0) WaterBlue.copy(alpha = 0.22f) else DarkElevated,
-                        border = BorderStroke(
-                            1.dp,
-                            if (count > 0) WaterBlue.copy(alpha = 0.6f) else DarkBorder
-                        ),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onReactClick(emoji) }
-                            .testTag("global_chat_react_${message.id}_$emoji")
-                    ) {
-                        Text(
-                            text = if (count > 0) "$emoji $count" else emoji,
-                            fontSize = 10.sp,
-                            fontWeight = if (count > 0) FontWeight.Bold else FontWeight.Normal,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-                message.reactions.entries
-                    .filter { it.key !in quickReactionEmojis && it.value > 0 }
-                    .forEach { (emoji, count) ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = FlameYellow.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f)),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onReactClick(emoji) }
-                        ) {
-                            Text(
-                                text = "$emoji $count",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FlameYellow,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
             }
         }
     }
+    HorizontalDivider(color = DiscordDivider, thickness = 0.5.dp)
 }
 
 @Composable
@@ -1090,20 +878,21 @@ private fun GlobalChatRoleTag(
     role: UserRole,
     modifier: Modifier = Modifier
 ) {
+    // Owner: Red + Black | Admin: Red + White | Player: White only
     val bgColor = when (role) {
-        UserRole.OWNER -> Color(0xFF062C1A)
-        UserRole.ADMIN -> Color(0xFF142442)
-        UserRole.PLAYER -> Color(0xFF161E2E)
+        UserRole.OWNER -> OwnerBlack
+        UserRole.ADMIN -> AdminRed
+        UserRole.PLAYER -> Color.Transparent
     }
     val borderColor = when (role) {
-        UserRole.OWNER -> VictoryGreen
-        UserRole.ADMIN -> FlameOrange
-        UserRole.PLAYER -> FlameCyan.copy(alpha = 0.55f)
+        UserRole.OWNER -> OwnerRed
+        UserRole.ADMIN -> Color.White
+        UserRole.PLAYER -> Color.White.copy(alpha = 0.45f)
     }
     val textColor = when (role) {
-        UserRole.OWNER -> FlameYellow
-        UserRole.ADMIN -> FlameOrange
-        UserRole.PLAYER -> FlameCyan
+        UserRole.OWNER -> OwnerRed
+        UserRole.ADMIN -> Color.White
+        UserRole.PLAYER -> Color.White
     }
     val roleLabel = when (role) {
         UserRole.OWNER -> "ওনার"
@@ -1112,15 +901,15 @@ private fun GlobalChatRoleTag(
     }
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(4.dp),
         color = bgColor,
         border = BorderStroke(1.dp, borderColor),
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             when (role) {
                 UserRole.OWNER -> {
@@ -1128,7 +917,7 @@ private fun GlobalChatRoleTag(
                         painter = painterResource(id = R.drawable.badge_owner_logo),
                         contentDescription = "ওনার আইকন",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
                 UserRole.ADMIN -> {
@@ -1136,12 +925,10 @@ private fun GlobalChatRoleTag(
                         painter = painterResource(id = R.drawable.badge_admin_logo),
                         contentDescription = "অ্যাডমিন আইকন",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
-                UserRole.PLAYER -> {
-                    Text(text = "🎮", fontSize = 10.sp)
-                }
+                UserRole.PLAYER -> Unit
             }
             Text(
                 text = roleLabel,

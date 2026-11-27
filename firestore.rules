@@ -24,15 +24,18 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isBootstrappedOwner() {
-      return isSignedIn() &&
-        request.auth.token.email == "mrshosneara24@gmail.com" &&
-        request.auth.token.email_verified == true;
+    function userRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'player';
+    }
+
+    function isOwner() {
+      return isSignedIn() && userRole() == 'owner';
     }
 
     function isAdmin() {
-      return isBootstrappedOwner() ||
-        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return isSignedIn() && userRole() in ['owner', 'admin'];
     }
 
     function isValidTimestamp(ts) {
@@ -155,7 +158,7 @@ service cloud.firestore {
           'customBannerUri', 'bannerColorId', 'battleTagline', 'favoriteWeapon',
           'activeCharacter', 'guildName', 'playerRole', 'level', 'walletBalance',
           'matchesPlayed', 'totalWins', 'totalKills', 'totalEarnings', 'totalSpent',
-          'kudosCount', 'customBadges', 'revokedBadges', 'banned', 'banReason', 'bannedAt',
+          'kudosCount', 'kudosGiverKeys', 'customBadges', 'revokedBadges', 'banned', 'banReason', 'bannedAt',
           'warningsCount', 'banExpiresAtMillis', 'moderationWarningsCount', 'timeoutUntilMillis',
           'timeoutReason', 'timeoutBy', 'chatMuted', 'chatMuteUntilMillis', 'chatMuteReason',
           'matchBanned', 'matchBanReason', 'walletFrozen', 'walletFreezeReason',
@@ -172,6 +175,7 @@ service cloud.firestore {
         data.warningsCount is int && data.warningsCount >= 0 && data.warningsCount <= 100 &&
         data.moderationWarningsCount is int && data.moderationWarningsCount >= 0 && data.moderationWarningsCount <= 100 &&
         data.kudosCount is int && data.kudosCount >= 0 && data.kudosCount <= 1000000 &&
+        (!('kudosGiverKeys' in data) || (data.kudosGiverKeys is list && data.kudosGiverKeys.size() <= 1000)) &&
         (!('battleTagline' in data) || data.battleTagline == null || (data.battleTagline is string && data.battleTagline.size() <= 180)) &&
         (!('customPfpUri' in data) || data.customPfpUri == null || (data.customPfpUri is string && data.customPfpUri.size() <= 500)) &&
         (!('customBannerUri' in data) || data.customBannerUri == null || (data.customBannerUri is string && data.customBannerUri.size() <= 500)) &&
@@ -269,7 +273,7 @@ service cloud.firestore {
           'senderAuthUid', 'senderUserId', 'senderName', 'senderIgn', 'senderUid',
           'senderRole', 'senderAvatarId', 'senderCustomPfpUri', 'senderPrimaryBadge',
           'senderBadges', 'text', 'timestampMillis', 'timeLabel', 'pinnedAnnouncement',
-          'replyToId', 'replyToIgn', 'replyToText', 'reactions', 'createdAt', 'updatedAt'
+          'replyToId', 'replyToIgn', 'replyToText', 'reactions', 'reactedByUsers', 'channelId', 'createdAt', 'updatedAt'
         ]) &&
         data.senderAuthUid is string && data.senderAuthUid.size() >= 1 && data.senderAuthUid.size() <= 128 &&
         data.senderUserId is string && data.senderUserId.size() <= 128 &&
@@ -289,6 +293,8 @@ service cloud.firestore {
         isOptionalString(data, 'replyToIgn', 50) &&
         isOptionalString(data, 'replyToText', 200) &&
         (!('reactions' in data) || data.reactions is map) &&
+        (!('reactedByUsers' in data) || data.reactedByUsers is map) &&
+        isOptionalString(data, 'channelId', 40) &&
         isValidTimestamp(data.createdAt) &&
         isValidTimestamp(data.updatedAt);
     }
@@ -309,13 +315,12 @@ service cloud.firestore {
         isValidTimestamp(data.createdAt);
     }
 
-    function isValidAdminGrant(data) {
-      return data.keys().hasAll(['role', 'createdAt']) &&
-        data.keys().hasOnly(['role', 'email', 'ign', 'createdAt']) &&
-        data.role in ['ADMIN', 'OWNER'] &&
+    function isValidUserRoleDoc(data) {
+      return data.keys().hasAll(['role']) &&
+        data.keys().hasOnly(['role', 'email', 'ign', 'createdAt', 'updatedAt']) &&
+        data.role in ['owner', 'admin', 'player'] &&
         isOptionalString(data, 'email', 120) &&
-        isOptionalString(data, 'ign', 50) &&
-        isValidTimestamp(data.createdAt);
+        isOptionalString(data, 'ign', 50);
     }
 
     function isValidPromoCode(data) {
@@ -412,12 +417,14 @@ service cloud.firestore {
         isValidTimestamp(data.updatedAt);
     }
 
-    // 1. Admins registry
-    match /admins/{uid} {
+    // 1. User Role Registry (collection `users`, doc ID = UID, field `role`: 'owner' | 'admin' | 'player')
+    match /users/{uid} {
       allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
-      allow list: if isBootstrappedOwner();
-      allow create, update: if isBootstrappedOwner() && isValidId(uid) && isValidAdminGrant(incoming());
-      allow delete: if isBootstrappedOwner() && isValidId(uid);
+      allow list: if isOwner();
+      allow create: if isSignedIn() && isValidId(uid) && isValidUserRoleDoc(incoming()) &&
+        (isOwner() || (request.auth.uid == uid && incoming().role == 'player'));
+      allow update: if isOwner() && isValidId(uid) && isValidUserRoleDoc(incoming());
+      allow delete: if isOwner() && isValidId(uid);
     }
 
     // 2. App configuration (single shared doc 'main')
@@ -492,10 +499,10 @@ service cloud.firestore {
               'name', 'ign', 'uid', 'avatarId', 'customPfpUri', 'customBannerUri',
               'bannerColorId', 'battleTagline', 'favoriteWeapon', 'activeCharacter',
               'guildName', 'playerRole', 'walletBalance', 'matchesPlayed',
-              'totalWins', 'totalKills', 'totalEarnings', 'totalSpent', 'kudosCount', 'updatedAt'
+              'totalWins', 'totalKills', 'totalEarnings', 'totalSpent', 'kudosCount', 'kudosGiverKeys', 'updatedAt'
             ])
           ) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['kudosCount', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['kudosCount', 'kudosGiverKeys', 'updatedAt'])
         );
       allow delete: if isAdmin() && isValidId(userId);
     }
@@ -503,7 +510,7 @@ service cloud.firestore {
     // 6. Private User Accounts (PII-isolated: phone & bKash strictly per-user or admin)
     match /user_accounts/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (existing().ownerUid == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isOwner());
       allow create: if isSignedIn() && isValidId(userId) && isValidUserAccount(incoming()) &&
         (
           isAdmin() ||
@@ -526,7 +533,7 @@ service cloud.firestore {
     // 7. Deposit Requests
     match /deposit_requests/{requestId} {
       allow get: if isSignedIn() && isValidId(requestId) && (existing().ownerUid == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && isValidId(requestId) && isValidDepositRequest(incoming()) &&
         (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
       allow update: if isAdmin() && isValidId(requestId) && isValidDepositRequest(incoming()) &&
@@ -539,7 +546,7 @@ service cloud.firestore {
     // 8. Withdraw Requests
     match /withdraw_requests/{requestId} {
       allow get: if isSignedIn() && isValidId(requestId) && (existing().ownerUid == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && isValidId(requestId) && isValidWithdrawRequest(incoming()) &&
         (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
       allow update: if isAdmin() && isValidId(requestId) && isValidWithdrawRequest(incoming()) &&
@@ -552,7 +559,7 @@ service cloud.firestore {
     // 9. Badge Appeals
     match /badge_appeals/{appealId} {
       allow get: if isSignedIn() && isValidId(appealId) && (existing().ownerUid == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isBootstrappedOwner());
+      allow list: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && isValidId(appealId) && isValidBadgeAppeal(incoming()) &&
         (isAdmin() || (incoming().ownerUid == request.auth.uid && incoming().status == 'PENDING'));
       allow update: if isSignedIn() && isValidId(appealId) && isValidBadgeAppeal(incoming()) &&
@@ -583,7 +590,7 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'reactedByUsers', 'updatedAt'])
         );
       allow delete: if isSignedIn() && isValidId(messageId) && (isAdmin() || existing().senderAuthUid == request.auth.uid);
     }
@@ -591,7 +598,7 @@ service cloud.firestore {
     // 11. Moderation Logs
     match /moderation_logs/{logId} {
       allow get: if isSignedIn() && isValidId(logId) && (existing().targetAuthUid == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (existing().targetAuthUid == request.auth.uid || isBootstrappedOwner());
+      allow list: if isSignedIn() && (existing().targetAuthUid == request.auth.uid || isOwner());
       allow create: if isAdmin() && isValidId(logId) && isValidModerationLog(incoming());
       allow update: if false;
       allow delete: if isAdmin() && isValidId(logId);

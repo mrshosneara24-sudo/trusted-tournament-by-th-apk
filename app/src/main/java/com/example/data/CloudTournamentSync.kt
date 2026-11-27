@@ -59,8 +59,7 @@ class CloudTournamentSync(private val context: Context) {
 
     companion object {
         private const val TAG = "CloudTournamentSync"
-        private const val BOOTSTRAPPED_OWNER_EMAIL = "mrshosneara24@gmail.com"
-        private const val COL_ADMINS = "admins"
+        private const val COL_USERS = "users"
         private const val COL_APP_CONFIG = "app_config"
         private const val DOC_MAIN_CONFIG = "main"
         private const val COL_MATCHES = "matches"
@@ -78,6 +77,15 @@ class CloudTournamentSync(private val context: Context) {
         private const val COL_GIVEAWAYS = "giveaways"
     }
 
+    data class EmailAuthOutcome(
+        val success: Boolean,
+        val message: String,
+        val needsVerification: Boolean = false,
+        val emailVerified: Boolean = false,
+        val cloudRole: UserRole = UserRole.PLAYER,
+        val firebaseUid: String = ""
+    )
+
     data class SyncCallbacks(
         val onAppConfigSynced: (AppCustomization, List<TournamentRuleItem>?) -> Unit,
         val onMatchesSynced: (List<TournamentMatch>) -> Unit,
@@ -93,6 +101,7 @@ class CloudTournamentSync(private val context: Context) {
         val onBonusDropsSynced: (List<BonusGiftDrop>) -> Unit = {},
         val onCommunityPollsSynced: (List<LiveCommunityPoll>) -> Unit = {},
         val onGiveawaysSynced: (List<GiveawayEvent>) -> Unit = {},
+        val onCloudRoleResolved: (UserRole, String, String) -> Unit = { _, _, _ -> },
         val onSyncStateChanged: (connected: Boolean, email: String, statusText: String) -> Unit
     )
 
@@ -101,6 +110,8 @@ class CloudTournamentSync(private val context: Context) {
     private val playerFirebaseUidByUserId = mutableMapOf<String, String>()
     private var attachedUid: String? = null
     private var callbacks: SyncCallbacks? = null
+
+    fun isFirebaseBackendReady(): Boolean = isFirebaseReady()
 
     private fun isFirebaseReady(): Boolean = runCatching {
         FirebaseApp.getApps(context).isNotEmpty() || FirebaseApp.initializeApp(context) != null
@@ -125,14 +136,159 @@ class CloudTournamentSync(private val context: Context) {
 
     fun currentCloudUid(): String = currentUser()?.uid.orEmpty()
 
-    private fun isOwnerEmail(user: FirebaseUser?): Boolean =
-        user?.email?.equals(BOOTSTRAPPED_OWNER_EMAIL, ignoreCase = true) == true
+    private fun resolveUserRoleFromFirestore(rawRole: String?): UserRole =
+        when (rawRole?.trim()?.lowercase()) {
+            "owner" -> UserRole.OWNER
+            "admin" -> UserRole.ADMIN
+            else -> UserRole.PLAYER
+        }
+
+    private suspend fun fetchCloudRole(db: FirebaseFirestore, uid: String): UserRole =
+        runCatching {
+            val doc = db.collection(COL_USERS).document(uid).get().await()
+            resolveUserRoleFromFirestore(doc.getString("role"))
+        }.getOrDefault(UserRole.PLAYER)
 
     private suspend fun isCloudStaff(db: FirebaseFirestore, user: FirebaseUser): Boolean {
-        if (isOwnerEmail(user)) return true
-        return runCatching {
-            db.collection(COL_ADMINS).document(user.uid).get().await().exists()
-        }.getOrDefault(false)
+        val role = fetchCloudRole(db, user.uid)
+        return role == UserRole.OWNER || role == UserRole.ADMIN
+    }
+
+    suspend fun signUpWithFirebaseEmailVerification(
+        email: String,
+        password: String
+    ): EmailAuthOutcome = withContext(Dispatchers.IO) {
+        if (!isFirebaseReady()) {
+            return@withContext EmailAuthOutcome(
+                success = false,
+                message = "Firebase Auth is not configured"
+            )
+        }
+        val cleanEmail = email.trim()
+        val auth = FirebaseAuth.getInstance()
+        try {
+            val result = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+            val firebaseUser = result.user
+            val uid = firebaseUser?.uid.orEmpty()
+            firebaseUser?.sendEmailVerification()?.await()
+            // Always sign out after sending verification email so unverified users cannot log in
+            auth.signOut()
+            EmailAuthOutcome(
+                success = true,
+                message = "Verification email sent to $cleanEmail. Please verify your email before login.",
+                needsVerification = true,
+                emailVerified = false,
+                cloudRole = UserRole.PLAYER,
+                firebaseUid = uid
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase signUp failed: ${e.message}")
+            EmailAuthOutcome(
+                success = false,
+                message = e.localizedMessage ?: "সাইন আপ সম্পন্ন করা যায়নি"
+            )
+        }
+    }
+
+    suspend fun signInWithFirebaseEmailVerification(
+        email: String,
+        password: String
+    ): EmailAuthOutcome = withContext(Dispatchers.IO) {
+        if (!isFirebaseReady()) {
+            return@withContext EmailAuthOutcome(
+                success = false,
+                message = "Firebase Auth is not configured"
+            )
+        }
+        val cleanEmail = email.trim()
+        val auth = FirebaseAuth.getInstance()
+        try {
+            val result = auth.signInWithEmailAndPassword(cleanEmail, password).await()
+            val firebaseUser = result.user
+                ?: return@withContext EmailAuthOutcome(false, "Authentication failed")
+            runCatching { firebaseUser.reload().await() }
+            if (!firebaseUser.isEmailVerified) {
+                auth.signOut()
+                return@withContext EmailAuthOutcome(
+                    success = false,
+                    message = "Please verify your email",
+                    needsVerification = true,
+                    emailVerified = false
+                )
+            }
+            val db = firestoreOrNull()
+            val resolvedRole = if (db != null) {
+                runCatching {
+                    val userRef = db.collection(COL_USERS).document(firebaseUser.uid)
+                    val snap = userRef.get().await()
+                    if (!snap.exists()) {
+                        userRef.set(
+                            mapOf(
+                                "role" to "player",
+                                "email" to firebaseUser.email.orEmpty().take(120),
+                                "createdAt" to FieldValue.serverTimestamp(),
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        ).await()
+                        UserRole.PLAYER
+                    } else {
+                        resolveUserRoleFromFirestore(snap.getString("role"))
+                    }
+                }.getOrDefault(UserRole.PLAYER)
+            } else UserRole.PLAYER
+            EmailAuthOutcome(
+                success = true,
+                message = "Verified",
+                needsVerification = false,
+                emailVerified = true,
+                cloudRole = resolvedRole,
+                firebaseUid = firebaseUser.uid
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase signIn failed: ${e.message}")
+            EmailAuthOutcome(
+                success = false,
+                message = e.localizedMessage ?: "ভুল ইমেইল অথবা পাসওয়ার্ড"
+            )
+        }
+    }
+
+    suspend fun resendFirebaseVerificationEmail(
+        email: String,
+        password: String
+    ): EmailAuthOutcome = withContext(Dispatchers.IO) {
+        if (!isFirebaseReady()) {
+            return@withContext EmailAuthOutcome(false, "Firebase Auth is not configured")
+        }
+        val cleanEmail = email.trim()
+        val auth = FirebaseAuth.getInstance()
+        try {
+            val result = auth.signInWithEmailAndPassword(cleanEmail, password).await()
+            val firebaseUser = result.user
+                ?: return@withContext EmailAuthOutcome(false, "Account not found")
+            runCatching { firebaseUser.reload().await() }
+            if (firebaseUser.isEmailVerified) {
+                return@withContext EmailAuthOutcome(
+                    success = true,
+                    message = "Email is already verified! You can sign in now.",
+                    emailVerified = true
+                )
+            }
+            firebaseUser.sendEmailVerification().await()
+            auth.signOut()
+            EmailAuthOutcome(
+                success = true,
+                message = "Verification email resent to $cleanEmail. Please verify your email.",
+                needsVerification = true,
+                emailVerified = false
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Resend verification failed: ${e.message}")
+            EmailAuthOutcome(
+                success = false,
+                message = e.localizedMessage ?: "ভেরিফিকেশন ইমেইল পাঠানো যায়নি"
+            )
+        }
     }
 
     fun startRealtimeSync(syncCallbacks: SyncCallbacks) {
@@ -150,13 +306,25 @@ class CloudTournamentSync(private val context: Context) {
         attachedUid = user.uid
 
         scope.launch {
-            val isOwner = isOwnerEmail(user)
-            val isStaff = isCloudStaff(db, user)
+            val initialRole = fetchCloudRole(db, user.uid)
+            val isOwner = initialRole == UserRole.OWNER
+            val isStaff = initialRole == UserRole.OWNER || initialRole == UserRole.ADMIN
             syncCallbacks.onSyncStateChanged(
                 true,
                 user.email.orEmpty(),
                 "লাইভ ক্লাউড সিঙ্ক চালু (${user.email ?: "Connected"})"
             )
+
+            // 0. User role doc listener (`users/{uid}.role` is single source of truth: owner / admin / player)
+            registrations += db.collection(COL_USERS).document(user.uid)
+                .addSnapshotListener { roleSnap, err ->
+                    if (err != null) {
+                        handleFirestoreError(err, "LISTEN", "$COL_USERS/${user.uid}")
+                        return@addSnapshotListener
+                    }
+                    val resolvedRole = resolveUserRoleFromFirestore(roleSnap?.getString("role"))
+                    callbacks?.onCloudRoleResolved(resolvedRole, user.email.orEmpty(), user.uid)
+                }
 
             // 1. App Config & Rules
             registrations += db.collection(COL_APP_CONFIG).document(DOC_MAIN_CONFIG)
@@ -261,8 +429,8 @@ class CloudTournamentSync(private val context: Context) {
                 }
             }
 
-            // 7. Deposit Requests
-            val depositsQuery = if (isOwner) {
+            // 7. Deposit Requests (Owner & Firestore Admins see all; normal user sees only their own)
+            val depositsQuery = if (isOwner || isStaff) {
                 db.collection(COL_DEPOSITS)
             } else {
                 db.collection(COL_DEPOSITS).whereEqualTo("ownerUid", user.uid)
@@ -277,8 +445,8 @@ class CloudTournamentSync(private val context: Context) {
                 }
             }
 
-            // 8. Withdraw Requests
-            val withdrawsQuery = if (isOwner) {
+            // 8. Withdraw Requests (Owner & Firestore Admins see all; normal user sees only their own)
+            val withdrawsQuery = if (isOwner || isStaff) {
                 db.collection(COL_WITHDRAWS)
             } else {
                 db.collection(COL_WITHDRAWS).whereEqualTo("ownerUid", user.uid)
@@ -294,7 +462,7 @@ class CloudTournamentSync(private val context: Context) {
             }
 
             // 9. Badge Appeals
-            val appealsQuery = if (isOwner) {
+            val appealsQuery = if (isOwner || isStaff) {
                 db.collection(COL_BADGE_APPEALS)
             } else {
                 db.collection(COL_BADGE_APPEALS).whereEqualTo("ownerUid", user.uid)
@@ -408,25 +576,22 @@ class CloudTournamentSync(private val context: Context) {
     fun syncAdminGrant(userId: String, grantAdmin: Boolean, ign: String = "") {
         val db = firestoreOrNull() ?: return
         val user = currentUser() ?: return
-        if (!isOwnerEmail(user)) return
         val targetFirebaseUid = playerFirebaseUidByUserId[sanitizeDocId(userId)] ?: return
         if (targetFirebaseUid.isBlank()) return
         scope.launch {
             try {
-                val adminRef = db.collection(COL_ADMINS).document(sanitizeDocId(targetFirebaseUid))
-                if (grantAdmin) {
-                    adminRef.set(
-                        mapOf(
-                            "role" to "ADMIN",
-                            "ign" to ign.take(50),
-                            "createdAt" to FieldValue.serverTimestamp()
-                        )
-                    ).await()
-                } else {
-                    adminRef.delete().await()
-                }
+                if (fetchCloudRole(db, user.uid) != UserRole.OWNER) return@launch
+                val userRoleRef = db.collection(COL_USERS).document(sanitizeDocId(targetFirebaseUid))
+                userRoleRef.set(
+                    mapOf(
+                        "role" to if (grantAdmin) "admin" else "player",
+                        "ign" to ign.take(50),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge()
+                ).await()
             } catch (e: Exception) {
-                handleFirestoreError(e, "ADMIN_GRANT", "$COL_ADMINS/$targetFirebaseUid")
+                handleFirestoreError(e, "ADMIN_GRANT", "$COL_USERS/$targetFirebaseUid")
             }
         }
     }
@@ -652,6 +817,7 @@ class CloudTournamentSync(private val context: Context) {
                     "totalEarnings" to appUser.totalEarnings,
                     "totalSpent" to appUser.totalSpent,
                     "kudosCount" to appUser.kudosCount,
+                    "kudosGiverKeys" to appUser.kudosGiverKeys.toList().take(1000),
                     "customBadges" to appUser.customBadges.map { it.name }.take(12),
                     "revokedBadges" to appUser.revokedBadges.map { it.name }.take(12),
                     "banned" to appUser.isBanned,
@@ -723,7 +889,7 @@ class CloudTournamentSync(private val context: Context) {
         }
     }
 
-    fun pushKudosUpdate(userId: String, newKudosCount: Int) {
+    fun pushKudosUpdate(userId: String, newKudosCount: Int, kudosGiverKeys: Set<String> = emptySet()) {
         val db = firestoreOrNull() ?: return
         currentUser() ?: return
         val safeUserId = sanitizeDocId(userId)
@@ -732,6 +898,7 @@ class CloudTournamentSync(private val context: Context) {
                 db.collection(COL_PLAYER_DIRECTORY).document(safeUserId).update(
                     mapOf(
                         "kudosCount" to newKudosCount.coerceAtLeast(0),
+                        "kudosGiverKeys" to kudosGiverKeys.toList().take(1000),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
                 ).await()
@@ -858,8 +1025,10 @@ class CloudTournamentSync(private val context: Context) {
                     "text" to msg.text.ifBlank { " " }.take(500),
                     "timestampMillis" to msg.timestampMillis.coerceAtLeast(0L),
                     "timeLabel" to msg.timeLabel.take(40),
-                    "pinnedAnnouncement" to msg.isPinnedAnnouncement,
-                    "reactions" to msg.reactions
+                    "pinnedAnnouncement" to false,
+                    "reactions" to msg.reactions,
+                    "reactedByUsers" to msg.reactedByUsers,
+                    "channelId" to msg.channelId.ifBlank { "GLOBAL" }.take(40)
                 )
                 msg.senderCustomPfpUri?.takeIf { it.isNotBlank() && it.length <= 500 }?.let { fields["senderCustomPfpUri"] = it }
                 msg.replyToId?.takeIf { it.isNotBlank() }?.let { fields["replyToId"] = it.take(128) }
@@ -1415,7 +1584,7 @@ class CloudTournamentSync(private val context: Context) {
                 startsInMinutes = startsInMinutes,
                 entryFee = (snap.get("entryFee") as? Number)?.toInt() ?: 20,
                 totalPrize = (snap.get("totalPrize") as? Number)?.toInt() ?: 300,
-                perKillPrize = (snap.get("perKillPrize") as? Number)?.toInt() ?: 10,
+                perKillPrize = if (cat == GameCategory.LONE_WOLF) 0 else ((snap.get("perKillPrize") as? Number)?.toInt() ?: 10),
                 booyahPrize = (snap.get("booyahPrize") as? Number)?.toInt() ?: 100,
                 totalSlots = ((snap.get("totalSlots") as? Number)?.toInt() ?: 48).coerceIn(2, 100),
                 bookedSlots = ((snap.get("bookedSlots") as? Number)?.toInt() ?: 0).coerceAtLeast(0),
@@ -1499,6 +1668,8 @@ class CloudTournamentSync(private val context: Context) {
                 playerRole = snap.getString("playerRole") ?: "সোলো প্লেয়ার",
                 level = (snap.get("level") as? Number)?.toInt() ?: 1,
                 kudosCount = (snap.get("kudosCount") as? Number)?.toInt() ?: 0,
+                kudosGiverKeys = (@Suppress("UNCHECKED_CAST") (snap.get("kudosGiverKeys") as? List<String>))
+                    ?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
                 warningsCount = (snap.get("warningsCount") as? Number)?.toInt() ?: 0,
                 banExpiresAtMillis = (snap.get("banExpiresAtMillis") as? Number)?.toLong(),
                 moderationWarningsCount = (snap.get("moderationWarningsCount") as? Number)?.toInt() ?: 0,
@@ -1630,6 +1801,12 @@ class CloudTournamentSync(private val context: Context) {
                 val count = (v as? Number)?.toInt() ?: return@mapNotNull null
                 k to count
             }?.toMap() ?: emptyMap()
+            @Suppress("UNCHECKED_CAST")
+            val rawReactedBy = snap.get("reactedByUsers") as? Map<String, Any?>
+            val reactedByUsers = rawReactedBy?.mapNotNull { (k, v) ->
+                val reactKey = v as? String ?: return@mapNotNull null
+                if (k.isNotBlank() && reactKey.isNotBlank()) k to reactKey else null
+            }?.toMap() ?: emptyMap()
 
             GlobalChatMessage(
                 id = snap.id,
@@ -1646,11 +1823,13 @@ class CloudTournamentSync(private val context: Context) {
                 text = text,
                 timestampMillis = (snap.get("timestampMillis") as? Number)?.toLong() ?: 0L,
                 timeLabel = snap.getString("timeLabel") ?: "এইমাত্র",
-                isPinnedAnnouncement = snap.getBoolean("pinnedAnnouncement") ?: false,
+                isPinnedAnnouncement = false,
                 replyToId = snap.getString("replyToId"),
                 replyToIgn = snap.getString("replyToIgn"),
                 replyToText = snap.getString("replyToText"),
-                reactions = reactions
+                reactions = reactions,
+                reactedByUsers = reactedByUsers,
+                channelId = snap.getString("channelId")?.ifBlank { "GLOBAL" } ?: "GLOBAL"
             )
         }.getOrNull()
     }

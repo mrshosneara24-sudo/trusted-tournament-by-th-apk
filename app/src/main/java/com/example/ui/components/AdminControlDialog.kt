@@ -789,9 +789,9 @@ private fun CreateMatchSection(
         mutableStateOf(formatMatchClockTimeLabel(System.currentTimeMillis() + 15 * 60_000L))
     }
     var entryFee by remember { mutableStateOf("10") }
-    var totalPrize by remember { mutableStateOf("15") }
+    var totalPrize by remember { mutableStateOf("30") }
     var perKill by remember { mutableStateOf("0") }
-    var booyahPrize by remember { mutableStateOf("15") }
+    var booyahPrize by remember { mutableStateOf("30") }
     var totalSlots by remember { mutableStateOf("2") }
 
     val applyMinutesToClock: (Int) -> Unit = { mins ->
@@ -984,25 +984,28 @@ private fun CreateMatchSection(
                                 totalSlots = "2"
                                 title = "লোন উলফ - ১ বনাম ১ কিং ডুয়েল"
                                 mapName = "আয়রন কেজ (Iron Cage)"
-                                totalPrize = "15"
+                                entryFee = "10"
+                                totalPrize = "30"
                                 perKill = "0"
-                                booyahPrize = "15"
+                                booyahPrize = "30"
                             } else if (cat == GameCategory.CS_RANK) {
                                 matchType = MatchType.SQUAD
                                 totalSlots = "8"
                                 title = "সিএস র‍্যাঙ্ক - ৪ বনাম ৪ ক্ল্যাশ স্কোয়াড"
                                 mapName = "ক্লক টাওয়ার (Clock Tower)"
-                                totalPrize = "40"
+                                entryFee = "15"
+                                totalPrize = "100"
                                 perKill = "0"
-                                booyahPrize = "40"
+                                booyahPrize = "100"
                             } else {
                                 matchType = MatchType.SOLO
                                 totalSlots = "48"
                                 title = "বিআর র‍্যাঙ্ক - বারমুডা সোলো এক্সপ্রেস"
                                 mapName = "বারমুডা (Bermuda)"
-                                totalPrize = "80"
-                                perKill = "1"
-                                booyahPrize = "30"
+                                entryFee = "15"
+                                totalPrize = "250"
+                                perKill = "4"
+                                booyahPrize = "100"
                             }
                         }
                 ) {
@@ -1121,25 +1124,27 @@ private fun CreateMatchSection(
                 ),
                 singleLine = true
             )
-            OutlinedTextField(
-                value = perKill,
-                onValueChange = { perKill = it.filter { ch -> ch.isDigit() } },
-                label = { Text("প্রতি কিল ৳") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = FlameYellow,
-                    unfocusedBorderColor = DarkBorder,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
-            )
+            if (selectedCategory != GameCategory.LONE_WOLF) {
+                OutlinedTextField(
+                    value = perKill,
+                    onValueChange = { perKill = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("প্রতি কিল ৳") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = FlameYellow,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    singleLine = true
+                )
+            }
             OutlinedTextField(
                 value = booyahPrize,
                 onValueChange = { booyahPrize = it.filter { ch -> ch.isDigit() } },
-                label = { Text("বুইয়া ৳") },
+                label = { Text(if (selectedCategory == GameCategory.LONE_WOLF) "উইন প্রাইজ ৳" else "বুইয়া ৳") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp),
@@ -1173,6 +1178,7 @@ private fun CreateMatchSection(
         Button(
             onClick = {
                 val mins = (startsInMinutesInput.toIntOrNull() ?: 15).coerceIn(1, 100000)
+                val safePerKill = if (selectedCategory == GameCategory.LONE_WOLF) 0 else (perKill.toIntOrNull() ?: 0)
                 onCreateMatch(
                     title.ifBlank { "${selectedCategory.banglaTitle} ম্যাচ" },
                     selectedCategory,
@@ -1180,9 +1186,9 @@ private fun CreateMatchSection(
                     mapName,
                     matchDateTime,
                     entryFee.toIntOrNull() ?: 10,
-                    totalPrize.toIntOrNull() ?: 15,
-                    perKill.toIntOrNull() ?: 0,
-                    booyahPrize.toIntOrNull() ?: 15,
+                    totalPrize.toIntOrNull() ?: 30,
+                    safePerKill,
+                    booyahPrize.toIntOrNull() ?: 30,
                     (totalSlots.toIntOrNull() ?: 2).coerceIn(2, 100),
                     mins
                 )
@@ -1207,6 +1213,7 @@ private fun CreateMatchSection(
             onClick = {
                 val mins = (startsInMinutesInput.toIntOrNull() ?: 15).coerceIn(1, 100000)
                 val cleanTitle = title.trim().ifBlank { "${selectedCategory.banglaTitle} প্রিসেট" }
+                val safePerKill = if (selectedCategory == GameCategory.LONE_WOLF) 0 else (perKill.toIntOrNull() ?: 0)
                 val res = onSavePreset(
                     MatchPresetTemplate(
                         id = "preset_custom_${System.currentTimeMillis()}",
@@ -1217,9 +1224,9 @@ private fun CreateMatchSection(
                         mapName = mapName,
                         defaultStartsInMinutes = mins,
                         entryFee = entryFee.toIntOrNull() ?: 10,
-                        totalPrize = totalPrize.toIntOrNull() ?: 15,
-                        perKillPrize = perKill.toIntOrNull() ?: 0,
-                        booyahPrize = booyahPrize.toIntOrNull() ?: 15,
+                        totalPrize = totalPrize.toIntOrNull() ?: 30,
+                        perKillPrize = safePerKill,
+                        booyahPrize = booyahPrize.toIntOrNull() ?: 30,
                         totalSlots = (totalSlots.toIntOrNull() ?: 2).coerceIn(2, 100),
                         isDefaultSaved = false
                     )

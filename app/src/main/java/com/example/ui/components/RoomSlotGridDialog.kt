@@ -600,6 +600,7 @@ fun RoomSlotGridDialog(
             profile = profileData,
             onDismiss = { localPlayerProfileCard = null },
             onGiveKudos = onGiveKudos,
+            hasGivenKudos = hasActorGivenKudos(profileData, registeredUsers, currentUser),
             viewerRole = currentUser.role,
             onGrantBadge = onGrantBadge,
             onRevokeBadge = onRevokeBadge

@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.GameCategory
 import com.example.model.MatchStatus
 import com.example.model.TournamentMatch
 import com.example.ui.theme.DarkBorder
@@ -309,14 +310,24 @@ fun MatchCard(
                         Box(modifier = Modifier.width(1.dp).height(28.dp).background(DarkBorder))
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val showPerKill = match.category != GameCategory.LONE_WOLF && match.perKillPrize > 0
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.TrackChanges, contentDescription = "Per kill", tint = NeonPink, modifier = Modifier.size(13.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.TrackChanges,
+                                    contentDescription = if (showPerKill) "Per kill" else "Win prize",
+                                    tint = NeonPink,
+                                    modifier = Modifier.size(13.dp)
+                                )
                                 Spacer(modifier = Modifier.width(3.dp))
-                                Text("প্রতি কিল", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                Text(
+                                    text = if (showPerKill) "প্রতি কিল" else "উইন প্রাইজ",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary
+                                )
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (match.perKillPrize > 0) "৳${match.perKillPrize}" else "বুইয়া ৳${match.booyahPrize}",
+                                text = if (showPerKill) "৳${match.perKillPrize}" else "৳${match.booyahPrize}",
                                 fontFamily = MonoFontFamily,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,

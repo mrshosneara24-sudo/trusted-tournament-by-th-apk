@@ -74,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,12 +99,15 @@ import com.example.model.AppCustomization
 import com.example.model.AppUser
 import com.example.model.BadgeAppeal
 import com.example.model.BadgeType
+import com.example.model.EmailAuthResult
 import com.example.model.UserProfile
 import com.example.model.UserRole
+import kotlinx.coroutines.launch
 import com.example.ui.components.BadgePill
 import com.example.ui.components.BadgeShowcaseDialog
 import com.example.ui.components.PlayerProfileCardData
 import com.example.ui.components.PlayerProfileCardDialog
+import com.example.ui.components.hasActorGivenKudos
 import com.example.ui.components.ForgotPasswordDialog
 import com.example.ui.components.InteractiveProfileBadgeTile
 import com.example.ui.components.getAvailableAvatars
@@ -126,8 +130,9 @@ fun AccountScreen(
     userProfile: UserProfile,
     walletBalance: Int,
     onEditProfileClick: () -> Unit,
-    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit,
+    onLogin: suspend (email: String, password: String) -> EmailAuthResult,
+    onRegister: suspend (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> EmailAuthResult,
+    onResendVerification: suspend (email: String, password: String) -> EmailAuthResult = { _, _ -> EmailAuthResult(false, "") },
     onLogout: () -> Unit,
     onNavigateToWallet: () -> Unit,
     onNavigateToMyMatches: () -> Unit,
@@ -157,6 +162,7 @@ fun AccountScreen(
         AuthView(
             onLogin = onLogin,
             onRegister = onRegister,
+            onResendVerification = onResendVerification,
             onRequestOtp = onRequestOtp,
             onVerifyOtp = onVerifyOtp,
             onResetPassword = onResetPassword,
@@ -1595,7 +1601,7 @@ private fun LoggedInAccountView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "অফিসিয়াল বিকাশ: ${appCustomization.officialBkashNumber}",
+                            text = "ভেরিফাইড পেমেন্ট ও সাপোর্ট গেটওয়ে",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = BkashPink
                         )
@@ -1655,6 +1661,7 @@ private fun LoggedInAccountView(
                 }
             } else null,
             onGiveKudos = onGiveKudos,
+            hasGivenKudos = hasActorGivenKudos(profileData, registeredUsers, userProfile),
             onViewAllBadges = {
                 localPlayerProfileCard = null
                 showBadgeDialog = true
@@ -1759,14 +1766,18 @@ private fun AccountMenuRow(
 
 @Composable
 private fun AuthView(
-    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit,
+    onLogin: suspend (email: String, password: String) -> EmailAuthResult,
+    onRegister: suspend (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> EmailAuthResult,
+    onResendVerification: suspend (email: String, password: String) -> EmailAuthResult,
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String>,
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean,
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     var selectedAuthTab by remember { mutableIntStateOf(0) } // 0: Login, 1: Sign Up
+    var pendingVerifyEmail by remember { mutableStateOf("") }
+    var pendingVerifyPassword by remember { mutableStateOf("") }
+    var verificationInfoBanner by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -1863,7 +1874,11 @@ private fun AuthView(
         if (selectedAuthTab == 0) {
             item {
                 LoginFormCard(
+                    initialEmail = pendingVerifyEmail,
+                    initialPassword = pendingVerifyPassword,
+                    initialStatusBanner = verificationInfoBanner,
                     onLogin = onLogin,
+                    onResendVerification = onResendVerification,
                     onRequestOtp = onRequestOtp,
                     onVerifyOtp = onVerifyOtp,
                     onResetPassword = onResetPassword
@@ -1871,7 +1886,15 @@ private fun AuthView(
             }
         } else {
             item {
-                SignUpFormCard(onRegister = onRegister)
+                SignUpFormCard(
+                    onRegister = onRegister,
+                    onRegistrationSuccess = { registeredEmail, registeredPassword, statusMessage ->
+                        pendingVerifyEmail = registeredEmail
+                        pendingVerifyPassword = registeredPassword
+                        verificationInfoBanner = statusMessage
+                        selectedAuthTab = 0
+                    }
+                )
             }
         }
     }
@@ -1879,14 +1902,22 @@ private fun AuthView(
 
 @Composable
 private fun LoginFormCard(
-    onLogin: (phoneOrEmail: String, password: String) -> Boolean,
+    initialEmail: String = "",
+    initialPassword: String = "",
+    initialStatusBanner: String? = null,
+    onLogin: suspend (email: String, password: String) -> EmailAuthResult,
+    onResendVerification: suspend (email: String, password: String) -> EmailAuthResult,
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String>,
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean,
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean
 ) {
-    var phoneOrEmail by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
+    var phoneOrEmail by remember(initialEmail) { mutableStateOf(initialEmail) }
+    var password by remember(initialPassword) { mutableStateOf(initialPassword) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var statusBanner by remember(initialStatusBanner) { mutableStateOf(initialStatusBanner) }
+    var needsVerification by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
 
     Card(
@@ -1902,7 +1933,7 @@ private fun LoginFormCard(
                 color = Color.White
             )
             Text(
-                text = "আপনার ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন",
+                text = "আপনার ভেরিফাইড ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1993,32 +2024,75 @@ private fun LoginFormCard(
                 }
             }
 
+            statusBanner?.let { banner ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = banner,
+                    color = VictoryGreen,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+
             errorMessage?.let { error ->
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = error,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
                 )
+                if (needsVerification) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        enabled = !isLoading,
+                        onClick = {
+                            coroutineScope.launch {
+                                isLoading = true
+                                val res = onResendVerification(phoneOrEmail.trim(), password.trim())
+                                isLoading = false
+                                if (res.success) {
+                                    statusBanner = res.message
+                                } else {
+                                    errorMessage = res.message
+                                }
+                            }
+                        },
+                        border = BorderStroke(1.dp, FlameYellow),
+                        modifier = Modifier.testTag("account_resend_verification_btn")
+                    ) {
+                        Text("Resend Verification Email", color = FlameYellow, fontSize = 11.sp)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
             // Login Button
             Button(
+                enabled = !isLoading,
                 onClick = {
                     val trimmedEmail = phoneOrEmail.trim()
                     if (trimmedEmail.isBlank() || !trimmedEmail.contains("@")) {
                         errorMessage = "আপনার নিবন্ধিত ইমেইল লিখুন"
+                        needsVerification = false
                         return@Button
                     }
                     if (password.isBlank()) {
                         errorMessage = "আপনার পাসওয়ার্ড লিখুন"
+                        needsVerification = false
                         return@Button
                     }
-                    val ok = onLogin(trimmedEmail, password)
-                    if (!ok) {
-                        errorMessage = "ভুল ইমেইল অথবা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে Forgot Password এ চাপুন।"
+                    coroutineScope.launch {
+                        isLoading = true
+                        val res = onLogin(trimmedEmail, password.trim())
+                        isLoading = false
+                        if (!res.success) {
+                            errorMessage = res.message
+                            needsVerification = res.needsVerification
+                        } else {
+                            errorMessage = null
+                            needsVerification = false
+                            statusBanner = null
+                        }
                     }
                 },
                 modifier = Modifier
@@ -2029,7 +2103,7 @@ private fun LoginFormCard(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(
-                    text = "লগইন করুন (Log In)",
+                    text = if (isLoading) "অপেক্ষা করুন..." else "লগইন করুন (Log In)",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )
@@ -2055,9 +2129,12 @@ private fun LoginFormCard(
 
 @Composable
 private fun SignUpFormCard(
-    onRegister: (name: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> Unit
+    onRegister: suspend (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, avatarId: String, password: String) -> EmailAuthResult,
+    onRegistrationSuccess: (email: String, password: String, statusMessage: String) -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var ign by remember { mutableStateOf("") }
     var uid by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -2065,6 +2142,7 @@ private fun SignUpFormCard(
     var password by remember { mutableStateOf("") }
     var selectedAvatarId by remember { mutableStateOf("th_logo") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
 
     val avatars = remember { getAvailableAvatars() }
 
@@ -2081,7 +2159,7 @@ private fun SignUpFormCard(
                 color = Color.White
             )
             Text(
-                text = "ফ্রি ফায়ার টুর্নামেন্টে যোগ দিন • অ্যাকাউন্ট খুললেই ফ্রি ৳৫ বোনাস!",
+                text = "ইমেইল ভেরিফিকেশনের মাধ্যমে ফ্রি ফায়ার টুর্নামেন্টে যোগ দিন",
                 style = MaterialTheme.typography.bodySmall,
                 color = VictoryGreen
             )
@@ -2140,6 +2218,32 @@ private fun SignUpFormCard(
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = FlameYellow,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Email
+            OutlinedTextField(
+                value = email,
+                onValueChange = {
+                    email = it
+                    errorMessage = null
+                },
+                label = { Text("ইমেইল (Email Verification Required)") },
+                placeholder = { Text("example@gmail.com") },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Filled.Email, contentDescription = null, tint = FlameCyan)
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier.fillMaxWidth().testTag("signup_email_input"),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FlameCyan,
                     unfocusedBorderColor = DarkBorder,
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White
@@ -2262,7 +2366,7 @@ private fun SignUpFormCard(
                     password = it
                     errorMessage = null
                 },
-                label = { Text("পাসওয়ার্ড (কমপক্ষে ৪ সংখ্যা)") },
+                label = { Text("পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)") },
                 leadingIcon = {
                     Icon(imageVector = Icons.Filled.Lock, contentDescription = null, tint = FlameYellow)
                 },
@@ -2290,9 +2394,15 @@ private fun SignUpFormCard(
             Spacer(modifier = Modifier.height(20.dp))
 
             Button(
+                enabled = !isLoading,
                 onClick = {
+                    val trimmedEmail = email.trim()
                     if (name.isBlank()) {
                         errorMessage = "আপনার নাম লিখুন"
+                        return@Button
+                    }
+                    if (trimmedEmail.isBlank() || !trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+                        errorMessage = "সঠিক ইমেইল অ্যাড্রেস লিখুন"
                         return@Button
                     }
                     if (ign.isBlank()) {
@@ -2307,19 +2417,29 @@ private fun SignUpFormCard(
                         errorMessage = "মোবাইল নম্বর দিন"
                         return@Button
                     }
-                    if (password.trim().length < 4) {
-                        errorMessage = "কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন"
+                    if (password.trim().length < 6) {
+                        errorMessage = "কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন"
                         return@Button
                     }
-                    onRegister(
-                        name.trim(),
-                        ign.trim(),
-                        uid.trim(),
-                        phone.trim(),
-                        if (bkash.isBlank()) phone.trim() else bkash.trim(),
-                        selectedAvatarId,
-                        password.trim()
-                    )
+                    coroutineScope.launch {
+                        isLoading = true
+                        val res = onRegister(
+                            name.trim(),
+                            trimmedEmail,
+                            ign.trim(),
+                            uid.trim(),
+                            phone.trim(),
+                            if (bkash.isBlank()) phone.trim() else bkash.trim(),
+                            selectedAvatarId,
+                            password.trim()
+                        )
+                        isLoading = false
+                        if (res.success) {
+                            onRegistrationSuccess(trimmedEmail, password.trim(), res.message)
+                        } else {
+                            errorMessage = res.message
+                        }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2329,7 +2449,7 @@ private fun SignUpFormCard(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(
-                    text = "সাইন আপ করুন (৳৫ ফ্রি বোনাস)",
+                    text = if (isLoading) "অপেক্ষা করুন..." else "সাইন আপ ও ভেরিফিকেশন ইমেইল পাঠান",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )

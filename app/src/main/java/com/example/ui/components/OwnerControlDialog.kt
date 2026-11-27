@@ -98,6 +98,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -152,12 +153,10 @@ fun OwnerControlDialog(
     depositRequests: List<DepositRequest> = emptyList(),
     withdrawRequests: List<WithdrawRequest> = emptyList(),
     onDismiss: () -> Unit,
-    onClaimOwner: (key: String) -> Boolean,
     onBanUser: (userIdOrPhone: String, reason: String) -> Unit,
     onUnbanUser: (userIdOrPhone: String) -> Unit,
-    onPromoteToAdmin: (target: String, passcode: String, name: String?, ign: String?, uid: String?) -> Unit,
+    onPromoteToAdmin: (target: String, name: String?, ign: String?, uid: String?) -> Unit,
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
-    onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit = {},
     onCancelLegacySlot: (matchId: String, slotNumber: Int) -> Pair<Boolean, String> = { _, _ -> false to "" },
     onAddManualSlot: (matchId: String, slotNumber: Int, ign: String, uid: String, phone: String, feePaid: Int) -> Pair<Boolean, String> = { _, _, _, _, _, _ -> false to "" },
@@ -233,10 +232,7 @@ fun OwnerControlDialog(
     onHoldBrAndCsForLoneWolf: () -> Pair<Boolean, String> = { false to "" },
     onRescheduleMatchMinutes: (String, Int) -> Pair<Boolean, String> = { _, _ -> false to "" }
 ) {
-    val context = LocalContext.current
-    var isUnlocked by remember { mutableStateOf(userProfile.role == UserRole.OWNER) }
-    var ownerKeyInput by remember { mutableStateOf("") }
-    var unlockError by remember { mutableStateOf<String?>(null) }
+    val isAuthorizedOwner = userProfile.role == UserRole.OWNER
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -251,30 +247,39 @@ fun OwnerControlDialog(
                 .testTag("owner_control_dialog"),
             color = DarkSurface
         ) {
-            if (!isUnlocked) {
-                // Owner Authentication Screen (Supreme Security Gate)
-                OwnerAuthGate(
-                    ownerKeyInput = ownerKeyInput,
-                    onKeyChange = {
-                        ownerKeyInput = it
-                        unlockError = null
-                    },
-                    unlockError = unlockError,
-                    onUnlock = {
-                        if (ownerKeyInput.isBlank()) {
-                            unlockError = "দয়া করে ওনার মাস্টার পাসকি বা পিন লিখুন"
-                        } else {
-                            val success = onClaimOwner(ownerKeyInput.trim())
-                            if (success) {
-                                isUnlocked = true
-                                Toast.makeText(context, "👑 ওনার প্যানেল আনলক হয়েছে!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                unlockError = "❌ ভুল মাস্টার পাসকি! অ্যাক্সেস কেবল মূল মালিকের জন্য।"
-                            }
-                        }
-                    },
-                    onDismiss = onDismiss
-                )
+            if (!isAuthorizedOwner) {
+                // Strictly forbidden unless authenticated as Owner via Firebase Firestore + verified email
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Security,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Text(
+                        text = "অ্যাক্সেস সংরক্ষিত (Owner Only)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                        color = FlameYellow
+                    )
+                    Text(
+                        text = "সাধারণ ইউজার অ্যাপ থেকে অ্যাডমিন বা ওনার হতে পারবেন না। ভূমিকা কেবল Firebase Firestore এর users কালেকশনে ইউজারের UID ডকুমেন্টের role ফিল্ড (owner / admin / player) থেকে নির্ধারিত হয়।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = FlameYellow)
+                    ) {
+                        Text("বন্ধ করুন", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
             } else {
                 // Full Master Owner Dashboard
                 OwnerDashboardContent(
@@ -288,7 +293,6 @@ fun OwnerControlDialog(
                     onUnbanUser = onUnbanUser,
                     onPromoteToAdmin = onPromoteToAdmin,
                     onDemoteAdmin = onDemoteAdmin,
-                    onUpdateMasterPin = onUpdateMasterPin,
                     onCancelSlotAndRefund = onCancelSlotAndRefund,
                     onCancelLegacySlot = onCancelLegacySlot,
                     onAddManualSlot = onAddManualSlot,
@@ -370,149 +374,6 @@ fun OwnerControlDialog(
 }
 
 @Composable
-private fun OwnerAuthGate(
-    ownerKeyInput: String,
-    onKeyChange: (String) -> Unit,
-    unlockError: String?,
-    onUnlock: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(FlameYellow.copy(alpha = 0.15f))
-                .border(1.5.dp, FlameYellow, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Security,
-                contentDescription = null,
-                tint = FlameYellow,
-                modifier = Modifier.size(36.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "👑 ওনার ভেরিফিকেশন",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-            color = FlameYellow
-        )
-        Text(
-            text = "TRUSTED TOURNAMENT - OWNER ONLY",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-            color = Color.White.copy(alpha = 0.7f)
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkCard),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "🔒 কঠোর নিরাপত্তা নোটিশ:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = FlameYellow
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "এই প্যানেলে শুধুমাত্র অ্যাপের মূল মালিক (Owner) প্রবেশ করতে পারবেন। সাধারণ প্লেয়ার বা এমনকি সাধারণ অ্যাডমিনও এখানে ঢুকতে পারবে না। ওনার হিসেবে নিজেকে ভেরিফাই করতে আপনার মাস্টার কী বা পিন প্রবেশ করান।",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f),
-                    lineHeight = 18.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Black.copy(alpha = 0.4f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "আপনার গোপন ওনার পাসকি বা পিন দিয়ে ভেরিফাই করুন",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = VictoryGreen,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = ownerKeyInput,
-            onValueChange = onKeyChange,
-            label = { Text("ওনার মাস্টার পাসকি বা পিন") },
-            placeholder = { Text("গোপন পাসকি বা পিন লিখুন") },
-            leadingIcon = {
-                Icon(Icons.Filled.Key, contentDescription = null, tint = FlameYellow)
-            },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            isError = unlockError != null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("owner_passkey_input"),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = FlameYellow,
-                unfocusedBorderColor = DarkBorder,
-                focusedLabelColor = FlameYellow,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
-
-        if (unlockError != null) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = unlockError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("বন্ধ করুন", color = Color.White)
-            }
-            Button(
-                onClick = onUnlock,
-                modifier = Modifier
-                    .weight(1.5f)
-                    .testTag("owner_unlock_btn"),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = FlameYellow)
-            ) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("আনলক করুন", color = Color.Black, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
 private fun OwnerDashboardContent(
     allUsers: List<AppUser>,
     allBookings: List<SlotBooking>,
@@ -522,9 +383,8 @@ private fun OwnerDashboardContent(
     onDismiss: () -> Unit,
     onBanUser: (userIdOrPhone: String, reason: String) -> Unit,
     onUnbanUser: (userIdOrPhone: String) -> Unit,
-    onPromoteToAdmin: (target: String, passcode: String, name: String?, ign: String?, uid: String?) -> Unit,
+    onPromoteToAdmin: (target: String, name: String?, ign: String?, uid: String?) -> Unit,
     onDemoteAdmin: (userIdOrPhone: String) -> Unit,
-    onUpdateMasterPin: (newPin: String) -> Boolean,
     onCancelSlotAndRefund: (bookingId: String) -> Unit,
     onCancelLegacySlot: (matchId: String, slotNumber: Int) -> Pair<Boolean, String>,
     onAddManualSlot: (matchId: String, slotNumber: Int, ign: String, uid: String, phone: String, feePaid: Int) -> Pair<Boolean, String>,
@@ -914,7 +774,6 @@ private fun OwnerDashboardContent(
                 }
                 9 -> OwnerInstructionsGuideTab()
                 10 -> OwnerSettingsTab(
-                    onUpdateMasterPin = onUpdateMasterPin,
                     onResetAppForFreshDownload = {
                         onResetAppForFreshDownload()
                         onDismiss()
@@ -1404,14 +1263,13 @@ private fun UserBanCard(
 @Composable
 private fun AdminManagementTab(
     users: List<AppUser>,
-    onPromoteToAdmin: (target: String, passcode: String, name: String?, ign: String?, uid: String?) -> Unit,
+    onPromoteToAdmin: (target: String, name: String?, ign: String?, uid: String?) -> Unit,
     onDemoteAdmin: (userIdOrPhone: String) -> Unit
 ) {
     var adminName by remember { mutableStateOf("") }
     var adminPhone by remember { mutableStateOf("") }
     var adminIgn by remember { mutableStateOf("") }
     var adminUid by remember { mutableStateOf("") }
-    var adminPasscode by remember { mutableStateOf("TH-ADMIN-2026") }
     val context = LocalContext.current
 
     val currentAdmins = users.filter { it.role == UserRole.ADMIN || it.role == UserRole.OWNER }
@@ -1513,33 +1371,15 @@ private fun AdminManagementTab(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = adminPasscode,
-                        onValueChange = { adminPasscode = it },
-                        label = { Text("অ্যাডমিন সিক্রেট পিন (যাতে সে অ্যাডমিন প্যানেল চালাতে পারে)") },
-                        leadingIcon = { Icon(Icons.Filled.VpnKey, contentDescription = null, tint = FlameYellow) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FlameYellow,
-                            unfocusedBorderColor = DarkBorder,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
                             if (adminPhone.isBlank()) {
-                                Toast.makeText(context, "ফোন নম্বর দেয়া আবশ্যক!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "ফোন নম্বর বা ইমেইল দেয়া আবশ্যক!", Toast.LENGTH_SHORT).show()
                             } else {
                                 onPromoteToAdmin(
                                     adminPhone.trim(),
-                                    adminPasscode.trim(),
                                     adminName.ifBlank { "টুর্নামেন্ট অ্যাডমিন" },
                                     adminIgn.ifBlank { "TH★ADMIN" },
                                     adminUid.ifBlank { "9876543210" }
@@ -1616,7 +1456,7 @@ private fun AdminManagementTab(
                         )
                         if (admin.role == UserRole.ADMIN) {
                             Text(
-                                text = "অ্যাডমিন পিন: ${admin.adminPasscode ?: "TH-ADMIN-2026"}",
+                                text = "রোল উৎস: Firestore users ডকুমেন্ট (role = admin)",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = VictoryGreen
                             )
@@ -1677,8 +1517,8 @@ private fun OwnerInstructionsGuideTab() {
         item {
             GuideStepCard(
                 stepNumber = "১",
-                title = "আপনি নিজে কীভাবে একাই ওনার (Owner) হবেন?",
-                description = "আপনি অ্যাপ ডাউনলোড করার পর আপনার পারসোনাল ফোন নম্বর (যেমন: 01861583924) দিয়ে লগইন বা রেজিস্টার করবেন। এরপর ওনার প্যানেলে প্রবেশের সময় ওনার মাস্টার পাসকি (TH-OWNER-7788) বা মাস্টার পিন (7788) প্রবেশ করাবেন। একবার প্রবেশ করলেই অ্যাপে আপনার প্রোফাইল '👑 অ্যাপ ওনার (মালিক)' হিসেবে চূড়ান্তভাবে ভেরিফাইড হয়ে যাবে। সাধারণ কোনো প্লেয়ার এই মাস্টার পাসকি জানবে না, তাই পুরো অ্যাপে আপনি ছাড়া অন্য কেউ ওনার হতে পারবে না।"
+                title = "Firebase Email Verification ও Owner নিরাপত্তা",
+                description = "অ্যাপে লগইন করতে প্রতিটি ইউজারকে Firebase Auth দিয়ে ইমেইল ভেরিফাই করতে হয়। ভেরিফাইড ইমেইল ছাড়া কেউ লগইন করতে পারবে না। অ্যাপের মধ্যে কোনো হার্ডকোডেড অ্যাডমিন বা ওনার কোড নেই।"
             )
         }
 
@@ -1686,23 +1526,23 @@ private fun OwnerInstructionsGuideTab() {
             GuideStepCard(
                 stepNumber = "২",
                 title = "প্রতারক ও ফ্রড ইউজারদের কীভাবে ব্যান করবেন?",
-                description = "অনেক সময় অসাধু প্লেয়ার বিকাশ পেমেন্ট না করে ভুয়া TrxID দিয়ে স্লট বুক করার চেষ্টা করে, অথবা টুর্নামেন্টে হ্যাক/স্ক্রিপ্ট ব্যবহার করে। 'ফ্রড ব্যান' ট্যাবে গিয়ে তাদের ফোন নম্বর, UID বা নাম সার্চ করুন। এরপর 'ব্যান করুন (BAN)' বাটনে চাপ দিয়ে কারণ নির্বাচন করুন (যেমন: ভুয়া পেমেন্ট বা হ্যাকিং)। সাথে সাথে ওই ইউজার চিরতরে অ্যাপ থেকে ব্লক হয়ে যাবে এবং সে আর কখনোই কোনো ম্যাচে স্লট বুক করতে পারবে না।"
+                description = "অনেক সময় অসাধু প্লেয়ার বিকাশ পেমেন্ট না করে ভুয়া TrxID দিয়ে স্লট বুক করার চেষ্টা করে, অথবা টুর্নামেন্টে হ্যাক/স্ক্রিপ্ট ব্যবহার করে। 'ফ্রড ব্যান' ট্যাবে গিয়ে তাদের ফোন নম্বর, UID বা নাম সার্চ করুন। এরপর 'ব্যান করুন (BAN)' বাটনে চাপ দিয়ে কারণ নির্বাচন করুন (যেমন: ভুয়া পেমেন্ট বা হ্যাকিং)।"
             )
         }
 
         item {
             GuideStepCard(
                 stepNumber = "৩",
-                title = "নতুন অ্যাডমিন কীভাবে বানাবেন এবং তাদের ক্ষমতা কতটুকু?",
-                description = "টুর্নামেন্টে একসাথে অনেক ম্যাচ থাকলে একা রুম কোড দেওয়া কষ্টকর হতে পারে। তাই আপনার বিশ্বস্ত বন্ধু বা ভাইদের 'অ্যাডমিন নিয়োগ' ট্যাবে গিয়ে তাদের নাম, ফোন নম্বর এবং একটি সিক্রেট অ্যাডমিন পিন দিয়ে অ্যাডমিন বানিয়ে দিন।\n\n⚠️ মনে রাখবেন:\n• অ্যাডমিন কেবল রুম আইডি ও পাসওয়ার্ড প্লেয়ারদের পাঠাতে পারবে।\n• অ্যাডমিন কোনো প্লেয়ারকে ব্যান করতে পারবে না।\n• অ্যাডমিন ওনার প্যানেলে ঢুকতে পারবে না বা অন্য কাউকে অ্যাডমিন বানাতে পারবে না!\n• আপনি চাইলে যেকোনো সময় 'অব্যাহতি' বাটনে এক ট্যাপে তাদের অ্যাডমিন পদ কেড়ে নিতে পারবেন।"
+                title = "Firestore users কালেকশন থেকে রোল নিয়ন্ত্রণ",
+                description = "সাধারণ কোনো ইউজার অ্যাপ থেকে অ্যাডমিন বা ওনার হতে পারবে না। ভূমিকা সম্পূর্ণভাবে Firebase Firestore এর users/{uid} ডকুমেন্টের role ফিল্ড (owner / admin / player) থেকে নির্ধারিত হয় এবং শুধুমাত্র ওনার ও অ্যাডমিন প্যানেলেই ডিপোজিট নম্বর দেখা যায়।"
             )
         }
 
         item {
             GuideStepCard(
                 stepNumber = "৪",
-                title = "ওনার সিকিউরিটি ও গোপনীয়তা রক্ষার নিয়ম",
-                description = "• আপনার মাস্টার পাসকি (TH-OWNER-7788) বা পিন (7788) কোনো সাধারণ প্লেয়ারকে কখনোই জানাবেন না।\n• ওনার প্যানেলে প্রবেশাধিকার শুধুই আপনার জন্য সংরক্ষিত।\n• টুর্নামেন্টের বিকাশ নম্বর (01861583924) সবসময় নিজের নিয়ন্ত্রণে রাখুন।"
+                title = "ডিপোজিট প্রাইভেসি ও গোপনীয়তা রক্ষার নিয়ম",
+                description = "• কোনো প্লেয়ারের bKash/Nagad নম্বর অন্য প্লেয়ারদের কাছে প্রদর্শিত হয় না।\n• শুধুমাত্র ওনার এবং অ্যাডমিন প্যানেলেই পুরো সেন্ডার নম্বর ভেরিফিকেশনের জন্য দেখা যায়।\n• পেমেন্ট ও ফাইন্যান্স সেটিংস শুধু মালিকের নিয়ন্ত্রণে সংরক্ষিত থাকে।"
             )
         }
     }
@@ -1795,10 +1635,8 @@ private fun OwnerOverviewTile(
 // ==========================================
 @Composable
 private fun OwnerSettingsTab(
-    onUpdateMasterPin: (newPin: String) -> Boolean,
     onResetAppForFreshDownload: () -> Unit = {}
 ) {
-    var newPinInput by remember { mutableStateOf("") }
     var showFreshResetConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -1813,53 +1651,20 @@ private fun OwnerSettingsTab(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = DarkCard),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+            border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.45f))
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
-                    text = "🔐 ওনার মাস্টার পিন পরিবর্তন",
+                    text = "🔐 রোল নিরাপত্তা (Firestore Verified)",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = FlameYellow
                 )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "ওনার প্যানেলে দ্রুত আনলক করার জন্য নিজের গোপন পিন সেট করুন (যেমন: 7788)",
+                    text = "অ্যাপের ভিতরে কোনো হার্ডকোডেড ওনার বা অ্যাডমিন কোড নেই। Firebase Firestore এর users কালেকশনে UID ভিত্তিক role ফিল্ড (owner / admin / player) যাচাই করে স্বয়ংক্রিয়ভাবে প্যানেল অনুমোদিত হয়।",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = Color.White.copy(alpha = 0.8f)
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = newPinInput,
-                    onValueChange = { newPinInput = it },
-                    label = { Text("নতুন মাস্টার পিন (কমপক্ষে ৪ সংখ্যা)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FlameYellow,
-                        unfocusedBorderColor = DarkBorder,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Button(
-                    onClick = {
-                        if (newPinInput.length >= 4) {
-                            val success = onUpdateMasterPin(newPinInput.trim())
-                            if (success) {
-                                Toast.makeText(context, "পিন আপডেট হয়েছে!", Toast.LENGTH_SHORT).show()
-                                newPinInput = ""
-                            }
-                        } else {
-                            Toast.makeText(context, "পিন কমপক্ষে ৪ সংখ্যার হতে হবে", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = FlameYellow),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("মাস্টার পিন সেভ করুন", color = Color.Black, fontWeight = FontWeight.Bold)
-                }
             }
         }
 
@@ -1880,8 +1685,8 @@ private fun OwnerSettingsTab(
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("• সার্ভার স্ট্যাটাস: সচল ও সুরক্ষিত 🟢", style = MaterialTheme.typography.bodySmall, color = VictoryGreen)
-                Text("• বিকাশ মার্চেন্ট নম্বর: 01861583924", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                Text("• সার্ভার স্ট্যাটাস: সচল ও সুরক্ষিত (Firebase Auth + Firestore)", style = MaterialTheme.typography.bodySmall, color = VictoryGreen)
+                Text("• পেমেন্ট প্রাইভেসি: ডিপোজিট সেন্ডার নম্বর শুধু ওনার/অ্যাডমিন প্যানেলে দৃশ্যমান", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                 Text("• প্রতারক সুরক্ষা: অটোমেটিক ব্লকিং অ্যাক্টিভ 🛡️", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                 Text("• ম্যাচ সময়সূচী: বিকাল ৫:০০ - রাত ৮:০০ (সুপারফাস্ট এক্সপ্রেস)", style = MaterialTheme.typography.bodySmall, color = FlameYellow)
             }

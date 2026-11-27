@@ -484,8 +484,10 @@ fun OwnerCommandAndPromoSection(
                         OutlinedTextField(value = editPrize, onValueChange = { editPrize = it.filter { ch -> ch.isDigit() } }, label = { Text("প্রাইজপুল (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = editPerKill, onValueChange = { editPerKill = it.filter { ch -> ch.isDigit() } }, label = { Text("প্রতি কিল (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary))
-                        OutlinedTextField(value = editBooyah, onValueChange = { editBooyah = it.filter { ch -> ch.isDigit() } }, label = { Text("Booyah (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary))
+                        if (activeMatch.category != com.example.model.GameCategory.LONE_WOLF) {
+                            OutlinedTextField(value = editPerKill, onValueChange = { editPerKill = it.filter { ch -> ch.isDigit() } }, label = { Text("প্রতি কিল (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary))
+                        }
+                        OutlinedTextField(value = editBooyah, onValueChange = { editBooyah = it.filter { ch -> ch.isDigit() } }, label = { Text(if (activeMatch.category == com.example.model.GameCategory.LONE_WOLF) "উইন প্রাইজ (৳)" else "Booyah (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = FlameCyan, unfocusedBorderColor = DarkBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary))
                     }
 
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -507,6 +509,11 @@ fun OwnerCommandAndPromoSection(
                                 } else {
                                     activeMatch.effectiveStartMillis()
                                 }
+                                val safePerKill = if (activeMatch.category == com.example.model.GameCategory.LONE_WOLF) {
+                                    0
+                                } else {
+                                    editPerKill.toIntOrNull() ?: activeMatch.perKillPrize
+                                }
                                 onUpdateExistingMatch(
                                     activeMatch.copy(
                                         title = editTitle.ifBlank { activeMatch.title },
@@ -515,7 +522,7 @@ fun OwnerCommandAndPromoSection(
                                         scheduledStartAtMillis = updatedScheduled,
                                         entryFee = editEntry.toIntOrNull() ?: activeMatch.entryFee,
                                         totalPrize = editPrize.toIntOrNull() ?: activeMatch.totalPrize,
-                                        perKillPrize = editPerKill.toIntOrNull() ?: activeMatch.perKillPrize,
+                                        perKillPrize = safePerKill,
                                         booyahPrize = editBooyah.toIntOrNull() ?: activeMatch.booyahPrize,
                                         status = editStatus
                                     )

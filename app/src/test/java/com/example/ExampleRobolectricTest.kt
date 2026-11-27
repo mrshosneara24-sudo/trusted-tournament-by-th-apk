@@ -15,9 +15,11 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.TournamentRepository
+import com.example.model.ChatChannel
 import com.example.ui.MainTournamentApp
 import com.example.ui.TournamentTab
 import com.example.ui.TournamentViewModel
+import com.example.ui.screens.AccountScreen
 import com.example.ui.theme.TrustedTournamentTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,7 +58,7 @@ class ExampleRobolectricTest {
         // Verify 5 Taka free welcome bonus copy on registration tab
         composeTestRule.onNodeWithText("অ্যাকাউন্ট খুললেই পাচ্ছেন ফ্রি ৳৫ ওয়েলকাম বোনাস!").assertIsDisplayed()
         composeTestRule.onNodeWithTag("auth_submit_btn").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("🚀 অ্যাকাউন্ট খুলুন (৳৫ ফ্রি বোনাস)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("অ্যাকাউন্ট খুলুন ও ইমেইল ভেরিফাই করুন").assertIsDisplayed()
 
         // Verify 1-tap demo owner login shortcut is completely removed
         composeTestRule.onNodeWithTag("demo_owner_login_btn").assertDoesNotExist()
@@ -72,7 +74,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `owner login with 01861583924 and 7788 renders matches missions maintenance banner empty leaderboard and withdraw dialog`() {
+    fun `owner login renders match slots directly without quests shows fun giveaway tab and withdraw dialog`() {
         val repo = TournamentRepository()
         val viewModel = TournamentViewModel(repo)
 
@@ -83,18 +85,27 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Owner signs in via 01861583924 + 7788
-        assertTrue(viewModel.login("01861583924", "7788"))
+        // Hardcoded 7788 / 77110 rejected; Owner signs in with registered credentials (Firestore role = OWNER)
+        assertFalse(viewModel.login("01861583924", "7788"))
+        assertFalse(viewModel.login("owner@trustedth.com", "77110"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         composeTestRule.waitForIdle()
 
         // Owner TopAppBar crown button is visible for OWNER
         composeTestRule.onNodeWithTag("appbar_owner_btn").assertIsDisplayed()
 
-        // Main dashboard renders with matches & daily missions
-        composeTestRule.onNodeWithTag("matches_screen_list").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("matches_screen_list").performScrollToIndex(2)
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("mission_card_m1").assertIsDisplayed()
+        // Main dashboard renders Match Slots cleanly without quests, spin, or mini-games clutter
+        composeTestRule.onNodeWithTag("matches_screen_list")
+            .assertIsDisplayed()
+            .performScrollToNode(hasTestTag("match_card_m_lw_1"))
+        composeTestRule.onNodeWithTag("match_card_m_lw_1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("mission_card_m1").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("sensitivity_lab_card").assertDoesNotExist()
+        composeTestRule.onNodeWithText("প্রতি কিল", substring = true).assertDoesNotExist()
+
+        // Fun & Giveaway tab sits in bottom navigation beside Global Chat
+        composeTestRule.onNodeWithTag("tab_global_chat").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tab_fun_giveaway").assertIsDisplayed()
 
         // Empty leaderboard state displays cleanly on fresh app
         viewModel.selectTab(TournamentTab.LEADERBOARD)
@@ -119,7 +130,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `viewmodel reactive sync updates slot capacity bkash number and missions`() {
+    fun `viewmodel reactive sync updates slot capacity bkash number and fun giveaway tab state`() {
         val repo = TournamentRepository()
         val vm = TournamentViewModel(repo)
         val match = vm.allMatches.value.first()
@@ -135,18 +146,12 @@ class ExampleRobolectricTest {
         vm.updateFinancialSettings("01955555555", "01966666666", "https://wa.me/test", 60, 300)
         assertEquals("01955555555", vm.officialBkashNumber)
 
-        vm.sendAiMessage("রুম আইডি কখন পাবো?")
-        val aiMission = vm.dailyMissions.value.find { it.actionType == "AI_CHAT" }
-        assertNotNull(aiMission)
-        assertTrue("AI_CHAT mission should auto-complete on sending message", aiMission!!.isCompleted)
-
-        val matchMission = vm.dailyMissions.value.find { it.actionType == "MATCH" }
-        assertNotNull(matchMission)
-        assertTrue("MATCH mission should complete on viewing slot grid", matchMission!!.isCompleted)
+        vm.selectTab(TournamentTab.FUN_GIVEAWAY)
+        assertEquals(TournamentTab.FUN_GIVEAWAY, vm.currentTab.value)
     }
 
     @Test
-    fun `new player registration grants 5 taka hides owner bar and opens pro sensitivity lab`() {
+    fun `new player registration grants 5 taka hides owner bar and opens pro sensitivity lab inside fun giveaway tab`() {
         val repo = TournamentRepository()
         val viewModel = TournamentViewModel(repo)
 
@@ -166,11 +171,14 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("appbar_admin_btn").assertDoesNotExist()
         assertEquals(5, viewModel.walletBalance.value)
 
-        // Scroll to item index 3 where Sensitivity Pro Lab card sits
-        composeTestRule.onNodeWithTag("matches_screen_list").performScrollToIndex(3)
+        // Open Fun & Giveaway tab (beside Global Chat) where all fun modules & Sensitivity Pro Lab live
+        composeTestRule.onNodeWithTag("tab_fun_giveaway").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("fun_giveaway_screen").assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag("sensitivity_lab_card").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("fun_giveaway_screen")
+            .performScrollToNode(hasTestTag("sensitivity_lab_card"))
+        composeTestRule.onNodeWithTag("sensitivity_lab_card").performScrollTo().assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("sensitivity_pro_dialog").assertIsDisplayed()
@@ -189,7 +197,7 @@ class ExampleRobolectricTest {
         assertTrue(firstSessionRepo.register("Hasan", "TH_Hasan", "77665544", "01777665544", "01777665544", password = "pass999"))
         assertTrue(firstSessionRepo.adjustUserBalance("01777665544", 100, isAdd = true, reason = "Owner gift").first)
         val match = firstSessionRepo.matches.value.first()
-        assertTrue(firstSessionRepo.bookSlotWithWallet(match, 4, "TH_Hasan", "77665544").first)
+        assertTrue(firstSessionRepo.bookSlotWithWallet(match, 2, "TH_Hasan", "77665544").first)
         val expectedBalance = firstSessionRepo.walletBalance.value
 
         // Simulate closing and reopening the app by creating a brand-new TournamentRepository(context)
@@ -226,8 +234,11 @@ class ExampleRobolectricTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("wallet_withdraw_eligibility_pill").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("wallet_screen").performScrollToNode(hasTestTag("wallet_system_guide_card"))
         composeTestRule.onNodeWithTag("wallet_system_guide_card").assertIsDisplayed()
 
+        composeTestRule.onNodeWithTag("wallet_screen").performScrollToIndex(0)
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("wallet_withdraw_btn").performClick()
         composeTestRule.waitForIdle()
 
@@ -245,9 +256,9 @@ class ExampleRobolectricTest {
         assertTrue(viewModel.submitDepositRequest(100, com.example.model.WalletPaymentMethod.BKASH, "01733445566", "TRX998811"))
         val depositReqId = viewModel.depositRequests.value.first().id
 
-        // Owner logs in via 01861583924 + 7788
+        // Owner logs in
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
 
         composeTestRule.setContent {
             TrustedTournamentTheme {
@@ -322,7 +333,7 @@ class ExampleRobolectricTest {
         // Register a player, then sign in as Owner
         assertTrue(viewModel.register("Siam", "TH_Siam", "66554433", "01766554433", "01766554433", "th_logo", "pass123"))
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
 
         composeTestRule.setContent {
             TrustedTournamentTheme {
@@ -454,6 +465,11 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("player_profile_give_kudos_btn").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         assertEquals(13, repo.registeredUsers.value.first { it.uid == "11410365896" }.kudosCount)
+
+        // Clicking GG/Respect again from the same player toggles/removes kudos cleanly back to 12
+        composeTestRule.onNodeWithTag("player_profile_give_kudos_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(12, repo.registeredUsers.value.first { it.uid == "11410365896" }.kudosCount)
     }
 
     @Test
@@ -496,7 +512,7 @@ class ExampleRobolectricTest {
 
         // 2. Owner logs in, opens Owner panel -> Badges tab -> accepts appeal and selects V_BADGE
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         viewModel.openOwnerPanel()
         composeTestRule.waitForIdle()
 
@@ -573,7 +589,7 @@ class ExampleRobolectricTest {
 
         // Owner signs in and opens Owner Panel -> Badges tab
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
 
         composeTestRule.setContent {
             TrustedTournamentTheme {
@@ -669,7 +685,7 @@ class ExampleRobolectricTest {
 
         // 3. Owner login -> Animated GIF PFP & Animated GIF Banner unlocked
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         viewModel.openEditProfile()
         composeTestRule.waitForIdle()
 
@@ -678,7 +694,7 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `global chat tab next to leaderboard lets owner admin and members talk reply pin and view profile cards`() {
+    fun `discord global chat next to fun giveaway lets owner and members talk react once without pins and view profiles`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("th_tournament_persistent_store_v1", Context.MODE_PRIVATE)
             .edit().clear().commit()
@@ -695,13 +711,14 @@ class ExampleRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Both Leaderboard and Global Chat bottom tabs exist side-by-side
-        composeTestRule.onNodeWithTag("tab_leaderboard").assertIsDisplayed()
+        // Global Chat and Fun/Giveaway tabs exist beside each other
+        composeTestRule.onNodeWithTag("tab_fun_giveaway").assertIsDisplayed()
         composeTestRule.onNodeWithTag("tab_global_chat").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("global_chat_screen").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("global_chat_pinned_banner").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("global_chat_pinned_banner").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("global_chat_pin_toggle").assertDoesNotExist()
 
         // Member sends a message via UI
         composeTestRule.onNodeWithTag("global_chat_input").performTextReplacement("সবাই রেডি তো?")
@@ -713,20 +730,32 @@ class ExampleRobolectricTest {
             hasAnyAncestor(hasTestTag("global_chat_list")) and hasText("সবাই রেডি তো?")
         ).assertIsDisplayed()
 
-        // Owner logs in and sends a pinned announcement in Global Chat
+        // Owner logs in and sends message in Global Chat
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         viewModel.selectTab(TournamentTab.GLOBAL_CHAT)
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag("global_chat_pin_toggle").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("global_chat_pin_toggle").assertDoesNotExist()
         composeTestRule.onNodeWithTag("global_chat_input").performTextReplacement("ম্যাচ ১৫ মিনিটে শুরু হবে!")
         composeTestRule.onNodeWithTag("global_chat_send_btn").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
 
         val lastMsg = repo.globalChatMessages.value.last()
-        assertTrue(lastMsg.isPinnedAnnouncement)
+        assertFalse(lastMsg.isPinnedAnnouncement)
         assertEquals("ম্যাচ ১৫ মিনিটে শুরু হবে!", lastMsg.text)
+
+        // Single-use toggleable reaction chip works (tap adds 1 GG, tapping WIN switches vote cleanly)
+        composeTestRule.onNodeWithTag("global_chat_list")
+            .performScrollToNode(hasTestTag("global_chat_msg_${lastMsg.id}"))
+        composeTestRule.onNodeWithTag("global_chat_react_${lastMsg.id}_GG").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(1, repo.globalChatMessages.value.last().reactions["GG"])
+
+        composeTestRule.onNodeWithTag("global_chat_react_${lastMsg.id}_WIN").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(null, repo.globalChatMessages.value.last().reactions["GG"])
+        assertEquals(1, repo.globalChatMessages.value.last().reactions["WIN"])
 
         // Clicking sender opens PlayerProfileCardDialog
         composeTestRule.onNodeWithTag("global_chat_sender_${lastMsg.id}").performClick()
@@ -811,7 +840,7 @@ class ExampleRobolectricTest {
 
         val repo = TournamentRepository(context)
         val viewModel = TournamentViewModel(repo)
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
 
         composeTestRule.setContent {
             TrustedTournamentTheme {
@@ -894,7 +923,7 @@ class ExampleRobolectricTest {
         val viewModel = TournamentViewModel(repo)
         assertTrue(viewModel.register("TestUser", "TH_Test", "10203040", "01710203040", "01710203040", "th_logo", "pass123"))
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
 
         composeTestRule.setContent {
             TrustedTournamentTheme {
@@ -941,7 +970,7 @@ class ExampleRobolectricTest {
         val adminPhone = "01766554433"
         assertTrue(viewModel.register("Sajid", "TH_Sajid", "88776655", playerPhone, playerPhone, "th_logo", "pass123"))
         assertTrue(viewModel.register("AdminRafi", "TH_AdminRafi", "66554433", adminPhone, adminPhone, "th_logo", "pass123"))
-        assertTrue(repo.promoteToAdmin(adminPhone, "TH-RAFI", "AdminRafi", "TH_AdminRafi", "66554433"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "AdminRafi", "TH_AdminRafi", "66554433"))
 
         // Log in as Admin and render MainTournamentApp
         viewModel.logout()
@@ -989,7 +1018,7 @@ class ExampleRobolectricTest {
         // 2. Owner opens Owner Panel -> Moderation tab and verifies Moderation Panel + Audit Log
         viewModel.closeAdminPanel()
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         composeTestRule.waitForIdle()
 
         viewModel.openOwnerPanel()
@@ -1066,7 +1095,7 @@ class ExampleRobolectricTest {
         composeTestRule.onNodeWithTag("auth_submit_btn").performScrollTo().assertIsDisplayed()
 
         // Owner logs in
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         composeTestRule.waitForIdle()
 
         // Cloud Sync pill is visible in quick action strip
@@ -1102,13 +1131,13 @@ class ExampleRobolectricTest {
         val match = viewModel.allMatches.value.first()
         val initialCapacity = match.totalSlots
         val expectedPlayerBalanceBeforeRefund = 105 - match.entryFee
-        assertTrue(repo.bookSlotWithWallet(match, 3, "TH_Tamim", "55667788").first)
-        val playerBookingId = repo.myBookings.value.first { it.slotNumber == 3 && it.matchId == match.id }.bookingId
+        assertTrue(repo.bookSlotWithWallet(match, 2, "TH_Tamim", "55667788").first)
+        val playerBookingId = repo.myBookings.value.first { it.slotNumber == 2 && it.matchId == match.id }.bookingId
         assertEquals(expectedPlayerBalanceBeforeRefund, repo.registeredUsers.value.first { it.phone == playerPhone }.walletBalance)
 
         // Owner logs in (wallet balance 0)
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         viewModel.clearSnackbar()
         val ownerBalanceBefore = repo.walletBalance.value
 
@@ -1128,7 +1157,7 @@ class ExampleRobolectricTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("room_slot_grid_dialog").assertIsDisplayed()
         composeTestRule.onNodeWithTag("slot_grid_item_1").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("slot_booked_player_chip_3").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("slot_booked_player_chip_2").performScrollTo().assertIsDisplayed()
         viewModel.closeSlotGrid()
         composeTestRule.waitForIdle()
 
@@ -1145,19 +1174,19 @@ class ExampleRobolectricTest {
         composeTestRule.waitForIdle()
         assertEquals(initialCapacity + 2, repo.matches.value.first { it.id == match.id }.totalSlots)
 
-        // 2. Add a manual slot (#5) via Slot Add panel
+        // 2. Add a manual slot (#4) via Slot Add panel
         composeTestRule.onNodeWithTag("owner_slot_control_list")
             .performScrollToNode(hasTestTag("owner_add_slot_num_input"))
-        composeTestRule.onNodeWithTag("owner_add_slot_num_input").performTextReplacement("5")
+        composeTestRule.onNodeWithTag("owner_add_slot_num_input").performTextReplacement("4")
         composeTestRule.onNodeWithTag("owner_add_slot_ign_input").performTextReplacement("TH_ManualPro")
         composeTestRule.onNodeWithTag("owner_add_slot_uid_input").performTextReplacement("99887766")
         composeTestRule.onNodeWithTag("owner_slot_control_list")
             .performScrollToNode(hasTestTag("owner_add_slot_btn"))
         composeTestRule.onNodeWithTag("owner_add_slot_btn").performClick()
         composeTestRule.waitForIdle()
-        assertTrue(repo.myBookings.value.any { it.matchId == match.id && it.slotNumber == 5 && it.playerIgn == "TH_ManualPro" })
+        assertTrue(repo.myBookings.value.any { it.matchId == match.id && it.slotNumber == 4 && it.playerIgn == "TH_ManualPro" })
 
-        // 3. Remove player Tamim's slot (#3) via UI cancel & confirm refund button
+        // 3. Remove player Tamim's slot (#2) via UI cancel & confirm refund button
         composeTestRule.onNodeWithTag("owner_slot_control_list")
             .performScrollToNode(hasTestTag("cancel_slot_btn_$playerBookingId"))
         composeTestRule.onNodeWithTag("cancel_slot_btn_$playerBookingId").performClick()
@@ -1185,14 +1214,14 @@ class ExampleRobolectricTest {
         val adminPhone = "01733445566"
         assertTrue(viewModel.register("Sakib", "TH_SakibPro", "22334455", playerPhone, playerPhone, "th_logo", "pass123"))
         assertTrue(viewModel.register("AdminKai", "TH_KaiMod", "33445566", adminPhone, adminPhone, "th_logo", "pass123"))
-        assertTrue(repo.promoteToAdmin(adminPhone, "TH-KAI", "AdminKai", "TH_KaiMod", "33445566"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "AdminKai", "TH_KaiMod", "33445566"))
 
         // Initially leaderboard is empty on fresh download
         assertTrue(viewModel.leaderboard.value.isEmpty())
 
         // Log in as Owner
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         viewModel.clearSnackbar()
 
         composeTestRule.setContent {
@@ -1312,7 +1341,7 @@ class ExampleRobolectricTest {
         val playerMsgId = repo.globalChatMessages.value.last().id
 
         assertTrue(viewModel.register("AdminNabil", "TH_NabilMod", "99887766", adminPhone, adminPhone, "th_logo", "pass123"))
-        assertTrue(repo.promoteToAdmin(adminPhone, "TH-NABIL", "AdminNabil", "TH_NabilMod", "99887766"))
+        assertTrue(repo.promoteToAdmin(adminPhone, "AdminNabil", "TH_NabilMod", "99887766"))
 
         // Register a second regular player to view Rafi's profile
         viewModel.logout()
@@ -1341,7 +1370,7 @@ class ExampleRobolectricTest {
 
         // 1. Owner logs in -> clicks Rafi's profile in Global Chat -> grants & revokes badges live
         viewModel.logout()
-        assertTrue(viewModel.login("01861583924", "7788"))
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("global_chat_list")
@@ -1423,7 +1452,95 @@ class ExampleRobolectricTest {
         assertTrue(repo.leaderboard.value.isEmpty())
         assertTrue(repo.myBookings.value.isEmpty())
     }
+
+    @Test
+    fun `account screen shows Please verify your email and resend verification button when unverified`() {
+        val repo = TournamentRepository()
+        val viewModel = TournamentViewModel(repo)
+        val unverifiedEmail = "unverified.player@gmail.com"
+        assertTrue(
+            repo.register(
+                accountName = "Unverified Player",
+                ign = "TH_Unverified",
+                uid = "5544332211",
+                phone = "01733445566",
+                bkash = "01733445566",
+                password = "password123",
+                email = unverifiedEmail
+            )
+        )
+        repo.logout()
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                AccountScreen(
+                    userProfile = repo.userProfile.value,
+                    walletBalance = 0,
+                    onEditProfileClick = {},
+                    onLogin = { e, p -> viewModel.loginWithEmailVerification(e, p) },
+                    onRegister = { n, e, ign, uid, ph, bk, av, pw ->
+                        viewModel.signUpWithEmailVerification(n, e, ign, uid, ph, bk, av, pw)
+                    },
+                    onResendVerification = { e, p -> viewModel.resendVerificationEmail(e, p) },
+                    onLogout = {},
+                    onNavigateToWallet = {},
+                    onNavigateToMyMatches = {},
+                    onOpenRules = {},
+                    onOpenSupportChat = {},
+                    onOpenOwnerPanel = {},
+                    onOpenSettings = {},
+                    appCustomization = repo.appCustomization.value
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("login_email_input").performScrollTo().performTextReplacement(unverifiedEmail)
+        composeTestRule.onNodeWithTag("login_password_input").performScrollTo().performTextReplacement("password123")
+        composeTestRule.onNodeWithTag("submit_login_btn").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("Please verify your email").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("account_resend_verification_btn").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `discord global chat renders category channels excludes staff filter and filters messages by channel`() {
+        val repo = TournamentRepository()
+        val viewModel = TournamentViewModel(repo)
+        assertTrue(viewModel.login("owner@trustedth.com", "123456"))
+        assertTrue(
+            viewModel.sendGlobalChatMessage(
+                text = "Lone Wolf 1v1 slot open",
+                channelId = ChatChannel.LONE_WOLF.id
+            ).first
+        )
+
+        composeTestRule.setContent {
+            TrustedTournamentTheme {
+                MainTournamentApp(viewModel = viewModel)
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tab_global_chat").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+
+        // Category channels rendered cleanly; staff-only filter is removed
+        composeTestRule.onNodeWithTag("chat_channel_global").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("chat_channel_lone_wolf").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("chat_channel_br_rank").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("chat_channel_cs_rank").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("global_chat_filter_staff").assertDoesNotExist()
+
+        // Lone Wolf message is hidden in #global-chat and appears when switching to #lone-wolf
+        composeTestRule.onNodeWithText("Lone Wolf 1v1 slot open").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("chat_channel_lone_wolf").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Lone Wolf 1v1 slot open").assertIsDisplayed()
+    }
 }
+
 
 
 

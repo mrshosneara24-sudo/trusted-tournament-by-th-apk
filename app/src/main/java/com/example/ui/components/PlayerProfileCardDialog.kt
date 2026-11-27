@@ -341,6 +341,31 @@ fun GlobalChatMessage.toPlayerProfileCard(
     )
 }
 
+fun hasActorGivenKudos(
+    profile: PlayerProfileCardData,
+    registeredUsers: List<AppUser>,
+    currentUser: UserProfile
+): Boolean {
+    val actorMatched = registeredUsers.firstOrNull {
+        (currentUser.phone.isNotBlank() && it.phone == currentUser.phone) ||
+            (currentUser.uid.isNotBlank() && it.uid == currentUser.uid) ||
+            (currentUser.ign.isNotBlank() && it.ign.equals(currentUser.ign, ignoreCase = true))
+    }
+    val actorKeys = setOfNotNull(
+        actorMatched?.id?.takeIf { it.isNotBlank() },
+        currentUser.phone.takeIf { it.isNotBlank() },
+        currentUser.uid.takeIf { it.isNotBlank() },
+        currentUser.ign.takeIf { it.isNotBlank() }
+    )
+    if (actorKeys.isEmpty()) return false
+    val targetUser = registeredUsers.firstOrNull { u ->
+        (profile.userId.isNotBlank() && (u.id == profile.userId || u.phone == profile.userId)) ||
+            (profile.uid.isNotBlank() && profile.uid != "N/A" && u.uid == profile.uid) ||
+            u.ign.equals(profile.ign, ignoreCase = true)
+    } ?: return false
+    return actorKeys.any { it in targetUser.kudosGiverKeys }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerProfileCardDialog(
@@ -348,6 +373,7 @@ fun PlayerProfileCardDialog(
     onDismiss: () -> Unit,
     onEditOwnProfile: (() -> Unit)? = null,
     onGiveKudos: ((String) -> Int)? = null,
+    hasGivenKudos: Boolean = false,
     onViewAllBadges: (() -> Unit)? = null,
     userProfileForAppeal: UserProfile? = null,
     badgeAppeals: List<BadgeAppeal> = emptyList(),
@@ -365,6 +391,7 @@ fun PlayerProfileCardDialog(
     var currentBadges by remember(profile.userId, profile.uid, profile.badges) { mutableStateOf(profile.badges) }
     var highlightedBadge by remember { mutableStateOf<BadgeType?>(null) }
     var localKudos by remember(profile.userId, profile.kudosCount) { mutableIntStateOf(profile.kudosCount) }
+    var localHasGivenKudos by remember(profile.userId, profile.kudosCount, hasGivenKudos) { mutableStateOf(hasGivenKudos) }
     var hasHypePop by remember { mutableStateOf(false) }
 
     val canManageTargetBadges = (viewerRole == UserRole.OWNER || viewerRole == UserRole.ADMIN) &&
@@ -1279,12 +1306,19 @@ fun PlayerProfileCardDialog(
                         Button(
                             onClick = {
                                 hasHypePop = true
-                                val serverCount = onGiveKudos?.invoke(profile.userId.ifBlank { profile.uid }) ?: 0
-                                localKudos = if (serverCount > 0) serverCount else localKudos + 1
+                                val targetKey = profile.userId.ifBlank { profile.uid }.ifBlank { profile.ign }
+                                if (onGiveKudos != null) {
+                                    val serverCount = onGiveKudos.invoke(targetKey)
+                                    localKudos = serverCount.coerceAtLeast(0)
+                                    localHasGivenKudos = !localHasGivenKudos
+                                } else {
+                                    localHasGivenKudos = !localHasGivenKudos
+                                    localKudos = if (localHasGivenKudos) localKudos + 1 else (localKudos - 1).coerceAtLeast(0)
+                                }
                             },
                             modifier = Modifier
                                 .weight(1.25f)
-                                .height(46.dp)
+                                .height(48.dp)
                                 .graphicsLayer {
                                     scaleX = hypeScale
                                     scaleY = hypeScale
@@ -1292,9 +1326,10 @@ fun PlayerProfileCardDialog(
                                 .testTag("player_profile_give_kudos_btn"),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BkashPink,
+                                containerColor = if (localHasGivenKudos) Color(0xFF14532D) else BkashPink,
                                 contentColor = Color.White
                             ),
+                            border = if (localHasGivenKudos) BorderStroke(1.dp, VictoryGreen) else null,
                             contentPadding = PaddingValues(horizontal = 10.dp)
                         ) {
                             Icon(
@@ -1304,8 +1339,12 @@ fun PlayerProfileCardDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "রেস্পেক্ট / GG ($localKudos)",
-                                fontSize = 12.sp,
+                                text = if (localHasGivenKudos) {
+                                    "GG দেওয়া হয়েছে ($localKudos) • সরান"
+                                } else {
+                                    "রেস্পেক্ট / GG ($localKudos)"
+                                },
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Black,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis

@@ -125,12 +125,12 @@ fun SettingsDialog(
     var showFreshResetConfirm by remember { mutableStateOf(false) }
 
     val userDeposits = remember(depositRequests, currentUserPhone) {
-        if (currentUserPhone.isBlank()) depositRequests
-        else depositRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+        if (currentUserPhone.isBlank()) emptyList()
+        else depositRequests.filter { it.userPhone == currentUserPhone }
     }
     val userWithdraws = remember(withdrawRequests, currentUserPhone) {
-        if (currentUserPhone.isBlank()) withdrawRequests
-        else withdrawRequests.filter { it.userPhone.isBlank() || it.userPhone == currentUserPhone }
+        if (currentUserPhone.isBlank()) emptyList()
+        else withdrawRequests.filter { it.userPhone == currentUserPhone }
     }
     val pendingGlobalCount = remember(depositRequests, withdrawRequests) {
         depositRequests.count { it.status == RequestStatus.PENDING } +
@@ -466,7 +466,7 @@ fun SettingsDialog(
                                     userDeposits.take(4).forEach { req ->
                                         SettingsRequestRow(
                                             title = "ডিপোজিট • ${req.paymentMethod.displayName} (+৳${req.amount})",
-                                            subtitle = "TrxID: ${req.trxId} • নম্বর: ${req.senderNumber}",
+                                            subtitle = "TrxID: ${req.trxId} • প্রেরক: ${com.example.model.maskPhoneForPrivacy(req.senderNumber)}",
                                             status = req.status,
                                             note = req.adminNote
                                         )
@@ -474,7 +474,7 @@ fun SettingsDialog(
                                     userWithdraws.take(4).forEach { req ->
                                         SettingsRequestRow(
                                             title = "উইথড্র • ${req.paymentMethod.displayName} (-৳${req.amount})",
-                                            subtitle = "প্রাপক নম্বর: ${req.targetNumber}",
+                                            subtitle = "প্রাপক: ${com.example.model.maskPhoneForPrivacy(req.targetNumber)}",
                                             status = req.status,
                                             note = req.adminNote
                                         )
@@ -735,31 +735,33 @@ fun SettingsDialog(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "অফিসিয়াল বিকাশ নম্বর",
+                                        text = "সুরক্ষিত পেমেন্ট গেটওয়ে",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextSecondary
                                     )
                                     Text(
-                                        text = officialBkashNumber,
+                                        text = if (isOwner || isAdmin) officialBkashNumber else "TH-BKASH-GATEWAY",
                                         fontFamily = MonoFontFamily,
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = BkashPink
                                     )
                                 }
                             }
-                            IconButton(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(officialBkashNumber))
-                                    Toast.makeText(context, "বিকাশ নম্বর কপি হয়েছে!", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentCopy,
-                                    contentDescription = "Copy",
-                                    tint = BkashPink,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                            if (isOwner || isAdmin) {
+                                IconButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(officialBkashNumber))
+                                        Toast.makeText(context, "বিকাশ নম্বর কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = "Copy",
+                                        tint = BkashPink,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
 

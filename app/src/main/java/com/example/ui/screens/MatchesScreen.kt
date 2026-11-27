@@ -1,6 +1,6 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,17 +19,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.GpsFixed
-import androidx.compose.material.icons.filled.HeadsetMic
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,37 +44,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppCustomization
-import com.example.model.BonusGiftDrop
-import com.example.model.DailyGamerMission
-import com.example.model.DailyTriviaProgress
 import com.example.model.GameCategory
-import com.example.model.GiveawayEvent
-import com.example.model.GiveawayStatus
-import com.example.model.LiveCommunityPoll
-import com.example.model.ReflexGameStats
 import com.example.model.SlotBooking
 import com.example.model.TournamentMatch
-import com.example.ui.components.DailyTriviaChallengeCard
-import com.example.ui.components.LiveBonusDropBannerCard
-import com.example.ui.components.LiveCommunityPollCard
-import com.example.ui.components.LiveMegaGiveawayCard
 import com.example.ui.components.MatchCard
-import com.example.ui.components.ReflexSpeedEntryCard
-import com.example.ui.components.ReflexTapChallengeDialog
-import com.example.ui.components.SensitivityProDialog
 import com.example.ui.components.TournamentHeader
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkCard
-import com.example.ui.theme.DarkElevated
-import com.example.ui.theme.DarkSurface
-import com.example.ui.theme.FlameCyan
-import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.VictoryGreen
 
 @Composable
 fun MatchesScreen(
@@ -97,28 +70,10 @@ fun MatchesScreen(
     onBookSlotClick: (TournamentMatch) -> Unit,
     onViewRoomClick: (TournamentMatch) -> Unit,
     onViewSlotGridClick: (TournamentMatch) -> Unit,
-    onDailySpinClick: () -> Unit,
-    onSupportChatClick: () -> Unit,
-    onDailyStreakClick: () -> Unit = {},
-    dailyMissions: List<DailyGamerMission> = emptyList(),
-    onClaimMission: (String) -> Unit = {},
     appCustomization: AppCustomization = AppCustomization(),
-    bonusDrops: List<BonusGiftDrop> = emptyList(),
-    communityPolls: List<LiveCommunityPoll> = emptyList(),
-    triviaProgress: DailyTriviaProgress = DailyTriviaProgress(),
-    currentActorKeys: Set<String> = emptySet(),
-    onClaimBonusDrop: (String) -> Pair<Boolean, String> = { false to "" },
-    onVoteCommunityPoll: (String, String) -> Pair<Boolean, String> = { _, _ -> false to "" },
-    onAnswerTrivia: (Int) -> Pair<Boolean, String> = { false to "" },
-    giveaways: List<GiveawayEvent> = emptyList(),
-    reflexStats: ReflexGameStats = ReflexGameStats(),
-    onJoinGiveaway: (String) -> Pair<Boolean, String> = { false to "" },
-    onRecordReflexResult: (Int, Int, Int) -> ReflexGameStats = { _, _, _ -> reflexStats },
     modifier: Modifier = Modifier
 ) {
     val bookedMatchIds = remember(myBookings) { myBookings.map { it.matchId }.toSet() }
-    var showSensitivityLab by remember { mutableStateOf(false) }
-    var showReflexChallenge by remember { mutableStateOf(false) }
     var liveNowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
@@ -141,395 +96,6 @@ fun MatchesScreen(
                 walletBalance = walletBalance,
                 onWalletClick = onWalletClick,
                 appCustomization = appCustomization
-            )
-        }
-
-        // Action Quick Row: Lucky Spin & Daily Streak
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onDailySpinClick() }
-                        .testTag("daily_spin_card"),
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(FlameYellow.copy(alpha = 0.14f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
-                                contentDescription = "Spin",
-                                tint = FlameYellow,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "লাকি স্পিন 🎡",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = FlameYellow
-                            )
-                            Text(
-                                text = "৳৩-৳৩০ জয়ের সুযোগ",
-                                fontSize = 10.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onDailyStreakClick() }
-                        .testTag("daily_streak_card"),
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.55f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(FlameOrange.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.LocalFireDepartment,
-                                contentDescription = "Daily Streak",
-                                tint = FlameOrange,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "দৈনিক স্ট্রিক 🔥",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "৭ দিনের নগদ বোনাস",
-                                fontSize = 10.sp,
-                                color = FlameYellow
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Daily Gamer Missions Strip (now interactive & claimable!)
-        if (dailyMissions.isNotEmpty()) {
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🎯 দৈনিক গেমার মিশন",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = FlameYellow
-                        )
-                        val doneCount = dailyMissions.count { it.isClaimed }
-                        Text(
-                            text = "$doneCount/${dailyMissions.size} সম্পন্ন",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = VictoryGreen
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(dailyMissions, key = { it.id }) { mission ->
-                            Card(
-                                modifier = Modifier
-                                    .width(210.dp)
-                                    .testTag("mission_card_${mission.id}"),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (mission.isCompleted && !mission.isClaimed) {
-                                        Color(0xFF211C0A)
-                                    } else {
-                                        DarkSurface
-                                    }
-                                ),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    when {
-                                        mission.isClaimed -> VictoryGreen.copy(alpha = 0.55f)
-                                        mission.isCompleted -> FlameYellow
-                                        else -> Color.White.copy(alpha = 0.2f)
-                                    }
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "${mission.iconEmoji} ${mission.title}",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = Color.White,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = BkashPink.copy(alpha = 0.25f)
-                                        ) {
-                                            Text(
-                                                text = "+৳${mission.rewardAmount}",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Black,
-                                                color = FlameYellow,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = mission.description,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        lineHeight = 14.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
-                                        onClick = {
-                                            if (mission.isCompleted && !mission.isClaimed) {
-                                                onClaimMission(mission.id)
-                                            } else if (!mission.isCompleted) {
-                                                when (mission.actionType) {
-                                                    "SPIN" -> onDailySpinClick()
-                                                    "STREAK" -> onDailyStreakClick()
-                                                    "AI_CHAT" -> onSupportChatClick()
-                                                }
-                                            }
-                                        },
-                                        enabled = !mission.isClaimed,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(34.dp)
-                                            .testTag("claim_mission_${mission.id}"),
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = when {
-                                                mission.isClaimed -> DarkCard
-                                                mission.isCompleted -> VictoryGreen
-                                                else -> BkashPink.copy(alpha = 0.7f)
-                                            }
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                    ) {
-                                        Text(
-                                            text = when {
-                                                mission.isClaimed -> "সংগ্রহ হয়েছে ✓"
-                                                mission.isCompleted -> "ক্লেইম +৳${mission.rewardAmount}"
-                                                else -> "মিশন শুরু করুন"
-                                            },
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Pro Sensitivity Lab & 24/7 AI Help Cards
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { showSensitivityLab = true }
-                        .testTag("sensitivity_lab_card"),
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(FlameYellow.copy(alpha = 0.14f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.GpsFixed,
-                                contentDescription = "Sensitivity Pro Lab",
-                                tint = FlameYellow,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "🎯 FF প্রো হেডশট সেনসিটিভিটি ল্যাব",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = FlameYellow
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(shape = RoundedCornerShape(5.dp), color = DarkElevated) {
-                                    Text(
-                                        text = "PRO",
-                                        fontFamily = MonoFontFamily,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "ফোনের RAM ও খেলার স্টাইল অনুযায়ী সেরা One-Tap সেটিংস কপি করুন",
-                                fontSize = 11.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSupportChatClick() }
-                        .testTag("support_chat_card"),
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameCyan.copy(alpha = 0.35f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(FlameCyan.copy(alpha = 0.14f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.SmartToy,
-                                contentDescription = "Talk with AI",
-                                tint = FlameCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "🤖 Talk with AI (এআই সহকারী)",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "24/7 লাইভ",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                    color = VictoryGreen
-                                )
-                            }
-                            Text(
-                                text = "ডিপোজিট, ক্যাশআউট বা রুম কোড সংক্রান্ত যেকোনো সমস্যায় তাৎক্ষণিক সাহায্য নিন",
-                                fontSize = 11.sp,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Live Mega Giveaways & Lottery Draw Events
-        val visibleGiveaways = giveaways.filter { it.status == GiveawayStatus.LIVE || it.status == GiveawayStatus.DRAWN }
-        if (visibleGiveaways.isNotEmpty()) {
-            items(visibleGiveaways, key = { "gw_${it.id}" }) { gw ->
-                LiveMegaGiveawayCard(
-                    giveaway = gw,
-                    currentActorKeys = currentActorKeys,
-                    onJoinGiveaway = onJoinGiveaway
-                )
-            }
-        }
-
-        // FF One-Tap Reflex Speed Lab Mini-Game (Fun/Skill Only - No Wallet Cash)
-        item {
-            ReflexSpeedEntryCard(
-                stats = reflexStats,
-                onPlayClick = { showReflexChallenge = true }
-            )
-        }
-
-        // Live Bonus Gift Drops (বোনাস রেইন)
-        val activeDrops = bonusDrops.filter { it.active }
-        if (activeDrops.isNotEmpty()) {
-            items(activeDrops, key = { "drop_${it.id}" }) { drop ->
-                val hasClaimed = currentActorKeys.any { it in drop.claimedByKeys }
-                LiveBonusDropBannerCard(
-                    drop = drop,
-                    hasClaimed = hasClaimed,
-                    onClaimClick = onClaimBonusDrop
-                )
-            }
-        }
-
-        // Live Community Polls
-        val activePolls = communityPolls.filter { it.active }
-        if (activePolls.isNotEmpty()) {
-            items(activePolls, key = { "poll_${it.id}" }) { poll ->
-                val hasVoted = currentActorKeys.any { it in poll.votedByKeys }
-                LiveCommunityPollCard(
-                    poll = poll,
-                    hasVoted = hasVoted,
-                    onVote = onVoteCommunityPoll
-                )
-            }
-        }
-
-        // Daily Free Fire Trivia Challenge
-        item {
-            DailyTriviaChallengeCard(
-                progress = triviaProgress,
-                onAnswerQuestion = onAnswerTrivia
             )
         }
 
@@ -586,7 +152,7 @@ fun MatchesScreen(
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primary else DarkCard,
-                            border = androidx.compose.foundation.BorderStroke(
+                            border = BorderStroke(
                                 1.dp,
                                 if (isSelected) FlameYellow else DarkBorder
                             ),
@@ -618,7 +184,7 @@ fun MatchesScreen(
             }
         }
 
-        // Section Title
+        // Section Title (Immediately visible at the top without mini-game/quest clutter)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -636,10 +202,10 @@ fun MatchesScreen(
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = DarkCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
+                    border = BorderStroke(1.dp, FlameYellow.copy(alpha = 0.4f))
                 ) {
                     Text(
-                        text = "বিকাশ: ${appCustomization.officialBkashNumber}",
+                        text = "সুরক্ষিত ওয়ালেট",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = MonoFontFamily,
                             fontWeight = FontWeight.Bold,
@@ -715,17 +281,5 @@ fun MatchesScreen(
                 )
             }
         }
-    }
-
-    if (showSensitivityLab) {
-        SensitivityProDialog(onDismiss = { showSensitivityLab = false })
-    }
-
-    if (showReflexChallenge) {
-        ReflexTapChallengeDialog(
-            stats = reflexStats,
-            onRecordResult = onRecordReflexResult,
-            onDismiss = { showReflexChallenge = false }
-        )
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,10 +76,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.AppCustomization
+import com.example.model.EmailAuthResult
 import com.example.ui.components.getLogoDrawable
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.draw.shadow
+import kotlinx.coroutines.launch
 import com.example.ui.theme.BkashPink
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkBorder
@@ -137,8 +140,9 @@ private fun generateNewCaptcha(): CaptchaChallenge {
 
 @Composable
 fun AuthOnboardingScreen(
-    onRegister: (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> Boolean,
-    onLogin: (email: String, pass: String) -> Boolean,
+    onRegister: suspend (name: String, email: String, ign: String, uid: String, phone: String, bkash: String, password: String) -> EmailAuthResult,
+    onLogin: suspend (email: String, pass: String) -> EmailAuthResult,
+    onResendVerification: suspend (email: String, pass: String) -> EmailAuthResult = { _, _ -> EmailAuthResult(false, "") },
     onRequestOtp: (phoneOrUid: String) -> Pair<Boolean, String> = { Pair(false, "") },
     onVerifyOtp: (phoneOrUid: String, enteredOtp: String) -> Boolean = { _, _ -> false },
     onResetPassword: (phoneOrUid: String, newPass: String) -> Boolean = { _, _ -> false },
@@ -146,6 +150,7 @@ fun AuthOnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Create Account, 1 = Sign In
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
 
@@ -163,6 +168,9 @@ fun AuthOnboardingScreen(
     var loginPassword by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
     var loginError by remember { mutableStateOf<String?>(null) }
+    var needsEmailVerification by remember { mutableStateOf(false) }
+    var authStatusBanner by remember { mutableStateOf<String?>(null) }
+    var isAuthLoading by remember { mutableStateOf(false) }
 
     // Captcha States
     var currentCaptcha by remember { mutableStateOf(generateNewCaptcha()) }
@@ -661,6 +669,26 @@ fun AuthOnboardingScreen(
                             }
                         }
 
+                        authStatusBanner?.let { statusMsg ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF0A281E),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, VictoryGreen),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 6.dp)
+                                    .testTag("auth_verification_sent_banner")
+                            ) {
+                                Text(
+                                    text = statusMsg,
+                                    color = VictoryGreen,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
                         loginError?.let { err ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
@@ -671,13 +699,44 @@ fun AuthOnboardingScreen(
                                     .padding(top = 4.dp)
                                     .testTag("login_error_banner")
                             ) {
-                                Text(
-                                    text = err,
-                                    color = Color(0xFFFCA5A5),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(10.dp)
-                                )
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = err,
+                                        color = Color(0xFFFCA5A5),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (needsEmailVerification) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        OutlinedButton(
+                                            enabled = !isAuthLoading,
+                                            onClick = {
+                                                val trimmedEmail = loginEmail.trim()
+                                                val trimmedPass = loginPassword.trim()
+                                                coroutineScope.launch {
+                                                    isAuthLoading = true
+                                                    val resendRes = onResendVerification(trimmedEmail, trimmedPass)
+                                                    isAuthLoading = false
+                                                    if (resendRes.success) {
+                                                        authStatusBanner = resendRes.message
+                                                    } else {
+                                                        loginError = resendRes.message
+                                                    }
+                                                }
+                                            },
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, FlameYellow),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.testTag("resend_verification_btn")
+                                        ) {
+                                            Text(
+                                                text = "Resend Verification Email",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = FlameYellow
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -815,15 +874,16 @@ fun AuthOnboardingScreen(
 
                     // Main Submit Button
                     Button(
+                        enabled = !isAuthLoading,
                         onClick = {
                             if (!isCaptchaSolved) {
-                                captchaError = "❌ দয়া করে ক্যাপচার সঠিক উত্তর দিন!"
+                                captchaError = "দয়া করে ক্যাপচার সঠিক উত্তর দিন!"
                                 Toast.makeText(context, "ক্যাপচা সমাধান করুন", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
 
                             if (selectedTab == 0) {
-                                // Register
+                                // Register with Firebase Email Verification
                                 val trimmedEmail = regEmail.trim()
                                 if (regName.isBlank() || trimmedEmail.isBlank() || regPhone.isBlank() || regIgn.isBlank()) {
                                     Toast.makeText(context, "নাম, ইমেইল, নম্বর ও IGN পূরণ করুন!", Toast.LENGTH_SHORT).show()
@@ -833,44 +893,66 @@ fun AuthOnboardingScreen(
                                     Toast.makeText(context, "সঠিক ইমেইল অ্যাড্রেস লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                if (regPassword.trim().length < 4) {
-                                    Toast.makeText(context, "কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন!", Toast.LENGTH_SHORT).show()
+                                if (regPassword.trim().length < 6) {
+                                    Toast.makeText(context, "কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val ok = onRegister(
-                                    regName.trim(),
-                                    trimmedEmail,
-                                    regIgn.trim(),
-                                    regUid.trim().ifEmpty { "1002345" },
-                                    regPhone.trim(),
-                                    regPhone.trim(),
-                                    regPassword.trim()
-                                )
-                                if (ok) {
-                                    Toast.makeText(context, "🎉 রেজিস্ট্রেশন সফল! ফ্রি ৳৫ ওয়েলকাম বোনাস যুক্ত হয়েছে। স্বাগতম $regName", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(context, "❌ এই ইমেইল বা মোবাইল নম্বর দিয়ে ইতিমধ্যেই অ্যাকাউন্ট খোলা আছে বা তথ্য অসম্পূর্ণ!", Toast.LENGTH_LONG).show()
+                                coroutineScope.launch {
+                                    isAuthLoading = true
+                                    val result = onRegister(
+                                        regName.trim(),
+                                        trimmedEmail,
+                                        regIgn.trim(),
+                                        regUid.trim().ifEmpty { "1002345" },
+                                        regPhone.trim(),
+                                        regPhone.trim(),
+                                        regPassword.trim()
+                                    )
+                                    isAuthLoading = false
+                                    if (result.success) {
+                                        loginEmail = trimmedEmail
+                                        loginPassword = regPassword.trim()
+                                        loginError = null
+                                        needsEmailVerification = true
+                                        authStatusBanner = "Verification email sent to $trimmedEmail. Please verify your email before login."
+                                        selectedTab = 1
+                                        currentCaptcha = generateNewCaptcha()
+                                        captchaInput = ""
+                                        isCaptchaSolved = false
+                                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             } else {
-                                // Email + Password Login ONLY
+                                // Email + Password Login with Firebase Email Verification
                                 val trimmedEmail = loginEmail.trim()
                                 if (trimmedEmail.isBlank() || !trimmedEmail.contains("@")) {
                                     loginError = "দয়া করে আপনার নিবন্ধিত ইমেইল অ্যাড্রেস লিখুন!"
+                                    needsEmailVerification = false
                                     Toast.makeText(context, "সঠিক ইমেইল লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 if (loginPassword.isBlank()) {
                                     loginError = "দয়া করে পাসওয়ার্ড লিখুন!"
+                                    needsEmailVerification = false
                                     Toast.makeText(context, "পাসওয়ার্ড লিখুন!", Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
-                                val ok = onLogin(trimmedEmail, loginPassword.trim())
-                                if (ok) {
-                                    loginError = null
-                                    Toast.makeText(context, "সফলভাবে লগইন হয়েছে!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    loginError = "❌ ভুল ইমেইল বা পাসওয়ার্ড! পাসওয়ার্ড ভুলে গেলে উপরে 'পাসওয়ার্ড ভুলে গেছেন?' এ ক্লিক করে রিসেট করুন।"
-                                    Toast.makeText(context, "ভুল ইমেইল বা পাসওয়ার্ড!", Toast.LENGTH_SHORT).show()
+                                coroutineScope.launch {
+                                    isAuthLoading = true
+                                    val result = onLogin(trimmedEmail, loginPassword.trim())
+                                    isAuthLoading = false
+                                    if (result.success) {
+                                        loginError = null
+                                        needsEmailVerification = false
+                                        authStatusBanner = null
+                                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        loginError = result.message
+                                        needsEmailVerification = result.needsVerification
+                                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
@@ -884,7 +966,13 @@ fun AuthOnboardingScreen(
                         )
                     ) {
                         Text(
-                            text = if (selectedTab == 0) "🚀 অ্যাকাউন্ট খুলুন (৳৫ ফ্রি বোনাস)" else "🔑 সাইন ইন করুন",
+                            text = if (isAuthLoading) {
+                                "অপেক্ষা করুন..."
+                            } else if (selectedTab == 0) {
+                                "অ্যাকাউন্ট খুলুন ও ইমেইল ভেরিফাই করুন"
+                            } else {
+                                "সাইন ইন করুন"
+                            },
                             fontWeight = FontWeight.Black,
                             fontSize = 14.sp,
                             color = Color.Black

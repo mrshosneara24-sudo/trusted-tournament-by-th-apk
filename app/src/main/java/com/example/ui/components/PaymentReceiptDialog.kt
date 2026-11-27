@@ -198,9 +198,12 @@ fun PaymentReceiptDialog(
                             HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 8.dp))
                         }
 
-                        // bKash Number
+                        // bKash Number (Masked for privacy)
                         if (transaction.senderBkash != null) {
-                            ReceiptRow(label = "প্রেরক বিকাশ নম্বর", value = transaction.senderBkash)
+                            ReceiptRow(
+                                label = "প্রেরক বিকাশ নম্বর",
+                                value = com.example.model.maskPhoneForPrivacy(transaction.senderBkash)
+                            )
                             HorizontalDivider(color = DarkBorder, modifier = Modifier.padding(vertical = 8.dp))
                         }
 
